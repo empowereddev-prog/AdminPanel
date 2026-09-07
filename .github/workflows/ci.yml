@@ -44,10 +44,13 @@ jobs:
           restore-keys: composer-${{ runner.os }}-${{ inputs.php-version || '8.3' }}-
 
       # Installs from composer.lock, so no dependency resolution happens here.
-      # Resolution is what trips Composer's security-advisory block; auditing is
-      # done explicitly (and visibly) in the next step instead.
+      # --no-security-blocking: the locked versions carry known advisories (see
+      # docs/DEPLOYMENT.md). Without it Composer 2.9 refuses to install them and the
+      # build cannot run at all. Advisories are surfaced by the audit step below
+      # instead of silently blocking. Note this is *blocking*, not *auditing* --
+      # `install` does not audit by default, and there is no --no-audit flag.
       - name: Install dependencies
-        run: composer install --no-interaction --no-progress --prefer-dist --no-audit
+        run: composer install --no-interaction --no-progress --prefer-dist --no-security-blocking
 
       - name: Prepare environment
         run: |

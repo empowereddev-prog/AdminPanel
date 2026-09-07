@@ -51,6 +51,15 @@ reload_fpm() {
   log "PHP-FPM service not found; skip reload"
 }
 
+# The locked dependencies carry known security advisories (see docs/DEPLOYMENT.md).
+# Composer 2.9+ refuses to install those unless blocking is disabled, but the flag
+# does not exist on older 2.x, where passing it is a hard error. Detect it.
+composer_blocking_flag() {
+  if composer install --help 2>/dev/null | grep -q -- '--no-security-blocking'; then
+    echo "--no-security-blocking"
+  fi
+}
+
 laravel_optimize() {
   cd "$APP_PATH"
   "$PHP_BIN" artisan config:clear || true
@@ -152,7 +161,7 @@ finish_deploy() {
   cd "$APP_PATH"
   if [[ -f composer.json ]]; then
     log "composer install"
-    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-audit
+    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader $(composer_blocking_flag)
   fi
 
   if [[ "$RUN_MIGRATIONS" == "true" ]]; then
@@ -234,7 +243,7 @@ do_rollback() {
   if [[ -f composer.json && -d vendor ]]; then
     composer dump-autoload --optimize --no-dev --no-interaction || true
   elif [[ -f composer.json ]]; then
-    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-audit
+    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader $(composer_blocking_flag)
   fi
 
   laravel_optimize

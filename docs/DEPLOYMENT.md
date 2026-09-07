@@ -151,10 +151,22 @@ but these were not loaded, because they are affected by security advisories
 ```
 
 `composer install` against a lock file performs no resolution, so it installs the pinned
-versions and that check never fires. CI and the server now build byte-identically from
-the same 128 runtime packages. Both install commands pass `--no-audit` so a future
-advisory cannot spontaneously break a deploy of unchanged code; auditing happens
-explicitly in CI instead.
+versions and that particular check never fires. CI and the server now build
+byte-identically from the same 128 runtime packages.
+
+Composer 2.9 also *blocks installing* advisory-affected packages, which is a separate
+mechanism from resolution and from auditing. Because the locked versions are affected,
+both install commands pass **`--no-security-blocking`**:
+
+- Auditing and blocking are not the same thing. `composer install` does not audit by
+  default (there is no `--no-audit` flag on `install` at all — it takes `--audit` to opt
+  *in*), but it does enforce blocking.
+- The deploy script probes `composer install --help` for the flag before using it, since
+  it does not exist on older Composer 2.x, where passing it is a hard error and would
+  break the deploy on a box with an older binary.
+
+Advisories are surfaced by the explicit `composer audit` step in CI rather than by
+failing installs at unpredictable moments.
 
 **Regenerating the lock.** `composer update` will hit the same advisory wall. That is the
 tool working correctly — resolve the advisories rather than switching the check off
