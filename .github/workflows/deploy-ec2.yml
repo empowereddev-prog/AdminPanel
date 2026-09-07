@@ -1,10 +1,14 @@
-name: Deploy to EC2
+name: Deploy to EC2 (dev)
 
 # Runs ON the EC2 box (self-hosted runner). GitHub-hosted ubuntu-latest cannot
 # reach port 22 (dial tcp :22 i/o timeout) unless the security group allows it.
+#
+# The release is rsynced from the runner's checkout, so APP_PATH does NOT need to
+# be a git checkout of any repo. That is what lets this repo take over the deploy
+# from the old one without rebuilding the server.
 on:
   push:
-    branches: [sprint1_dev, main]
+    branches: [sprint1_dev]
   workflow_dispatch:
     inputs:
       run_migrations:
@@ -21,9 +25,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    with:
+      php-version: '8.3'
+
   deploy:
+    needs: ci
     runs-on: [self-hosted, linux]
-    environment: production
+    environment: dev
     steps:
       - uses: actions/checkout@v4
 
@@ -44,3 +54,30 @@ jobs:
           chmod +x scripts/deploy/ec2-release.sh
           ./scripts/deploy/ec2-release.sh deploy-sync
           ./scripts/deploy/ec2-release.sh list
+
+      # Only runs when the HEALTHCHECK_URL repository variable is set.
+      - name: Smoke test the deployed app
+        id: healthcheck
+        if: vars.HEALTHCHECK_URL != ''
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3 4 5; do
+            code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 15 "${{ vars.HEALTHCHECK_URL }}" || true)"
+            echo "attempt $attempt -> HTTP ${code:-none}"
+            if [[ "$code" == "200" ]]; then exit 0; fi
+            sleep 5
+          done
+          echo "::error::Health check never returned 200"
+          exit 1
+
+      - name: Auto-rollback on failed health check
+        if: failure() && steps.healthcheck.outcome == 'failure'
+        env:
+          APP_PATH: ${{ secrets.APP_PATH }}
+          BACKUP_DIR: ${{ secrets.BACKUP_DIR }}
+          PHP_BIN: ${{ secrets.PHP_BIN || 'php' }}
+          PHP_FPM_SERVICE: ${{ secrets.PHP_FPM_SERVICE }}
+        run: |
+          set -euo pipefail
+          echo "::warning::Health check failed - restoring the pre-deploy snapshot"
+          ./scripts/deploy/ec2-release.sh rollback latest
