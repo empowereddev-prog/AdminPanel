@@ -152,7 +152,7 @@ finish_deploy() {
   cd "$APP_PATH"
   if [[ -f composer.json ]]; then
     log "composer install"
-    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-audit
   fi
 
   if [[ "$RUN_MIGRATIONS" == "true" ]]; then
@@ -234,7 +234,7 @@ do_rollback() {
   if [[ -f composer.json && -d vendor ]]; then
     composer dump-autoload --optimize --no-dev --no-interaction || true
   elif [[ -f composer.json ]]; then
-    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-audit
   fi
 
   laravel_optimize

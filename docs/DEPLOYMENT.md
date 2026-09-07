@@ -136,22 +136,47 @@ roll the schema back yourself before restoring the snapshot.
 
 ---
 
-## Known gap: `composer.lock` is not committed
+## Dependency locking
 
-`.gitignore` currently lists `composer.lock`, and the file is untracked. Every CI run
-and every deploy therefore resolves dependency versions afresh, so the runner and the
-server can install different code from the same commit — and an upstream patch release
-can break a deploy that touches no application code.
+`composer.lock` is now committed, and `.gitignore` no longer excludes it (or itself —
+it was previously self-ignored and absent from the remote entirely).
 
-Fix it once:
+This is load-bearing, not housekeeping. Composer 2.9 refuses to *resolve* packages that
+carry security advisories, so with no lock file every CI run and every deploy tried a
+full re-resolve and failed outright:
 
-```bash
-sed -i '' '/^composer\.lock$/d' .gitignore
-git add -f composer.lock .gitignore
-git commit -m "Track composer.lock for reproducible builds"
+```
+Root composer.json requires laravel/framework ^11.9, found laravel/framework[v11.9.0, ..., v11.56.1]
+but these were not loaded, because they are affected by security advisories
 ```
 
-(`.gitignore` is also currently self-ignored and absent from the remote, which is why
-the command above force-adds it.) After this, switch the deploy's install step to
-`composer install` against the lock file — it already does — and builds become
-byte-identical across CI and the server.
+`composer install` against a lock file performs no resolution, so it installs the pinned
+versions and that check never fires. CI and the server now build byte-identically from
+the same 128 runtime packages. Both install commands pass `--no-audit` so a future
+advisory cannot spontaneously break a deploy of unchanged code; auditing happens
+explicitly in CI instead.
+
+**Regenerating the lock.** `composer update` will hit the same advisory wall. That is the
+tool working correctly — resolve the advisories rather than switching the check off
+(`policy.advisories.block: false` would silence it and quietly reintroduce the
+non-determinism this section exists to prevent).
+
+### Outstanding advisories
+
+Committing the lock unblocked the pipeline; it did not make the dependencies safe. The
+locked versions have known advisories and this is what the app is already running in
+production today:
+
+| Package | Locked | Status |
+|---|---|---|
+| `laravel/framework` | v11.45.1 | 7 advisories; every `^11.x` release is flagged, so this needs a Laravel 12 upgrade |
+| `dompdf/dompdf` | v2.0.8 | 6 advisories; fixed in dompdf 3.x, via `barryvdh/laravel-dompdf` ^3.0 |
+| `illuminate/mail` | v11.45.1 | PKSA-zwc5-qtrz-zm1n, same v11 constraint |
+
+The `Audit dependencies` step in CI prints the current list on every run. It is
+`continue-on-error: true` today because it would otherwise fail every build — remove
+that line once the table above is clear, so regressions become a hard gate.
+
+Plan the upgrade as its own piece of work; `laravel/cashier` and
+`yajra/laravel-datatables` both constrain the framework version and will need bumping
+in the same change.
