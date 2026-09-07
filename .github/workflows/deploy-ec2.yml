@@ -1,0 +1,61 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [sprint1_dev, main]
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: Run php artisan migrate --force
+        type: boolean
+        default: false
+      skip_backup:
+        description: Skip snapshot of the live deploy (not recommended)
+        type: boolean
+        default: false
+
+concurrency:
+  group: ec2-release
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy release script to the instance
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          source: scripts/deploy/ec2-release.sh
+          target: /tmp/ec-healthcare-deploy
+          overwrite: true
+
+      - name: Snapshot live app, then deploy
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          APP_PATH: ${{ secrets.APP_PATH }}
+          BACKUP_DIR: ${{ secrets.BACKUP_DIR }}
+          BACKUP_KEEP: ${{ secrets.BACKUP_KEEP || 5 }}
+          GIT_SHA: ${{ github.sha }}
+          GIT_BRANCH: ${{ github.ref_name }}
+          RUN_MIGRATIONS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_migrations || 'false' }}
+          SKIP_BACKUP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_backup || 'false' }}
+          PHP_BIN: ${{ secrets.PHP_BIN || 'php' }}
+          PHP_FPM_SERVICE: ${{ secrets.PHP_FPM_SERVICE }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          envs: APP_PATH,BACKUP_DIR,BACKUP_KEEP,GIT_SHA,GIT_BRANCH,RUN_MIGRATIONS,SKIP_BACKUP,PHP_BIN,PHP_FPM_SERVICE
+          script: |
+            set -euo pipefail
+            chmod +x /tmp/ec-healthcare-deploy/scripts/deploy/ec2-release.sh
+            /tmp/ec-healthcare-deploy/scripts/deploy/ec2-release.sh deploy
+            /tmp/ec-healthcare-deploy/scripts/deploy/ec2-release.sh list
