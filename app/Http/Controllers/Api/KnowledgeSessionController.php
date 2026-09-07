@@ -152,6 +152,23 @@ class KnowledgeSessionController extends Controller
         $device = $request->device ?? 'mobile';
         $fontSize = ($device === 'tablet') ? '24px' : '16px';
 
+        $deepLink = app(\App\Services\DeepLinkService::class)->resolve('article', $session_id, auth()->user(), false);
+        if ($deepLink['status'] !== \App\Services\DeepLinkService::STATUS_OK) {
+            $messages = [
+                'not_found' => $language == 'chinese' ? '未找到会话详细信息。' : 'Content unavailable.',
+                'unpublished' => $language == 'chinese' ? '内容不可用。' : 'Content unavailable.',
+                'forbidden_role' => $language == 'chinese' ? '此内容不适用于您的帐户。' : 'This content is not available for your account.',
+                'subscription_required' => $language == 'chinese' ? '需要有效订阅。' : 'An active subscription is required.',
+            ];
+            return response()->json([
+                'status' => false,
+                'deeplink_status' => $deepLink['status'],
+                'message' => $messages[$deepLink['status']] ?? 'Content unavailable.',
+                'canonical_url' => $deepLink['canonical_url'],
+                'data' => null
+            ], $deepLink['http_status']);
+        }
+
         $session_details =  KnowledgeSession::where('id', $session_id)->first();
 
         if ($session_details) {
@@ -193,6 +210,7 @@ class KnowledgeSessionController extends Controller
             }
 
             $session_details->articles = $articlesData->unique('article_id')->values();
+            $session_details->canonical_url = $deepLink['canonical_url'];
 
             return response()->json([
                 'status' => true,
@@ -202,9 +220,10 @@ class KnowledgeSessionController extends Controller
         } else {
             return response()->json([
                 'status' => false,
+                'deeplink_status' => 'not_found',
                 'message' => $language == 'chinese' ? '未找到会话详细信息。' : 'Session details not found.',
                 'data' => null
-            ], 201);
+            ], 404);
         }
     }
 

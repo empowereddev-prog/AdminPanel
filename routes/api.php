@@ -35,6 +35,9 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
   return $request->user();
 });
 
+Route::get('deeplink/resolve', \App\Http\Controllers\Api\DeepLinkResolveController::class)
+  ->middleware('throttle:deeplink_resolve');
+
 Route::post('webhooks/google', [WebhookController::class, 'google']);
 Route::post('webhooks/apple', [WebhookController::class, 'apple']);
 

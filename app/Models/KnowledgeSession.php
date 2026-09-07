@@ -21,4 +21,23 @@ class KnowledgeSession extends Model implements AuditableContract
     {
         return $this->hasMany(ArticleSuggestion::class, 'knowledge_session_id', 'id');
     }
+
+    protected static function booted(): void
+    {
+        static::saved(function (KnowledgeSession $session) {
+            \App\Services\DeepLinkService::persistCanonicalUrl($session);
+        });
+    }
+
+    public function getCanonicalUrlAttribute($value): ?string
+    {
+        if ($value) {
+            return $value;
+        }
+        if (!$this->id) {
+            return null;
+        }
+
+        return \App\Services\DeepLinkService::canonicalUrl('article', (int) $this->id);
+    }
 }

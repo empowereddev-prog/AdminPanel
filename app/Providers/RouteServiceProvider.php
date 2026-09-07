@@ -30,11 +30,17 @@ class RouteServiceProvider extends ServiceProvider
         RateLimiter::for('contact_form', function (Request $request) {
             return Limit::perMinute(5)->by($request->ip());
         });
+        RateLimiter::for('deeplink_resolve', function (Request $request) {
+            return Limit::perMinute(30)->by($request->ip());
+        });
 
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')
                 ->group(base_path('routes/api.php'));
+
+            Route::middleware([])
+                ->group(base_path('routes/deeplink.php'));
 
             Route::middleware('web')
                 ->group(base_path('routes/web.php'));

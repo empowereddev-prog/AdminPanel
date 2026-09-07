@@ -328,6 +328,12 @@
                                     </div>
                                 </div>
 
+                                @include('admin.partials.deeplink-share', [
+                                    'deeplinkType' => 'podcast',
+                                    'shareId' => $data->id,
+                                    'canonicalUrl' => $data->canonical_url,
+                                    'shareStatus' => $data->status,
+                                ])
                                 {{-- Action Buttons with Real-time Upload Progress Bar Wrapper --}}
                                 <div class="form-footer text-end">
                                     <div id="upload-progress" class="mb-3 text-start" style="display:none; max-width:400px; margin-left:auto;">

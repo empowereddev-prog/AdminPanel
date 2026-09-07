@@ -470,7 +470,7 @@ class KnowleadgeSessionController extends Controller
                 // ✅ Category से color values dynamically ले रहे हैं
                 'color' => $category->color ?? null,
                 'title_color' => $category->title_color ?? null,
-                'user_type' => 'parent',
+                'user_type' => in_array($request->user_type, ['parent', 'child', 'both'], true) ? $request->user_type : 'parent',
                 'written_by' => $request->written_by,
                 'featured_key' => $request->featured_key,
             ]);
@@ -488,11 +488,13 @@ class KnowleadgeSessionController extends Controller
         }
         // Notifications
         foreach ($createdArticles as $article) {
-            $userIds = User::where([
-                'user_type' => 'parent',
-                'status' => 'active',
-                'is_notification' => 'true'
-            ])->pluck('id')->toArray();
+            $notifyTypes = $article->user_type === 'both'
+                ? ['parent', 'child', 'teacher']
+                : ($article->user_type === 'child' ? ['child'] : ['parent', 'teacher']);
+            $userIds = User::whereIn('user_type', $notifyTypes)
+                ->where('status', 'active')
+                ->where('is_notification', 'true')
+                ->pluck('id')->toArray();
 
             $users = DeviceToken::whereIn('user_id', $userIds)
                 ->whereNotNull('token')
@@ -505,9 +507,11 @@ class KnowleadgeSessionController extends Controller
             $userData = [
                 'title'      => $article->title,
                 'id'         => $article->id,
+                'know_ses_id'=> $article->id,
                 'color'      => $article->color,
                 'title_color' => $article->title_color,
                 'type'       => 'add_article',
+                'link'       => \App\Services\DeepLinkService::canonicalUrl('article', (int) $article->id),
             ];
 
             foreach ($users as $user) {
@@ -666,7 +670,9 @@ class KnowleadgeSessionController extends Controller
         $knowledgeSession->is_featured = 'yes';
         // $knowledgeSession->title_chinese = $request->title_chinese;
         // $knowledgeSession->description_chinese = $request->description_chinese;
-        $knowledgeSession->user_type = 'parent';
+        $knowledgeSession->user_type = in_array($request->user_type, ['parent', 'child', 'both'], true)
+            ? $request->user_type
+            : ($knowledgeSession->user_type ?: 'parent');
         $knowledgeSession->color = $request->color;
         $knowledgeSession->title_color = $request->title_color;
         $knowledgeSession->written_by = $request->written_by;

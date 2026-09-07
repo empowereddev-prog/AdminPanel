@@ -19,4 +19,23 @@ class VideoContent extends Model implements AuditableContract
     {
         return $this->belongsTo(Category::class, 'category_id');
     }
+
+    protected static function booted(): void
+    {
+        static::saved(function (VideoContent $video) {
+            \App\Services\DeepLinkService::persistCanonicalUrl($video);
+        });
+    }
+
+    public function getCanonicalUrlAttribute($value): ?string
+    {
+        if ($value) {
+            return $value;
+        }
+        if (!$this->id) {
+            return null;
+        }
+
+        return \App\Services\DeepLinkService::canonicalUrl('podcast', (int) $this->id);
+    }
 }

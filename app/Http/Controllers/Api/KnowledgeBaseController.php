@@ -825,21 +825,35 @@ class KnowledgeBaseController extends Controller
     }
     public function videoContentdetails(Request $request)
     {
-        $video_content = VideoContent::where('id', $request->video_id)->where('status', 'active')->first();
-        $last_watched_duration = UserContentWatchHistory::where('child_id', $request->user_id)->where('video_content_id', $request->video_id)->value('last_watched_duration');
+        $videoId = $request->video_id ?? $request->id;
+        $language = $request->language ?? 'english';
+        $deepLink = app(\App\Services\DeepLinkService::class)->resolve('podcast', $videoId, auth()->user(), false);
+        if ($deepLink['status'] !== \App\Services\DeepLinkService::STATUS_OK) {
+            return response()->json([
+                'status' => false,
+                'deeplink_status' => $deepLink['status'],
+                'message' => $deepLink['status'] === 'forbidden_role'
+                    ? 'This content is not available for your account.'
+                    : ($deepLink['status'] === 'subscription_required'
+                        ? 'An active subscription is required.'
+                        : 'Video content not found.'),
+                'canonical_url' => $deepLink['canonical_url'],
+                'data' => null
+            ], $deepLink['http_status']);
+        }
+
+        $video_content = VideoContent::where('id', $videoId)->where('status', 'active')->first();
+        $last_watched_duration = UserContentWatchHistory::where('child_id', $request->user_id)->where('video_content_id', $videoId)->value('last_watched_duration');
         if ($video_content) {
-            $video_content['title'] = $request->language === 'english' ? $video_content->title : $video_content->title_chinese;
-            $video_content['description'] = $request->language === 'english' ? $video_content->description : $video_content->description_chinese;
+            $video_content['title'] = $language === 'english' ? $video_content->title : $video_content->title_chinese;
+            $video_content['description'] = $language === 'english' ? $video_content->description : $video_content->description_chinese;
             $video_content['video_link'] =  getImagePathUrl($video_content->video_link, 'assets/video');
             $video_content['watched_duration'] = $last_watched_duration ?? "00:00";
-            // $watchedSeconds = durationToSeconds($video_content['watched_duration']);
-            // $totalSeconds = durationToSeconds($video_content['total_video_duration']);
-            $is_video_completed =  UserContentWatchHistory::where('child_id', $request->user_id)->where('video_content_id', $request->video_id)->value('is_completed');
-            // $is_video_completed = $watchedSeconds == $totalSeconds  ? 'yes' : 'no';
+            $is_video_completed =  UserContentWatchHistory::where('child_id', $request->user_id)->where('video_content_id', $videoId)->value('is_completed');
             $video_content['is_video_completed'] = $is_video_completed;
 
             $likeStatus = UserLikedVideo::where('user_id', $request->user_id)
-                ->where('video_id', $request->video_id)
+                ->where('video_id', $videoId)
                 ->get()
                 ->pluck('type')
                 ->toArray();
@@ -848,6 +862,7 @@ class KnowledgeBaseController extends Controller
             $video_content->is_dislike = in_array('dislike', $likeStatus) ? 'yes' : 'no';
             $video_content->is_heart = in_array('favourite', $likeStatus) ? 'yes' : 'no';
             $video_content->category_name = $video_content->category->category_name;
+            $video_content->canonical_url = $deepLink['canonical_url'];
             return response()->json([
                 'status' => true,
                 'message' => 'Video content fetched successfully!',
@@ -856,9 +871,10 @@ class KnowledgeBaseController extends Controller
         } else {
             return response()->json([
                 'status' => false,
+                'deeplink_status' => 'not_found',
                 'message' => 'Video content not found.',
                 'data' => null
-            ]);
+            ], 404);
         }
     }
     public function videoContentforparent1(Request $request)

@@ -679,7 +679,9 @@ class VideoUploadChildController extends Controller
                 $video_content_details->video_link
             ),
 
-            'id' => $video_content_details->category_id,
+            'id' => $video_content_details->id,
+
+            'category_id' => $video_content_details->category_id,
 
             'color' => $video_content_details->color,
 
@@ -687,6 +689,8 @@ class VideoUploadChildController extends Controller
                 $video_content_details->title_color,
 
             'type' => $notification_type,
+
+            'link' => \App\Services\DeepLinkService::canonicalUrl('podcast', (int) $video_content_details->id),
         ];
 
         foreach ($users as $user) {
