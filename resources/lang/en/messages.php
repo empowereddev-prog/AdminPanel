@@ -1,0 +1,103 @@
+<?php
+
+return [
+    'feature_section_title'=> "Experience AE Note,<br />Elevate Excellence.", 
+    'pricing_section_title' => "Your Digital Journey Starts Here.",
+    'pricing_section_description' => 'Unlock Limitless Potential and Maximise your productivity today with Our Premium Subscription.',
+    'pricing_section_monthly' => 'Monthly',
+    'pricing_section_annual'  => 'Annually',
+    'pricing_section_basic' => 'Basic License',
+    'pricing_section_pro' => 'Pro License',
+    'pricing_section_buy'  => 'Subscribe License',
+    'place_order_header'  =>'Place your order',
+    'place_order_header_content' =>'Thank you for shopping with us! Before you can proceed with placing your order, please ensure you have filled in your billing details accurately and completely. This information is necessary to process your purchase smoothly and securely.',
+    'place_order_summary'    =>'Order Summary',
+    'place_order_license'   =>'License',
+    'place_order_header_basic_license'   =>'Basic License',
+    'place_order_header_pro_license'   =>'Pro License',
+    'place_order_billing_cycle'   =>'Billing Cycle',
+    'place_order_monthly'    =>'Monthly',
+    'place_order_annual'      => 'Annually',
+    'place_order_checkout'   => 'Subtotal',
+    'place_order_checkout_price'   => 'Subscription Amount',
+    'place_order_checkout_price_year'  => '/year',
+    'place_order_checkout_price_month'  => '/month',
+    'place_order_checkout_price_tax'  => 'Tax',
+    'place_order_checkout_price_total'  => 'Total',
+    'place_order_checkout_price_desc'   => 'Your selected payment method will be billed',
+    'place_order_checkout_price_desc1'  => 'and your subscription will automatically renew on an annual basis.Review',
+    'place_order_billing_details'  => 'Billing Details',
+    'place_order_billing_first_name'   => 'First Name',
+    'place_order_billing_last_name'   => 'Last Name',
+    'place_order_billing_email'     => 'Email Address',
+    'place_order_billing_phone_number'     => 'Mobile Number',
+    'place_order_billing_terms'    => 'By selecting the button, I consent to the',
+    'place_order_billing_privacy_policy'  => 'Privacy Policy',
+    'place_order_billing_and'    => 'and',
+    'place_order_billing_user_terms'    => 'User Terms',
+    'place_order_billing_proceed_to_payment'   => 'Proceed to Payment',
+    'header_home'   =>'Home',
+    'header_about'   =>'About',
+    'header_features'   =>'Features',
+    'header_pricing'   =>'Pricing',
+    'header_contact_us'   =>'Contact us',
+    'header_traditional_chinese'   => 'Traditional Chinese',
+    'header_english'   => 'English',
+    'header_simplified_chinese'   => 'Simplified Chinese',
+    'footer_legal'   => 'Legal',
+    'footer_faq'    =>'FAQ',
+    'footer_t&c'   =>'Terms & Conditions',
+    'footer_privacy_policy'  => 'Privacy Policy',
+    'footer_address'   =>'Address',
+    'footer_address_desc'   => '10 ANSON ROAD #25-05INTERNATIONAL PLAZA,',
+    'footer_country'   => 'SINGAPORE (079903)',
+    'footer_email'   => 'aenote@gmail.com',
+    'footer_slogan'  => 'Seize Your Ideas, Anytime, Anywhere',
+    'footer_copyright'  =>'Copyright ©2024 AE Note. All Rights Reserved',
+    'order_placed_successfully'  => 'Order Placed Successfully',
+    'order_placed_successfully_content'   => 'Thank you for choosing AE Note. Your license key will be sent to you via email. Please feel free to contact our support team if you need any assistance.',
+    'agreement' =>'Before proceeding, you need to accept the Privacy Policy and User Terms.',
+    'recover_license_key_button' => 'Recover License Key' ,
+
+    'fill_your_email' => 'Enter your registered email',
+    // 'email_placeholder' => 'Email',
+    'submit_button' => 'Submit',
+    //home section
+    'home_content_1' => 'Enhance your notes with AE Note',
+    'home_content_2' => 'intuitive and organized solutions',
+    'banner_header'  => 'Effortless Note-Taking, Endless Possibilities, Made Simple.',
+
+    'license_purchased_list'  => 'Acquired License Inventory',
+    'plan'  => 'Type of plan',
+    'plan_type'  => 'Plan Interval',
+    'license_key'  => 'License Key',
+    'purchased_on'  => 'Purchased On',
+    'expires_on'  => 'Expires On',
+    'order_id'  => 'Order ID',
+
+    //purchase now section 
+    'purchase_now_header' => 'Unleash Your Inner Genius',
+    'purchase_now_content' => 'AE NOTE is more than just a digital piece of paper. It is a versatile tool with secured features that can help you unlock your potential by fostering creativity, enhancing productivity, aiding in learning, facilitating collaboration, and supporting personal growth. Start exploring the possibilities today and see how AE NOTE can transform the way you work and live.',
+    'purchase_now_button'  => 'Purchase Now',
+
+    //testimonail section 
+    'testimonial_header'  => 'Empower Your Day with AE Note – Where Millions Find Their Rhythm.', 
+
+    //contact us section 
+    'contact_us_header' => 'Connect With Us',
+    'contact_us_content' => "Thank you for choosing AE Note. We appreciate your feedback, questions, and inquiries. Our committed team is ready to assist you in any way we can. Please don't hesitate to reach out to us.",
+    'contact_header'  => 'We’re excited to connect with you! Feel free to reach out.',
+    'contact_full_name'  => 'Full Name',
+    'contact_message'  => 'Message',
+    'send_messages'  =>'Send Message',
+    'placeholder_message' => 'Write your message here',
+    'back_button' => 'Back',
+
+    //faq section 
+    'faq_header' => 'Frequently asked questions',
+
+
+    'annually_purchase' => 'Already purchased for its Annually Plan',
+    'already_purchase' => 'You have already purchased this Plan'
+
+];

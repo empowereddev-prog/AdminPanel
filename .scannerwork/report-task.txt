@@ -1,0 +1,6 @@
+projectKey=ec-healthcare
+serverUrl=https://aw-sonar.singsys.net
+serverVersion=9.4.0.54424
+dashboardUrl=https://aw-sonar.singsys.net/dashboard?id=ec-healthcare
+ceTaskId=AZaqsxVL7ABKDXEj-VO7
+ceTaskUrl=https://aw-sonar.singsys.net/api/ce/task?id=AZaqsxVL7ABKDXEj-VO7
