@@ -3,11 +3,13 @@
 # Intended to run ON the server (GitHub Actions copies it, then SSH-executes it).
 #
 # Required env: APP_PATH
-# Optional: BACKUP_DIR, BACKUP_KEEP, GIT_SHA, GIT_BRANCH, RUN_MIGRATIONS, PHP_BIN, PHP_FPM_SERVICE
+# Optional: BACKUP_DIR, BACKUP_KEEP, GIT_SHA, GIT_BRANCH, RUN_MIGRATIONS,
+#           PHP_BIN, PHP_FPM_SERVICE, RELEASE_SRC (workspace checkout on a self-hosted runner)
+
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 backup|deploy|rollback|list [archive-name|latest]"
+  echo "Usage: $0 backup|deploy|deploy-sync|rollback|list [archive-name|latest]"
   exit 1
 }
 
@@ -20,6 +22,7 @@ RUN_MIGRATIONS="${RUN_MIGRATIONS:-false}"
 SKIP_BACKUP="${SKIP_BACKUP:-false}"
 PHP_BIN="${PHP_BIN:-php}"
 PHP_FPM_SERVICE="${PHP_FPM_SERVICE:-}"
+RELEASE_SRC="${RELEASE_SRC:-}"
 
 command="${1:-}"
 archive_arg="${2:-latest}"
@@ -142,6 +145,11 @@ do_deploy() {
     exit 1
   fi
 
+  finish_deploy
+}
+
+finish_deploy() {
+  cd "$APP_PATH"
   if [[ -f composer.json ]]; then
     log "composer install"
     composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
@@ -155,6 +163,38 @@ do_deploy() {
   laravel_optimize
   reload_fpm
   log "Deploy finished (sha=$(current_sha))"
+}
+
+do_deploy_sync() {
+  RELEASE_SRC="${RELEASE_SRC:?Set RELEASE_SRC to the GitHub Actions workspace}"
+  if [[ ! -f "$RELEASE_SRC/artisan" && ! -f "$RELEASE_SRC/composer.json" ]]; then
+    log "ERROR: RELEASE_SRC does not look like the Laravel repo: $RELEASE_SRC"
+    exit 1
+  fi
+
+  if [[ "$SKIP_BACKUP" == "true" ]]; then
+    log "SKIP_BACKUP=true; not snapshotting the live app"
+  else
+    do_backup
+  fi
+
+  mkdir -p "$APP_PATH"
+  log "Syncing $RELEASE_SRC -> $APP_PATH"
+  rsync -a --delete \
+    --exclude '.env' \
+    --exclude '.env.*' \
+    --exclude '.git/' \
+    --exclude 'storage/' \
+    --exclude 'vendor/' \
+    --exclude 'node_modules/' \
+    --exclude 'public/uploads/' \
+    --exclude 'public/assets/' \
+    --exclude 'public/storage/' \
+    --exclude 'public/phpdb/' \
+    --exclude 'bootstrap/cache/*.php' \
+    "$RELEASE_SRC"/ "$APP_PATH"/
+
+  finish_deploy
 }
 
 do_rollback() {
@@ -205,6 +245,7 @@ do_rollback() {
 case "$command" in
   backup) do_backup ;;
   deploy) do_deploy ;;
+  deploy-sync) do_deploy_sync ;;
   rollback) do_rollback ;;
   list) do_list ;;
   *) usage ;;

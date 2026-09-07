@@ -14,38 +14,20 @@ concurrency:
 
 jobs:
   rollback:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     environment: production
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy release script to the instance
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: ${{ secrets.EC2_PORT || 22 }}
-          source: scripts/deploy/ec2-release.sh
-          target: /tmp/ec-healthcare-deploy
-          overwrite: true
-
       - name: Restore previous live snapshot
-        uses: appleboy/ssh-action@v1.2.0
         env:
           APP_PATH: ${{ secrets.APP_PATH }}
           BACKUP_DIR: ${{ secrets.BACKUP_DIR }}
           BACKUP_KEEP: ${{ secrets.BACKUP_KEEP || 5 }}
           PHP_BIN: ${{ secrets.PHP_BIN || 'php' }}
           PHP_FPM_SERVICE: ${{ secrets.PHP_FPM_SERVICE }}
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: ${{ secrets.EC2_PORT || 22 }}
-          envs: APP_PATH,BACKUP_DIR,BACKUP_KEEP,PHP_BIN,PHP_FPM_SERVICE
-          script: |
-            set -euo pipefail
-            chmod +x /tmp/ec-healthcare-deploy/scripts/deploy/ec2-release.sh
-            /tmp/ec-healthcare-deploy/scripts/deploy/ec2-release.sh list
-            /tmp/ec-healthcare-deploy/scripts/deploy/ec2-release.sh rollback "${{ github.event.inputs.archive }}"
+        run: |
+          set -euo pipefail
+          chmod +x scripts/deploy/ec2-release.sh
+          ./scripts/deploy/ec2-release.sh list
+          ./scripts/deploy/ec2-release.sh rollback "${{ github.event.inputs.archive }}"
