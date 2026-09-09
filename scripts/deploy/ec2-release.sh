@@ -66,7 +66,10 @@ laravel_optimize() {
   "$PHP_BIN" artisan cache:clear || true
   "$PHP_BIN" artisan view:clear || true
   "$PHP_BIN" artisan config:cache
-  "$PHP_BIN" artisan route:cache
+  if ! "$PHP_BIN" artisan route:cache; then
+    log "route:cache failed; serving without a route cache"
+    "$PHP_BIN" artisan route:clear || true
+  fi
   "$PHP_BIN" artisan view:cache
 }
 
