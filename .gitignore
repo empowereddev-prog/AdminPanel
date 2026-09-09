@@ -22,6 +22,12 @@ public/phpdb
 public/.htpasswd
 .env
 *.pem
+.DS_Store
 *.sql
 code-db-20251010.zip
-/public/assets/*
+# Theme assets (css/js/plugins/avatar and root art) are tracked so a fresh
+# deploy renders correctly. Heavy media below is shipped out-of-band.
+/public/assets/video/
+/public/assets/images/
+/public/assets/avtar/
+/public/assets/aws/

@@ -1,0 +1,694 @@
+@media only screen and (min-width: 1200px) {
+    .slide .slide-contents .slide-heading {
+      max-width: 75%;
+    }
+
+    .industry-listings .industry:nth-child(even) {
+      flex-direction: row-reverse;
+    }
+  }
+  
+  @media only screen and (max-width: 1366px) {
+    body {
+      font-size: 1.6rem;
+    }
+  
+    .top-header,
+    .navbar {
+      padding-inline: 6rem;
+    }
+  
+    .top-header-links li {
+      margin-left: 5rem;
+    }
+  
+    .default-button span {
+      font-size: 1.3rem;
+      padding: 1rem 2rem;
+    }
+  
+    .video-play-buttton span {
+      padding: 1.2rem 2.6rem;
+    }
+  
+    .spacer-bottom {
+      margin-bottom: 6rem;
+    }
+  
+    .slide .slide-contents .slide-heading {
+      font-size: 5rem;
+    }
+  
+    .slide .slide-contents .slide-sub-heading {
+      margin-bottom: 2rem;
+    }
+  
+    .slide .slide-contents .slide-heading {
+      margin-bottom: 4rem;
+    }
+  
+    .techno-button {
+      font-size: 1.6rem;
+    }
+  
+    .offices h3.office + p {
+      font-size: 1.8rem;
+    }
+  
+    .testimonial .title {
+      margin-bottom: 3rem;
+    }
+  
+    .insights h2,
+    .contact .form-heading {
+      font-size: 2.8rem;
+    }
+  
+    .industry-listings .industry:not(:last-child) {
+      margin-bottom: 6rem;
+    }
+  }
+  
+  @media only screen and (max-width: 1200px) {
+    .top-header,
+    .navbar {
+      padding-block: 1rem;
+      padding-inline: 4rem;
+    }
+  
+    .top-header-links li {
+      margin-left: 3rem;
+    }
+  
+    .slide-detail h2,
+    .slide .slide-contents .slide-heading {
+      font-size: 3.2rem;
+      margin-bottom: 2rem;
+    }
+  
+    .section-heading {
+      font-size: 3.2rem;
+    }
+  
+    .insights h2 {
+      margin-bottom: 3rem;
+    }
+  
+    .form {
+      padding: 5rem;
+    }
+  
+    .form input,
+    .form select,
+    .form textarea {
+      padding: 1.2rem 2rem;
+    }
+  
+    .get-quote-form {
+      padding: 0;
+    }
+  
+    .offices h3.office + p {
+      font-size: 1.6rem;
+    }
+  
+    .offices .contact-no span {
+      margin-right: 1rem;
+    }
+  
+    .industry-listings .industry,
+    .vestibulum-ante .row {
+      max-width: unset;
+    }
+  
+    .industry-listings .industry:not(:last-child) {
+      margin-bottom: 5rem;
+    }
+  
+    .product-specification .row {
+      max-width: unset;
+    }
+  
+    .sub-footer {
+      padding-block: 3rem;
+    }
+  }
+  
+  @media only screen and (max-width: 1024px) {
+    .top-header-links li {
+      margin-left: 2rem;
+    }
+  
+    .mega-menu h2 {
+      font-size: 2.8rem;
+    }
+  
+    .slide .slide-contents,
+    .slide .slide-image {
+      height: 25rem;
+    }
+  
+    .slide-banner .swiper-slide {
+      width: 100%;
+    }
+  
+    .slide-banner .slide {
+      display: flex;
+      flex-direction: column;
+    }
+  
+    .slide-banner .col-sm-6 {
+      width: 100%;
+    }
+  
+    .back-button-container .back-button {
+      max-width: unset;
+    }
+  
+    .quote .unlock .heading {
+      font-size: 2.8rem;
+    }
+  
+    .vestibulum-ante .vestibulum-ante-contents {
+      padding-inline: 1rem;
+    }
+  
+    .newsletter ._container {
+      background-size: 7rem, 7rem;
+    }
+  
+    section.sponsors,
+    section.clients {
+      padding-inline: 5rem;
+    }
+  
+    .clients .myClient .swiper-button-next,
+    .clients .myOtherClient .swiper-button-next {
+      right: 1rem;
+    }
+  
+    .clients .myClient .swiper-button-prev,
+    .clients .myOtherClient .swiper-button-prev {
+      left: 1rem;
+    }
+  
+    .clients .myClient .swiper-button-prev::after,
+    .clients .myClient .swiper-button-next::after,
+    .clients .myOtherClient .swiper-button-prev::after,
+    .clients .myOtherClient .swiper-button-next::after {
+      font-size: 1.5rem;
+    }
+  
+    .product-overview-tab .nav-tabs {
+      padding: 2rem;
+    }
+  
+    .product-overview-tab .nav-item:not(:last-child) {
+      margin-right: 2rem;
+    }
+  
+    .build-server .form form {
+      padding-right: 2rem;
+    }
+  
+    .build-server label,
+    .build-server .form .action-btn {
+      font-size: 1.4rem;
+    }
+  
+    h4.imp-link {
+      margin-bottom: 2rem;
+    }
+  
+    .footer-section .legend {
+      padding-top: 4rem;
+      padding-bottom: 4rem;
+    }
+  
+    .footer-menu-list li:nth-child(2) {
+      margin-bottom: 2rem;
+    }
+  }
+  
+  @media only screen and (max-width: 991px) {
+    .mega-menu {
+      top: 13rem;
+    }
+  
+    .spacer-bottom {
+      margin-bottom: 5rem;
+    }
+  
+    .slide-detail h2 {
+      font-size: 4.2rem;
+      margin-bottom: 4rem;
+    }
+  
+    .services .content {
+      min-height: 24rem;
+    }
+  
+    .testimonials {
+      padding-block: 4rem;
+      background-position: 1rem 1rem, 100% 100%;
+      background-size: 6rem, 15rem;
+    }
+  
+    .testimonial .title,
+    .testimonial .subtitle {
+      margin-bottom: 2rem;
+    }
+  
+    .testimonial .subtitle h3 {
+      font-size: 1.6rem;
+    }
+  
+    .form {
+      padding: 3rem;
+    }
+  
+    .get-quote-form {
+      padding: 0;
+    }
+  
+    .quote .unlock {
+      width: 100%;
+    }
+  
+    .offices .row {
+      max-width: unset;
+    }
+  
+    .footer-section .legend .col-lg-3 {
+      padding-block: 2rem;
+    }
+  
+    .prodcut-reviews {
+      padding-top: 6rem;
+      background-size: 6rem 7rem;
+    }
+  
+    .product-reviews-slider .video-play-buttton {
+      bottom: 6rem;
+    }
+  
+    .product-reviews-slider .swiper-pagination {
+      bottom: 2rem;
+    }
+  
+    section.accessory {
+      padding-block: 5rem;
+      background-position: 3% 0, 100% 1%, 100% 50%, 98% 82%, 2% 90%, 0 45%;
+      background-size: 4rem, 4rem, 4rem, 4rem, 4rem, 4rem;
+    }
+  
+    section.recommended-services {
+      padding-top: 4rem;
+    }
+  
+    .step-one,
+    .step-three {
+      padding-block: 4rem;
+    }
+  
+    .product-comparison .add-for-compare,
+    .product-specifications {
+      padding-block: 4rem;
+    }
+  
+    .product-specifications table td {
+      padding: 2rem 2rem 2rem 0;
+    }
+  
+    .product-specifications {
+      background-size: 5rem, 5rem, 5rem, 5rem, 5rem, 5rem, 5rem;
+    }
+  
+    .product-specifications table td {
+      min-width: 15rem;
+      padding: 1rem 2rem 1rem 0;
+    }
+  }
+  
+  @media only screen and (max-width: 767px) {
+    .top-header,
+    .navbar {
+      padding-inline: 2rem;
+    }
+  
+    .header .social-links {
+      justify-content: center;
+    }
+  
+    .navbar .navbar-nav {
+      margin-bottom: 2rem;
+    }
+  
+    .mega-menu {
+      padding: 2.5rem;
+      top: 18rem;
+    }
+  
+    .mega-menu h2 {
+      font-size: 2.4rem;
+      margin-bottom: 1.5rem;
+    }
+  
+    .mega-menu .nav-pills {
+      margin-bottom: 2rem;
+    }
+  
+    .mega-menu .menus .links {
+      padding-top: 5rem;
+    }
+  
+    .mega-menu .content-wrapper {
+      flex-direction: column;
+    }
+  
+    .slide .slide-contents {
+      margin-bottom: 2rem;
+    }
+  
+    .margin-sm {
+      margin-bottom: 2rem !important;
+    }
+  
+    .slide-banner .slide {
+      display: flex;
+      flex-direction: column;
+    }
+  
+    .hero-pagination .swiper-pagination-bullet {
+      margin-inline: 0.5rem !important;
+    }
+  
+    .top-header-links {
+      flex-direction: column;
+    }
+  
+    .top-header-links li {
+      text-align: center;
+    }
+  
+    .top-header-links li a {
+      justify-content: center;
+    }
+  
+    .slide-detail h2 {
+      margin-bottom: 2rem;
+    }
+  
+    .techno-button {
+      min-width: 15rem;
+      padding: 1.2rem 0;
+    }
+  
+    .section-heading,
+    .insights h2,
+    .contact .form-heading {
+      font-size: 2.4rem;
+    }
+  
+    .services {
+      background-size: 3rem, 3rem, 3rem, 3rem, 3rem;
+      background-position: 2rem 2rem, 100% 0, 1px 50%, 2rem 100%, 98% 98%;
+    }
+  
+    .insights {
+      background-size: 4rem, 4rem;
+    }
+  
+    .form input,
+    .form select,
+    .form textarea {
+      padding: 1rem 1.5rem;
+    }
+  
+    .contact {
+      padding-bottom: 4rem;
+    }
+  
+    section.sponsors,
+    section.clients {
+      min-height: 12rem;
+      background: #d4f9f3;
+    }
+  
+    .quote {
+      text-align: center;
+    }
+  
+    .quote .unlock .heading {
+      margin-bottom: 2rem;
+    }
+  
+    .quote .side-btn {
+      padding-block: 1rem;
+    }
+  
+    .quote .unlock .button {
+      text-align: center;
+    }
+  
+    .form .row .col-sm-12:first-child {
+      margin-bottom: 1.5rem;
+    }
+  
+    .newsletter ._container {
+      background-size: 0, 0;
+    }
+  
+    .news-latter-detail {
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+  
+    .offices {
+      background-color: #fff8f2;
+    }
+  
+    .product-banner .contents {
+      max-width: unset;
+    }
+  
+    .login-field input {
+      padding: 1.2rem 2rem;
+    }
+  
+    .form-button button {
+      padding: 1.2rem 0;
+    }
+  
+    .remember-password {
+      margin-bottom: 1rem;
+    }
+  
+    .otp-field .field-wrapper {
+      max-width: unset;
+    }
+  
+    .industry-listings {
+      padding-block: 6rem;
+      background-position: 2% 0%, 100% 0, 100% 100%, 0 80%;
+      background-size: 5rem, 5rem, 5rem, 5rem;
+    }
+  
+    .industry-listings .industry:not(:last-child) {
+      margin-bottom: 3rem;
+    }
+  
+    .vestibulum-ante .vestibulum-ante-contents {
+      max-width: unset;
+      padding-inline: 0;
+      padding-top: 2rem;
+    }
+  
+    .industrie-video,
+    .vestibulum-ante-images {
+      max-width: unset;
+      height: auto;
+    }
+  
+    .vestibulum-ante-1 {
+      background-position: 1% 40%, 95% 22%, 0 0;
+      background-size: 3rem, 3rem, 100% 100%;
+    }
+  
+    .vestibulum-ante-2 {
+      background-position: 2% 0;
+      background-size: 7rem;
+    }
+  
+    .industry-listings .industry .industry-name,
+    .industry-listings .industry .about-industry,
+    .industry-listings .industry .author-designation {
+      margin-bottom: 1rem;
+    }
+  
+    .myClient .swiper-wrapper {
+      display: flex;
+      align-items: center;
+    }
+  
+    .myClient .swiper-slide {
+      display: flex;
+      justify-content: center;
+    }
+  
+    .product-overview-tab .nav-item:not(:last-child) {
+      margin-right: 0;
+    }
+  
+    .product-overview-tab .product-name h2 {
+      font-size: 2.4rem;
+      margin-bottom: 2rem;
+    }
+  
+    .product-overview-tab .product-specs {
+      margin-bottom: 2rem;
+    }
+  
+    .product-overview-tab .product-specs ul li {
+      font-size: 1.6rem;
+    }
+  
+    .swiper-next,
+    .swiper-prev {
+      height: 4rem;
+      width: 4rem;
+    }
+  
+    .product-overview-tab .swiper-pagination .swiper-pagination-bullet {
+      margin-inline: 0.5rem;
+    }
+  
+    .product-search {
+      padding-left: 0;
+    }
+  
+    .my-accessories {
+      min-width: 29rem;
+      padding: 2rem;
+    }
+  
+    .my-accessories .list {
+      margin-bottom: 1rem;
+    }
+  
+    .my-accessories .get-quote span {
+      padding: 1.5rem;
+    }
+  
+    .product-specification {
+      padding-block: 4rem;
+      background-size: 5rem, 5rem, 5rem, 5rem, 5rem, 5rem, 5rem, 5rem, 5rem;
+      background-position: 2% 3%, 100% 2%, 100% 20%, 98% 50%, 100% 90%, 0 90%,
+        2% 50%, 2% 70%, 0 20%;
+    }
+  
+    section.documents {
+      padding-block: 4rem;
+      background-size: 5rem, 5rem, 5rem, 5rem;
+    }
+  
+    section.model {
+      padding-block: 4rem;
+      background-position: 3% 0, 100% 0, 100% 85%, 0 70%;
+      background-size: 6rem, 5rem, 7rem, 5rem;
+    }
+  
+    section.recommended-services {
+      background-size: 5rem, 5rem, 5rem, 4rem;
+    }
+  
+    .step-one {
+      background-size: 4rem, 4rem, 4rem, 4rem, 4rem;
+    }
+  
+    .card.plan {
+      width: 100%;
+      padding: 2rem;
+    }
+  
+    .default-button.outlined span {
+      padding: 1.5rem;
+      padding: 1.5rem 5rem;
+    }
+  
+    .default-button.compare span {
+      padding: 1.5rem 5rem;
+    }
+  
+    .build-server .form form {
+      padding-right: 2rem;
+    }
+  
+    .build-server .form .row {
+      margin-bottom: 1.5rem;
+    }
+  
+    .build-server .default-button span {
+      padding: 1.5rem;
+    }
+  
+    .build-server .form .action-btn {
+      display: block;
+      margin-inline: auto;
+    }
+  
+    .build-server .form .action-btn.add {
+      margin-right: auto;
+    }
+  
+    .sub-footer {
+      padding-block: 2rem;
+    }
+  }
+  
+  @media only screen and (max-width: 576px) {
+    .form {
+      padding: 2rem;
+    }
+  
+    .get-quote-form {
+      padding: 0;
+    }
+  
+    .subscribe-with-email .subscribe-detail input {
+      padding: 1rem 2rem;
+    }
+  
+    .subscribe-with-email .subscribe-detail .field {
+      width: 55%;
+    }
+  
+    .subscribe-with-email .subscribe-detail button {
+      width: 45%;
+      font-size: 1.4rem;
+      padding: 0;
+    }
+  
+    .products {
+      padding-top: 5rem;
+      background-size: 3rem, 4rem, 4rem, 4rem, 4rem;
+      background-position: 2% 2%, 100% 0, 100% 95%, 0 100%, 0, 2%;
+    }
+  
+    .product-search {
+      gap: 1rem;
+    }
+  
+    .product-search input {
+      padding: 1rem;
+    }
+  
+    .product-search .my-list {
+      font-size: 0;
+      padding: 0;
+      height: 5rem;
+      min-width: 5rem;
+      border-radius: 50%;
+    }
+  }
