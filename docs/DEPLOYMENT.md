@@ -56,6 +56,11 @@ sudo ./svc.sh start
 The labels must include `self-hosted` and `linux` — the deploy job selects on both.
 Confirm it shows **Idle** on the Runners page before going further.
 
+This instance uses **Apache + mod_php** at `/var/www/AdminPanel` (not nginx/php-fpm).
+Auto-sync is a systemd timer that runs `ec2-release.sh autosync` every 2 minutes
+against `origin/sprint1_dev`. The GitHub deploy workflow is optional until a
+self-hosted runner is registered.
+
 > If a runner is already registered on this box against the **old** repo, leave it
 > running during cutover. Two runner services can coexist in separate directories;
 > remove the old one with `sudo ./svc.sh stop && ./config.sh remove` once you're happy.
@@ -81,7 +86,7 @@ The script calls `sudo systemctl reload <php-fpm>`, so grant exactly that, passw
 
 ```bash
 sudo tee /etc/sudoers.d/gh-runner-deploy >/dev/null <<'EOF'
-ubuntu ALL=(root) NOPASSWD: /usr/bin/systemctl reload php8.3-fpm, /usr/bin/systemctl list-unit-files
+ubuntu ALL=(root) NOPASSWD: /usr/bin/systemctl reload php8.3-fpm, /usr/bin/systemctl reload apache2, /usr/bin/systemctl list-unit-files
 EOF
 sudo chmod 0440 /etc/sudoers.d/gh-runner-deploy
 sudo visudo -c
@@ -95,7 +100,7 @@ Also make sure `rsync`, `git`, `composer`, `tar` and `curl` are installed on the
 
 | Secret | Example | Required |
 |---|---|---|
-| `APP_PATH` | `/var/www/ec-healthcare` | yes |
+| `APP_PATH` | `/var/www/AdminPanel` | yes |
 | `BACKUP_DIR` | `/var/www/backups/ec-healthcare` | no (defaults next to `APP_PATH`) |
 | `BACKUP_KEEP` | `5` | no |
 | `PHP_BIN` | `/usr/bin/php8.3` | no (defaults to `php`) |

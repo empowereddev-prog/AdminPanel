@@ -9,7 +9,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 backup|deploy|deploy-sync|rollback|list [archive-name|latest]"
+  echo "Usage: $0 backup|deploy|deploy-sync|autosync|rollback|list [archive-name|latest]"
   exit 1
 }
 
@@ -42,13 +42,13 @@ reload_fpm() {
     sudo systemctl reload "$PHP_FPM_SERVICE" || true
     return
   fi
-  for svc in php8.3-fpm php8.2-fpm php-fpm; do
+  for svc in php8.3-fpm php8.2-fpm php-fpm apache2; do
     if systemctl list-unit-files "$svc.service" >/dev/null 2>&1; then
       sudo systemctl reload "$svc" || true
       return
     fi
   done
-  log "PHP-FPM service not found; skip reload"
+  log "PHP-FPM / Apache service not found; skip reload"
 }
 
 # The locked dependencies carry known security advisories (see docs/DEPLOYMENT.md).
@@ -128,6 +128,29 @@ do_list() {
   mkdir -p "$BACKUP_DIR"
   log "Backups in $BACKUP_DIR (newest first):"
   ls -lh "$BACKUP_DIR"/pre-deploy-*.tar.gz 2>/dev/null || echo "(none)"
+}
+
+do_autosync() {
+  if [[ ! -d "$APP_PATH/.git" ]]; then
+    log "ERROR: $APP_PATH is not a git checkout; cannot autosync"
+    exit 1
+  fi
+
+  cd "$APP_PATH"
+  local branch="${GIT_BRANCH:-sprint1_dev}"
+  git fetch origin "$branch"
+  local local_sha remote_sha
+  local_sha="$(git rev-parse HEAD)"
+  remote_sha="$(git rev-parse "origin/$branch")"
+  if [[ "$local_sha" == "$remote_sha" ]]; then
+    log "Already on origin/$branch ($local_sha); nothing to deploy"
+    return 0
+  fi
+
+  log "Autosync $local_sha -> $remote_sha (origin/$branch)"
+  GIT_SHA="$remote_sha"
+  GIT_BRANCH="$branch"
+  do_deploy
 }
 
 do_deploy() {
@@ -255,6 +278,7 @@ case "$command" in
   backup) do_backup ;;
   deploy) do_deploy ;;
   deploy-sync) do_deploy_sync ;;
+  autosync) do_autosync ;;
   rollback) do_rollback ;;
   list) do_list ;;
   *) usage ;;

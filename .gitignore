@@ -19,9 +19,9 @@ yarn-error.log
 /.vscode
 public/uploads
 public/phpdb
-public/.htaccess
 public/.htpasswd
 .env
+*.pem
 *.sql
 code-db-20251010.zip
 /public/assets/*
