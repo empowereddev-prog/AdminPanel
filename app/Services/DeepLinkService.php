@@ -301,14 +301,39 @@ class DeepLinkService
         return in_array($viewerSchool, $schoolIds, true);
     }
 
-    protected function teaser(?string $html): ?string
+    public function withPreviewDetails(array $payload): array
+    {
+        if (empty($payload['type']) || empty($payload['id']) || empty($payload['published'])) {
+            return $payload;
+        }
+
+        $model = $this->findContent($payload['type'], (int) $payload['id']);
+        if (!$model) {
+            return $payload;
+        }
+
+        $payload['teaser'] = $this->teaser($model->description ?? '', 720);
+        $payload['author'] = $model->written_by ?: null;
+        $payload['category'] = $model->category?->category_name;
+        $payload['accent'] = $model->color ?: '#1a5edb';
+        $payload['audience_label'] = match ($this->normalizeAudience($model->user_type ?? null)) {
+            'child' => 'For children',
+            'parent' => 'For parents & staff',
+            'staff' => 'For staff',
+            default => 'For everyone',
+        };
+
+        return $payload;
+    }
+
+    protected function teaser(?string $html, int $limit = 240): ?string
     {
         $text = trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags((string) $html))) ?? '');
         if ($text === '') {
             return null;
         }
 
-        return Str::limit($text, 240);
+        return Str::limit($text, $limit);
     }
 
     protected function bannerUrl(KnowledgeSession|VideoContent $model): ?string

@@ -90,8 +90,10 @@ class KnowleadgeSessionController extends Controller
                 return DataTables::of($ageGroup)
                     ->addIndexColumn()
                     ->addColumn('action', function ($row) {
+                        $shareUrl = \App\Services\DeepLinkService::canonicalUrl('article', (int) $row->id);
                         $btn = "";
-                        $btn .= '<a href="' . url("knowledge-session/" . $row->id . "/edit") . '" title="Edit" style="margin-left:5px;font-size:20px"><i class="mdi mdi-pencil""></i></a>&nbsp;';
+                        $btn .= '<a href="javascript:void(0);" class="copy-article-link" data-url="' . e($shareUrl) . '" title="Copy share link" style="margin-left:5px;font-size:20px"><i class="mdi mdi-share-variant"></i></a>&nbsp;';
+                        $btn .= '<a href="' . url("knowledge-session/" . $row->id . "/edit") . '" title="Edit" style="margin-left:5px;font-size:20px"><i class="mdi mdi-pencil"></i></a>&nbsp;';
                         $btn .= '<a href="' . url("delete-knowledge-session/" . $row->id) . '" class="delete" title="Delete" data-id="' . $row->id . '" style="margin-left:5px;font-size:20px"><span class="mdi mdi-trash-can"></span></a>&nbsp;';
                         return $btn;
                     })
@@ -176,6 +178,10 @@ class KnowleadgeSessionController extends Controller
                     ->make(true);
             } else {
                 return Datatables::of($ageGroup)
+                    ->addColumn('action', function ($row) {
+                        $shareUrl = \App\Services\DeepLinkService::canonicalUrl('article', (int) $row->id);
+                        return '<a href="javascript:void(0);" class="copy-article-link" data-url="' . e($shareUrl) . '" title="Copy share link" style="margin-left:5px;font-size:20px"><i class="mdi mdi-share-variant"></i></a>';
+                    })
                     ->editColumn('title', function ($row) {
                         $plainTexttitle = strip_tags($row->title);
                         $truncatedtitle = substr($plainTexttitle, 0, 50);
@@ -250,7 +256,7 @@ class KnowleadgeSessionController extends Controller
                             </a>
                         ';
                     })
-                    ->rawColumns(['title', 'like_count', 'color', 'total_likes', 'total_dislikes', 'total_favourite', 'title_color', 'description', 'category',  'status', 'session_date_time'])
+                    ->rawColumns(['action', 'title', 'like_count', 'color', 'total_likes', 'total_dislikes', 'total_favourite', 'title_color', 'description', 'category',  'status', 'session_date_time'])
                     ->addIndexColumn()
                     ->make(true);
             }

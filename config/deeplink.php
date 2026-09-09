@@ -15,6 +15,10 @@ return [
 
     'ios_store_url' => env('DEEPLINK_IOS_STORE_URL', 'https://apps.apple.com'),
 
+    'ios_app_id' => env('DEEPLINK_IOS_APP_ID', ''),
+
+    'app_icon' => env('DEEPLINK_APP_ICON', '/assets/images/new.png'),
+
     'android_store_url' => env('DEEPLINK_ANDROID_STORE_URL', 'https://play.google.com/store/apps/details?id=asia.empoweredhealth'),
 
     'scheme' => env('DEEPLINK_SCHEME', 'empowered'),

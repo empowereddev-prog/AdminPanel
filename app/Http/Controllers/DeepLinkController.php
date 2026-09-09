@@ -50,6 +50,41 @@ class DeepLinkController extends Controller
         return $this->associationResponse($payload);
     }
 
+    public function webManifest(): Response
+    {
+        $icon = $this->appIconUrl();
+        $payload = [
+            'name' => 'Empowered Health',
+            'short_name' => 'Empowered',
+            'start_url' => '/',
+            'display' => 'browser',
+            'prefer_related_applications' => true,
+            'related_applications' => [
+                [
+                    'platform' => 'play',
+                    'id' => config('deeplink.android_package'),
+                    'url' => config('deeplink.android_store_url'),
+                ],
+            ],
+            'icons' => [
+                [
+                    'src' => $icon,
+                    'sizes' => '192x192',
+                    'type' => 'image/png',
+                ],
+            ],
+        ];
+
+        return response(
+            json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT),
+            200,
+            [
+                'Content-Type' => 'application/manifest+json',
+                'Cache-Control' => 'public, max-age=3600',
+            ]
+        );
+    }
+
     public function fallback(Request $request, string $type, $id)
     {
         $resolved = $this->deepLinks->resolve($type, $id, null, true);
@@ -63,11 +98,24 @@ class DeepLinkController extends Controller
                 ->header('Cache-Control', 'no-store');
         }
 
+        $resolved = $this->deepLinks->withPreviewDetails($resolved);
+        $scheme = $resolved['custom_scheme_url'];
+        $package = config('deeplink.android_package');
+        $androidIntent = 'intent://' . $resolved['type'] . '/' . $resolved['id']
+            . '#Intent;scheme=' . config('deeplink.scheme')
+            . ';package=' . $package
+            . ';S.browser_fallback_url=' . rawurlencode($resolved['canonical_url'])
+            . ';end';
+
         return response()
             ->view('deeplink.preview', [
                 'item' => $resolved,
                 'iosStore' => config('deeplink.ios_store_url'),
                 'androidStore' => config('deeplink.android_store_url'),
+                'iosAppId' => $this->iosAppId(),
+                'appIcon' => $this->appIconUrl(),
+                'schemeUrl' => $scheme,
+                'androidIntent' => $androidIntent,
             ], $http)
             ->header('Cache-Control', 'public, max-age=300');
     }
@@ -82,5 +130,28 @@ class DeepLinkController extends Controller
                 'Cache-Control' => 'public, max-age=3600',
             ]
         );
+    }
+
+    protected function iosAppId(): string
+    {
+        $id = trim((string) config('deeplink.ios_app_id'));
+        if ($id !== '') {
+            return $id;
+        }
+        if (preg_match('/(?:id|\/)(\d{9,12})/', (string) config('deeplink.ios_store_url'), $matches)) {
+            return $matches[1];
+        }
+
+        return '';
+    }
+
+    protected function appIconUrl(): string
+    {
+        $path = (string) config('deeplink.app_icon', '/assets/images/new.png');
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        return asset(ltrim($path, '/'));
     }
 }
