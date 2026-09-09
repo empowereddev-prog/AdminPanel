@@ -146,6 +146,10 @@ do_autosync() {
     log "Already on origin/$branch ($local_sha); nothing to deploy"
     return 0
   fi
+  if ! git merge-base --is-ancestor "$local_sha" "$remote_sha"; then
+    log "Skip autosync: HEAD $local_sha is not an ancestor of origin/$branch $remote_sha (would clobber local commits)"
+    return 0
+  fi
 
   log "Autosync $local_sha -> $remote_sha (origin/$branch)"
   GIT_SHA="$remote_sha"
