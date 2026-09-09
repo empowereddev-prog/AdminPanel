@@ -407,6 +407,6 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     });
 
     Route::resource('video-requests', VideoRequestController::class);
-    Route::post('video-requests/{id}', [VideoRequestController::class, 'destroy'])->name('video-requests.destroy');
+    Route::post('video-requests/{id}', [VideoRequestController::class, 'destroy']);
 
 });
