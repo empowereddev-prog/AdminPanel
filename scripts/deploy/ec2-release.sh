@@ -65,7 +65,14 @@ laravel_optimize() {
   "$PHP_BIN" artisan config:clear || true
   "$PHP_BIN" artisan cache:clear || true
   "$PHP_BIN" artisan view:clear || true
-  "$PHP_BIN" artisan config:cache
+  # NO config:cache. This app calls env() at runtime outside config/ --
+  # AppServiceProvider (STRIPE_TEST_SK), helper.php (MAIL_*, which it writes
+  # back over the mail config) and Api/ChildController (GOOGLE_PACKAGE_NAME,
+  # APPLE_SHARED_SECRET, GOOGLE_SERVICE_ACCOUNT). Caching config stops .env
+  # being loaded at all, so every one of those silently becomes null and the
+  # box behaves differently from a developer machine, where it is never cached.
+  # Re-enable this only once those calls read config() instead.
+  "$PHP_BIN" artisan config:clear || true
   # This app has historically duplicate route names (resource + extra aliases).
   # route:cache refuses that; the live app is fine without a route cache.
   "$PHP_BIN" artisan route:clear || true
