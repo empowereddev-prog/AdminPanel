@@ -23,14 +23,16 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
-<Files "apple-app-site-association">
-    Header set Content-Type "application/json"
-    Header set Cache-Control "public, max-age=3600"
-</Files>
-<Files "assetlinks.json">
-    Header set Content-Type "application/json"
-    Header set Cache-Control "public, max-age=3600"
-</Files>
+<IfModule mod_headers.c>
+    <Files "apple-app-site-association">
+        Header set Content-Type "application/json"
+        Header set Cache-Control "public, max-age=3600"
+    </Files>
+    <Files "assetlinks.json">
+        Header set Content-Type "application/json"
+        Header set Cache-Control "public, max-age=3600"
+    </Files>
+</IfModule>
 
 # AuthName "Dialog prompt"
 # AuthType Basic
