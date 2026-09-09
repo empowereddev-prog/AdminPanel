@@ -1,0 +1,11 @@
+[Unit]
+Description=Check GitHub sprint1_dev and deploy when it moves
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

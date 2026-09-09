@@ -264,8 +264,14 @@
 
 
 
-                                            {{-- <div class="col-md-6">
-                                                <label>User Type</label><br>
+                                            <div class="col-md-6">
+                                                <label>Audience</label><br>
+                                                <div class="form-check form-check-inline">
+                                                    <input class="form-check-input" type="radio" name="user_type"
+                                                        id="user_type_parent" value="parent"
+                                                        {{ old('user_type', 'parent') == 'parent' ? 'checked' : '' }}>
+                                                    <label class="form-check-label" for="user_type_parent">Parent / staff</label>
+                                                </div>
                                                 <div class="form-check form-check-inline">
                                                     <input class="form-check-input" type="radio" name="user_type"
                                                         id="user_type_child" value="child"
@@ -274,14 +280,14 @@
                                                 </div>
                                                 <div class="form-check form-check-inline">
                                                     <input class="form-check-input" type="radio" name="user_type"
-                                                        id="user_type_adult" value="parent"
-                                                        {{ old('user_type') == 'parent' ? 'checked' : '' }}>
-                                                    <label class="form-check-label" for="user_type_adult">Parent</label>
+                                                        id="user_type_both" value="both"
+                                                        {{ old('user_type') == 'both' ? 'checked' : '' }}>
+                                                    <label class="form-check-label" for="user_type_both">All</label>
                                                 </div>
                                                 @error('user_type')
                                                     <div class="text-danger small mt-1">{{ $message }}</div>
                                                 @enderror
-                                            </div> --}}
+                                            </div>
                                         </div>
 
                                         <div class="row mb-3">

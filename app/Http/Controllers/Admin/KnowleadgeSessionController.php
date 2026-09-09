@@ -90,8 +90,10 @@ class KnowleadgeSessionController extends Controller
                 return DataTables::of($ageGroup)
                     ->addIndexColumn()
                     ->addColumn('action', function ($row) {
+                        $shareUrl = \App\Services\DeepLinkService::canonicalUrl('article', (int) $row->id);
                         $btn = "";
-                        $btn .= '<a href="' . url("knowledge-session/" . $row->id . "/edit") . '" title="Edit" style="margin-left:5px;font-size:20px"><i class="mdi mdi-pencil""></i></a>&nbsp;';
+                        $btn .= '<a href="javascript:void(0);" class="copy-article-link" data-url="' . e($shareUrl) . '" title="Copy share link" style="margin-left:5px;font-size:20px"><i class="mdi mdi-share-variant"></i></a>&nbsp;';
+                        $btn .= '<a href="' . url("knowledge-session/" . $row->id . "/edit") . '" title="Edit" style="margin-left:5px;font-size:20px"><i class="mdi mdi-pencil"></i></a>&nbsp;';
                         $btn .= '<a href="' . url("delete-knowledge-session/" . $row->id) . '" class="delete" title="Delete" data-id="' . $row->id . '" style="margin-left:5px;font-size:20px"><span class="mdi mdi-trash-can"></span></a>&nbsp;';
                         return $btn;
                     })
@@ -176,6 +178,10 @@ class KnowleadgeSessionController extends Controller
                     ->make(true);
             } else {
                 return Datatables::of($ageGroup)
+                    ->addColumn('action', function ($row) {
+                        $shareUrl = \App\Services\DeepLinkService::canonicalUrl('article', (int) $row->id);
+                        return '<a href="javascript:void(0);" class="copy-article-link" data-url="' . e($shareUrl) . '" title="Copy share link" style="margin-left:5px;font-size:20px"><i class="mdi mdi-share-variant"></i></a>';
+                    })
                     ->editColumn('title', function ($row) {
                         $plainTexttitle = strip_tags($row->title);
                         $truncatedtitle = substr($plainTexttitle, 0, 50);
@@ -250,7 +256,7 @@ class KnowleadgeSessionController extends Controller
                             </a>
                         ';
                     })
-                    ->rawColumns(['title', 'like_count', 'color', 'total_likes', 'total_dislikes', 'total_favourite', 'title_color', 'description', 'category',  'status', 'session_date_time'])
+                    ->rawColumns(['action', 'title', 'like_count', 'color', 'total_likes', 'total_dislikes', 'total_favourite', 'title_color', 'description', 'category',  'status', 'session_date_time'])
                     ->addIndexColumn()
                     ->make(true);
             }
@@ -470,7 +476,7 @@ class KnowleadgeSessionController extends Controller
                 // ✅ Category से color values dynamically ले रहे हैं
                 'color' => $category->color ?? null,
                 'title_color' => $category->title_color ?? null,
-                'user_type' => 'parent',
+                'user_type' => in_array($request->user_type, ['parent', 'child', 'both'], true) ? $request->user_type : 'parent',
                 'written_by' => $request->written_by,
                 'featured_key' => $request->featured_key,
             ]);
@@ -488,11 +494,13 @@ class KnowleadgeSessionController extends Controller
         }
         // Notifications
         foreach ($createdArticles as $article) {
-            $userIds = User::where([
-                'user_type' => 'parent',
-                'status' => 'active',
-                'is_notification' => 'true'
-            ])->pluck('id')->toArray();
+            $notifyTypes = $article->user_type === 'both'
+                ? ['parent', 'child', 'teacher']
+                : ($article->user_type === 'child' ? ['child'] : ['parent', 'teacher']);
+            $userIds = User::whereIn('user_type', $notifyTypes)
+                ->where('status', 'active')
+                ->where('is_notification', 'true')
+                ->pluck('id')->toArray();
 
             $users = DeviceToken::whereIn('user_id', $userIds)
                 ->whereNotNull('token')
@@ -505,9 +513,11 @@ class KnowleadgeSessionController extends Controller
             $userData = [
                 'title'      => $article->title,
                 'id'         => $article->id,
+                'know_ses_id'=> $article->id,
                 'color'      => $article->color,
                 'title_color' => $article->title_color,
                 'type'       => 'add_article',
+                'link'       => \App\Services\DeepLinkService::canonicalUrl('article', (int) $article->id),
             ];
 
             foreach ($users as $user) {
@@ -666,7 +676,9 @@ class KnowleadgeSessionController extends Controller
         $knowledgeSession->is_featured = 'yes';
         // $knowledgeSession->title_chinese = $request->title_chinese;
         // $knowledgeSession->description_chinese = $request->description_chinese;
-        $knowledgeSession->user_type = 'parent';
+        $knowledgeSession->user_type = in_array($request->user_type, ['parent', 'child', 'both'], true)
+            ? $request->user_type
+            : ($knowledgeSession->user_type ?: 'parent');
         $knowledgeSession->color = $request->color;
         $knowledgeSession->title_color = $request->title_color;
         $knowledgeSession->written_by = $request->written_by;

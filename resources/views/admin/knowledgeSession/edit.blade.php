@@ -262,8 +262,14 @@
                                                     height="60" width="60" alt="image">
                                             </div>
 
-                                            {{-- <div class="form-group col-md-6 mb-3">
-                                                <label>User Type</label><br>
+                                            <div class="form-group col-md-6 mb-3">
+                                                <label>Audience</label><br>
+                                                <div class="form-check form-check-inline">
+                                                    <input class="form-check-input" type="radio" name="user_type"
+                                                        id="user_type_parent" value="parent"
+                                                        {{ old('user_type', $data->user_type) == 'parent' ? 'checked' : '' }}>
+                                                    <label class="form-check-label" for="user_type_parent">Parent / staff</label>
+                                                </div>
                                                 <div class="form-check form-check-inline">
                                                     <input class="form-check-input" type="radio" name="user_type"
                                                         id="user_type_child" value="child"
@@ -272,14 +278,14 @@
                                                 </div>
                                                 <div class="form-check form-check-inline">
                                                     <input class="form-check-input" type="radio" name="user_type"
-                                                        id="user_type_adult" value="parent"
-                                                        {{ old('user_type', $data->user_type) == 'parent' ? 'checked' : '' }}>
-                                                    <label class="form-check-label" for="user_type_adult">Parent</label>
+                                                        id="user_type_both" value="both"
+                                                        {{ old('user_type', $data->user_type) == 'both' ? 'checked' : '' }}>
+                                                    <label class="form-check-label" for="user_type_both">All</label>
                                                 </div>
                                                 @error('user_type')
                                                     <div class="text-danger small mt-1">{{ $message }}</div>
                                                 @enderror
-                                            </div> --}}
+                                            </div>
 
                                             <div class="form-group col-md-6 mb-3" id="ageRangeWrapper">
                                                 <label for="age_range">Select Age Range</label>
@@ -363,6 +369,12 @@
                                 </div>
 
                                 {{-- Buttons --}}
+                                @include('admin.partials.deeplink-share', [
+                                    'deeplinkType' => 'article',
+                                    'shareId' => $data->id,
+                                    'canonicalUrl' => $data->canonical_url,
+                                    'shareStatus' => $data->status,
+                                ])
                                 <div class="form-footer text-end">
                                     <button type="submit" class="btn btn-primary btn-pill">Update</button>
                                     <a href="{{ route('knowledgeSession.index') }}">

@@ -1,0 +1,19 @@
+[Unit]
+Description=Sync Laravel app from origin/sprint1_dev
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=www-data
+WorkingDirectory=/var/www/AdminPanel
+Environment=APP_PATH=/var/www/AdminPanel
+Environment=GIT_BRANCH=sprint1_dev
+Environment=PHP_BIN=/usr/bin/php
+Environment=PHP_FPM_SERVICE=apache2
+Environment=BACKUP_DIR=/var/www/backups/AdminPanel
+ExecStart=/usr/bin/bash /var/www/AdminPanel/scripts/deploy/ec2-release.sh autosync
+
+[Install]
+WantedBy=multi-user.target

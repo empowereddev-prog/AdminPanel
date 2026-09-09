@@ -171,10 +171,12 @@ class VideoMoreController extends Controller
         'title'       => $video_content_details->title,
         'thumbnail'   => asset('assets/images/' . $video_content_details->thumbnail),
         'video_link'  => asset('assets/video/' . $video_content_details->video_link),
-        'id'          => $video_content_details->category_id,
+        'id'          => $video_content_details->id,
+        'category_id' => $video_content_details->category_id,
         'color'       => $video_content_details->color,
         'title_color' => $video_content_details->title_color,
         'type'        => 'video_content',
+        'link'        => \App\Services\DeepLinkService::canonicalUrl('podcast', (int) $video_content_details->id),
     ];
 
     foreach ($users as $user) {

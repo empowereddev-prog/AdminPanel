@@ -35,14 +35,17 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
   return $request->user();
 });
 
+Route::get('deeplink/resolve', \App\Http\Controllers\Api\DeepLinkResolveController::class)
+  ->middleware('throttle:deeplink_resolve');
+
 Route::post('webhooks/google', [WebhookController::class, 'google']);
 Route::post('webhooks/apple', [WebhookController::class, 'apple']);
 
 Route::post('register', [HomeApiController::class, 'register']);
 Route::post('login', [HomeApiController::class, 'login']);
 Route::post('forgot-password', [HomeApiController::class, 'forgotPassword']);
-Route::get('reset-password/{token}', [HomeApiController::class, 'resetPasswordPage'])->name('reset.password.page');
-Route::post('reset-password/{token}', [HomeApiController::class, 'passwordReset'])->name('password-reset');
+Route::get('reset-password/{token}', [HomeApiController::class, 'resetPasswordPage'])->name('api.reset.password.page');
+Route::post('reset-password/{token}', [HomeApiController::class, 'passwordReset'])->name('api.password-reset');
 // Route::post('reset-password', [HomeApiController::class, 'resetPassword']);
 Route::post('verify-otp', [HomeApiController::class, 'verifyOtp']);
 Route::post('resend-otp', [HomeApiController::class, 'resendOtp']);
