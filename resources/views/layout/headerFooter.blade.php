@@ -29,7 +29,7 @@
     <link id="main-css-href" rel="stylesheet" href="{{ asset('assets/css/style.css') }}" />
     <link id="main-css" rel="stylesheet" href="{{ asset('assets/css/custom.css') }}" />
 
-    <link rel="shortcut icon" href="{{ asset('assets/images/new.png') }}" type="image/x-icon">
+    <link rel="shortcut icon" href="{{ asset('assets/images/new.png') }}" type="image/png">
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
