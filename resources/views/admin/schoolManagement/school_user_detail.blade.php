@@ -20,7 +20,7 @@
                             <a href="{{ route('user.index') }}">School Management</a>
                         </li>
                         <li class="active">
-                            <a href="{{ route('school.show', $data->school_id) }}">View School User Details </a>
+                            <a href="{{ route('school.show', $data->school_id ?? '') }}">View School User Details </a>
                         </li>
                         <li class="active">
                             <a href="#">School User Child Details </a>
@@ -415,7 +415,7 @@
                                     <input type="hidden" name="getid" id="getid" value="{{ $data->id }}">
                                     <input type="hidden" name="types" value="edit">
                                     <div class="form-footer mt-3" style="text-align: right;">
-                                        <a href="{{ route('school.show', $data->school_id) }}" class="btn btn-secondary">
+                                        <a href="{{ route('school.show', $data->school_id ?? '') }}" class="btn btn-secondary">
                                             <i class="mdi mdi-arrow-left"></i> Back
                                         </a>
                                     </div>
