@@ -275,7 +275,7 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
 
 
     Route::resource('contact-us', ContactUsController::class);
-    Route::post('contact-us/{id}', [ContactUsController::class, 'destroy'])->name('contact-us.destroy');
+    Route::post('contact-us/{id}', [ContactUsController::class, 'destroy']);
 
     // System Log
     Route::get('system-log', [App\Http\Controllers\Admin\SystemLogController::class, 'index'])->name('system-log.index');
