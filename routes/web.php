@@ -74,9 +74,6 @@ Route::post('reset-password', [LoginController::class, 'resetPasswordLink'])->na
 Route::get('reset-password/{token}', [LoginController::class, 'resetPasswordPage'])->name('reset.password.page');
 Route::post('reset-password/{token}', [LoginController::class, 'passwordReset'])->name('password-reset');
 Route::get('reset/{token}', [LoginController::class, 'reset'])->name('reset');
-Route::get('/temp-login', function () {
-    return view('temp.temp-login');
-})->name('temp-login');
 Route::get('/verify/{user_id}/{email}', [UsersController::class, 'verifyUser'])->name('user.verify');
 Route::get('/verify-signup', function () {
     return view('verifySignUp');
@@ -122,7 +119,8 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::post('update-password', [DashboardController::class, 'updatePassword'])->name('update-password');
     Route::resource('static-content', StaticContentController::class);
     Route::resource('faq', FaqController::class);
-    Route::resource('features', FeaturesController::class);
+    // FeaturesController implements only these; the other resource verbs 500 on arrival.
+    Route::resource('features', FeaturesController::class)->only(['index', 'edit', 'update']);
     Route::post('feature/toggle-status/{key}', [FeaturesController::class, 'toggleStatus'])->name('admin.feature.status');
     Route::resource('email-template', EmailTemplateController::class);
     Route::controller(NotificationTemplateController::class)->group(function () {
@@ -200,7 +198,8 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     // knowledgeSession
 
     // video more
-    Route::resource('video-other', VideoMoreController::class);
+    // VideoMoreController has no show(); every other resource verb exists.
+    Route::resource('video-other', VideoMoreController::class)->except(['show']);
     Route::get('video-other-data', [VideoMoreController::class, 'getVideoData'])->name('video-other.data');
 
     Route::get('knowledge-session', [KnowleadgeSessionController::class, 'index'])->name('knowledgeSession.index');
@@ -348,8 +347,11 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::get('child-mood-tracker', [MoodTrackerController::class, 'childMoodTrackerList'])->name('child-mood-tracker');
     Route::get('child-mood-tracker-details/{user_id}', [MoodTrackerController::class, 'childMoodTrackerDetails'])->name('child-mood-tracker.detail');
     //Performed Activity by child
-    Route::get('users-performed-activity', [MoodTrackerController::class, 'userPerformedActivityist'])->name('users-performed-activity');
-    Route::get('users-performed-activity-details/{user_id}', [MoodTrackerController::class, 'userPerformedActivityDetails'])->name('users-performed-activity.detail');
+    // Both actions below are absent from MoodTrackerController (note the typo in
+    // 'userPerformedActivityist'), so these routes only ever produced a 500.
+    // Nothing links to them. Restore them alongside the controller methods.
+    // Route::get('users-performed-activity', [MoodTrackerController::class, 'userPerformedActivityList'])->name('users-performed-activity');
+    // Route::get('users-performed-activity-details/{user_id}', [MoodTrackerController::class, 'userPerformedActivityDetails'])->name('users-performed-activity.detail');
 
     Route::resource('admin/notifications', AdminNotificationController::class)->middleware(['auth', 'isAdmin']);
     // Route::get('video-users/{type}/{videoId}', [KnowledgeBaseController::class, 'showUsers'])->name('video.users');
@@ -406,7 +408,8 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
         ];
     });
 
-    Route::resource('video-requests', VideoRequestController::class);
-    Route::post('video-requests/{id}', [VideoRequestController::class, 'destroy'])->name('video-requests.destroy');
+    // VideoRequestController implements only these; create/edit have no method.
+    Route::resource('video-requests', VideoRequestController::class)->only(['index', 'show', 'update', 'destroy']);
+    Route::post('video-requests/{id}', [VideoRequestController::class, 'destroy']);
 
 });
