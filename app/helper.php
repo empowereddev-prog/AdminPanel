@@ -607,7 +607,7 @@ function sendNotification($user_id, $title, $message, $userData, $type)
 }
 function getAccessToken()
 {
-    $credentials = file_get_contents(public_path('/firebase/auth.json'));
+    $credentials = file_get_contents(storage_path('app/firebase/auth-a0106.json'));
     $credentials = json_decode($credentials, true);
 
     $url = "https://www.googleapis.com/oauth2/v4/token";
@@ -834,7 +834,7 @@ function sendNotificationSender($user_id, $title, $message, $notification_type, 
 {
     try {
         $firebase = (new Factory())
-            ->withServiceAccount(public_path('auth.json'));
+            ->withServiceAccount(storage_path('app/firebase/auth.json'));
         $messaging = $firebase->createMessaging();
         $notiArr['user_id'] = $user_id;
         $notiArr['title'] = $title;

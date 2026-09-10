@@ -105,7 +105,7 @@ class SendAdminNotification implements ShouldQueue
                     ],
                 );
             // }
-            $credentials = file_get_contents(public_path('/firebase/auth.json'));
+            $credentials = file_get_contents(storage_path('app/firebase/auth-a0106.json'));
             $credentials = json_decode($credentials, true);
         
             $url = "https://www.googleapis.com/oauth2/v4/token";
