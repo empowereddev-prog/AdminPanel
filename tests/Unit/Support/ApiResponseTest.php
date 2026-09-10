@@ -96,6 +96,36 @@ class ApiResponseTest extends TestCase
         $this->assertSame('real message', $payload['message']);
     }
 
+    /**
+     * The auth token is top-level in v1 and a v2 client still needs it, so it
+     * goes through $extra rather than $legacy - which v2 drops.
+     */
+    public function test_extra_keys_survive_into_v2_unlike_legacy_keys(): void
+    {
+        $this->asVersion(null);
+        $v1 = json_decode(ApiResponse::success(['id' => 1], 'ok', 200, ['user' => ['id' => 1]], ['token' => 'abc'])->getContent(), true);
+        $this->assertSame('abc', $v1['token']);
+        $this->assertArrayHasKey('user', $v1);
+
+        $this->asVersion('2');
+        $v2 = json_decode(ApiResponse::success(['id' => 1], 'ok', 200, ['user' => ['id' => 1]], ['token' => 'abc'])->getContent(), true);
+        $this->assertSame('abc', $v2['token'], 'A v2 client must still receive its token.');
+        $this->assertArrayNotHasKey('user', $v2);
+    }
+
+    public function test_extra_keys_cannot_clobber_canonical_keys(): void
+    {
+        $this->asVersion(null);
+
+        $payload = json_decode(
+            ApiResponse::success(['real' => true], 'real', 200, [], ['data' => 'spoofed', 'status' => false])->getContent(),
+            true
+        );
+
+        $this->assertSame(['real' => true], $payload['data']);
+        $this->assertTrue($payload['status']);
+    }
+
     public function test_paginated_keeps_flat_legacy_keys_on_v1(): void
     {
         $this->asVersion(null);

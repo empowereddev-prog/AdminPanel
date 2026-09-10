@@ -19,15 +19,19 @@ use Illuminate\Http\JsonResponse;
 class ApiResponse
 {
     /**
-     * @param  array<string,mixed>  $legacy  extra top-level keys kept for v1 clients
+     * @param  array<string,mixed>  $legacy  top-level keys kept for v1 clients only
+     * @param  array<string,mixed>  $extra   top-level keys kept in every version
+     *                                       (the auth token, which a v2 client
+     *                                       still needs, is the reason this exists)
      */
     public static function success(
         mixed $data = null,
         ?string $message = null,
         int $status = 200,
-        array $legacy = []
+        array $legacy = [],
+        array $extra = []
     ): JsonResponse {
-        return self::make(true, $message ?? 'Action performed successfully', $data, $status, null, $legacy);
+        return self::make(true, $message ?? 'Action performed successfully', $data, $status, null, $legacy, $extra);
     }
 
     /**
@@ -83,7 +87,8 @@ class ApiResponse
         mixed $data,
         int $httpStatus,
         mixed $errors,
-        array $legacy
+        array $legacy,
+        array $extra = []
     ): JsonResponse {
         $payload = [
             'status'  => $status,
@@ -95,8 +100,12 @@ class ApiResponse
             $payload['errors'] = $errors;
         }
 
+        // Additive only: neither map may overwrite a canonical key.
+        if ($extra !== []) {
+            $payload += $extra;
+        }
+
         if (!ApiVersion::isV2() && $legacy !== []) {
-            // Additive only: legacy aliases never overwrite the canonical keys.
             $payload += $legacy;
         }
 
