@@ -564,7 +564,7 @@ public function getAllMood(Request $request)
         'data' => Mood::with('activity')->where('status', 'active')->get(),
     ], 200);
 }
-    public function storeChildMood(Request $request)
+    public function storeChildMood(\App\Http\Requests\Api\StoreChildMoodRequest $request)
     {
         // child_id used to come straight from the body, letting any caller wipe
         // and rewrite another child's mood history and loyalty points below.
@@ -1637,7 +1637,12 @@ $moodRing = collect($groupedByColor)
         } else {
             $user =  User::where('id', auth()->user()->id)->first();
             $user_details = User::where('id', $user->parent_id)->first();
-            $school_details =  School::where('id', $user_details->school_id)->where('status', 'active')->latest()->first();
+
+            // A caller with no parent_id (a parent or teacher hitting this
+            // branch) left $user_details null and 500'd on ->school_id.
+            $school_details = $user_details
+                ? School::where('id', $user_details->school_id)->where('status', 'active')->latest()->first()
+                : null;
             if (!$school_details) {
                 return response()->json([
                     'status' => false,

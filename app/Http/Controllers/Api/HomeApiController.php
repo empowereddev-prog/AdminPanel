@@ -829,6 +829,11 @@ class HomeApiController extends Controller
 
     public function individualLogin(Request $request)
     {
+        // Resolved before the try: the catch below reads $language, and a
+        // validation failure used to reach it before it was ever assigned,
+        // turning every bad login payload into a 500.
+        $language = $request->language ?? 'english';
+
         try {
             $request->validate([
                 'country_code' => 'required',
@@ -836,7 +841,6 @@ class HomeApiController extends Controller
                 'password' => 'required',
             ]);
             $user = User::where('country_code', $request->country_code)->where('phone_no', $request->phone_no)->where('user_type', 'parent')->where('deleted_at', NULL)->first();
-            $language = $request->language;
             $deleted_user = User::where('country_code', $request->country_code)->where('phone_no', $request->phone_no)->where('user_type', 'parent')->whereNot('deleted_at', NULL)->first();
             if ($deleted_user) {
                 return response()->json(['message' =>  $language == 'english' ? 'Your account has been deleted.' : '您的帐户已被删除。'], 401);
@@ -1015,7 +1019,12 @@ class HomeApiController extends Controller
         // delete user notifications
         DeviceToken::where('user_id', $user->id)->delete();
         $language = $request->language;
-        $user->token()->revoke();
+
+        // token() is null when the request was not authenticated through a
+        // stored Passport token; reset() already guards this the same way.
+        if ($user->token()) {
+            $user->token()->revoke();
+        }
         return [
             "status" => true,
             "message" => $language == 'english' ? "Logout Successfully." : "登出成功。",

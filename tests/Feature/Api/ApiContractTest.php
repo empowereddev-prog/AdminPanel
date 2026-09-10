@@ -97,6 +97,48 @@ class ApiContractTest extends TestCase
             ->assertJsonPath('status', false);
     }
 
+    /**
+     * FormRequest::failedValidation throws HttpResponseException. The parent
+     * handler returns its response before anything else; the api/* branch must
+     * do the same or every FormRequest failure becomes a 500.
+     */
+    public function test_form_request_validation_failure_is_not_a_500(): void
+    {
+        $teacher = $this->makeUser(['user_type' => 'teacher', 'user_role_id' => 5]);
+        Passport::actingAs($teacher, [], 'api');
+
+        $response = $this->postJson('/api/update-teacher-profile', []);
+
+        $this->assertNotSame(500, $response->getStatusCode());
+        $response->assertJsonPath('status', false);
+    }
+
+    /** An unauthorized FormRequest returns JSON 403, not the HTML 403 page. */
+    public function test_form_request_authorization_failure_returns_json_403(): void
+    {
+        $parent = $this->makeUser(); // not a teacher
+        Passport::actingAs($parent, [], 'api');
+
+        $response = $this->postJson('/api/update-teacher-profile', []);
+
+        $response->assertStatus(403)->assertJsonPath('status', false);
+        $this->assertStringContainsString('application/json', $response->headers->get('Content-Type'));
+    }
+
+    /** A raw HttpResponseException keeps its own status and body. */
+    public function test_http_response_exception_is_returned_verbatim(): void
+    {
+        $handler = app(\App\Exceptions\Handler::class);
+        $request = \Illuminate\Http\Request::create('/api/probe', 'POST');
+
+        $response = $handler->render($request, new \Illuminate\Http\Exceptions\HttpResponseException(
+            response()->json(['status' => false, 'probe' => true], 422)
+        ));
+
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertSame('{"status":false,"probe":true}', $response->getContent());
+    }
+
     /** The web side must keep its redirect behaviour. */
     public function test_web_routes_still_redirect_when_unauthenticated(): void
     {

@@ -6,6 +6,7 @@ use App\Support\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -74,6 +75,25 @@ class Handler extends ExceptionHandler
      */
     protected function renderApiException($request, Throwable $e)
     {
+        // Exceptions that render themselves keep doing so, as the parent handler
+        // allows. Nothing in app/ defines one today; this keeps a future custom
+        // exception from silently becoming a 500 here.
+        if (method_exists($e, 'render') && $rendered = $e->render($request)) {
+            return $rendered;
+        }
+
+        if ($e instanceof \Illuminate\Contracts\Support\Responsable) {
+            return $e->toResponse($request);
+        }
+
+        // A response the caller already built (FormRequest::failedValidation,
+        // abort_if, and anything else throwing HttpResponseException) must be
+        // returned as-is. The parent handler does this first; bypassing it
+        // would turn every one of those into a 500.
+        if ($e instanceof HttpResponseException) {
+            return $e->getResponse();
+        }
+
         if ($e instanceof ValidationException) {
             $errors = $e->errors();
 

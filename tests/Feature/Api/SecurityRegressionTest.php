@@ -65,15 +65,9 @@ class SecurityRegressionTest extends TestCase
     /** A parent may still reset their own child's password. */
     public function test_parent_can_still_reset_their_own_childs_password(): void
     {
-        // reset() writes users.is_first_login, which no migration creates on the
-        // users table. Pre-existing schema drift, not a Phase 0 regression.
-        $this->markTestSkipped('Blocked by missing users.is_first_login column.');
-
         $parent = $this->makeUser(['user_type' => 'parent']);
-        // NOTE: users.user_type is enum('user','admin','parent','teacher') on the
-        // migrated schema - it has no 'child' value - so the child row uses 'user'.
         $child  = $this->makeUser([
-            'user_type' => 'user',
+            'user_type' => 'child',
             'user_role_id' => 4,
             'parent_id' => $parent->id,
         ]);
@@ -99,7 +93,7 @@ class SecurityRegressionTest extends TestCase
             'phone_no' => '9' . random_int(100000000, 999999999),
             'country_code' => '+91',
             'otp' => '4321',
-            'is_mobile_verified' => '0',
+            'is_mobile_verified' => 'no',
         ]);
 
         $this->postJson('/api/verify-otp', [
@@ -108,23 +102,18 @@ class SecurityRegressionTest extends TestCase
             'country_code' => $user->country_code,
         ])->assertStatus(200)->assertJsonPath('status', false);
 
-        $this->assertSame('0', $user->fresh()->is_mobile_verified);
+        $this->assertSame('no', $user->fresh()->is_mobile_verified);
     }
 
     /** The real OTP must still verify. */
     public function test_correct_otp_still_verifies(): void
     {
-        // verifyOtp writes is_mobile_verified => 'yes', but the migrated schema
-        // declares enum('0','1'), so MySQL rejects the write. This is pre-existing
-        // schema drift, not a regression from the Phase 0 changes.
-        $this->markTestSkipped('Blocked by users.is_mobile_verified schema drift.');
-
         $user = $this->makeUser([
             'user_role_id' => 3,
             'phone_no' => '9' . random_int(100000000, 999999999),
             'country_code' => '+91',
             'otp' => '4321',
-            'is_mobile_verified' => '0',
+            'is_mobile_verified' => 'no',
         ]);
 
         $this->postJson('/api/verify-otp', [
