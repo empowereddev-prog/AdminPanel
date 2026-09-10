@@ -1,0 +1,266 @@
+# Mobile API Remediation
+
+Status of the work to make the 71 mobile API endpoints correct and safe, without
+breaking the shipped mobile app.
+
+- **Branch:** `phase0-api-hotfix` (branched from `sprint1_dev`; the name predates
+  Phases 1 and 2 — worth renaming to `api-remediation` before opening a PR)
+- **Last updated:** 2026-09-10
+- **Tests:** 51 passing, 340 assertions, 0 skipped
+- **Phases 0 and 1 complete. Phase 2 in progress: 1 of 6 controllers migrated.**
+
+---
+
+## Context
+
+`routes/api.php` exposes 71 mobile endpoints across 12 `Api/*` controllers plus
+three shared web+API controllers. The surface grew by copy-paste and had no
+shared foundation:
+
+- **No response contract.** `Api/ResponseController` existed but was called from
+  two lines and could not express an error at all — every method hardcoded
+  `response()->json($response)` with no status argument. Everything else
+  hand-rolled its own envelope.
+- **No error contract.** The exception handler did not force JSON for `api/*`, so
+  a client omitting `Accept: application/json` got a 302 redirect from
+  validation, an HTML page from `findOrFail()`, and a redirect from throttling.
+- **Authorization was advisory.** Routes were behind `auth:api`, but handlers
+  then acted on whatever `user_id`/`child_id` the request body carried.
+- **The schema did not match the code.** Children are created as `users` rows,
+  but no migration ever added the columns that requires. `addChild` failed
+  outright on a database built from this repo.
+
+The constraint throughout: **additive only**. The shipped app must keep receiving
+the same status codes and the same keys. Corrected behaviour that would change
+the wire format goes behind an opt-in `Accept-Version: 2` header.
+
+---
+
+## Done
+
+### Phase 0 — Security hotfix (`313b299`)
+
+Authentication holes, each verified in the source before fixing:
+
+| Fix | What it allowed |
+|---|---|
+| `reset()` resolves its target from the token | Changing **any** account's password via a body `user_id`, with no old-password and no ownership check |
+| Removed the `otp == '1111'` branch | Verifying any registered phone number |
+| Teacher login passes `user_role_id` to `attempt()` | Any child or parent logging in through the teacher endpoint |
+| Re-enabled `validateGooglePlayReceipt()` | Android subscriptions skipped receipt verification and trusted client-supplied `transaction_id`, `price`, `end_date` |
+
+IDOR: added `App\Http\Controllers\Concerns\ResolvesApiUser`, which resolves the
+acted-on user from the bearer token and honours a body id only for self or own
+child. Applied across notifications, moods, watch history, avatars, child
+management and the content feeds. The deliberate teacher cross-child access in
+`videoContentforchild` was preserved explicitly.
+
+Removed two endpoints: `send-notification` (any user could push-blast every
+device token in the system) and `test-battery` (debug endpoint hardcoded to user
+425).
+
+Correctness: `QuizController` called an undefined `between()`, making every
+age-ranged quiz question a 500; `userUnlockAvatars` accepted negative points that
+passed the balance check and *credited* the account; `storeAvtar` wiped
+`users.avtar_image` on any save without a file; watch time was summed from the
+wrong variable; `is_account_active` was inverted relative to the login age gate.
+
+Also hid `otp`, `mobile_otp` and `password_reset_code` from `User` serialisation
+— they leaked from every endpoint returning a raw model.
+
+### Phase 1 — Foundation (`8fd6fed`, `c2fb3b9`)
+
+- **`app/Exceptions/Handler.php`** now routes `api/*` through a JSON renderer.
+  Status codes match what Laravel already returned to clients sending `Accept`
+  (422/401/403/404), so only the broken no-`Accept` path changed. Exception
+  messages are no longer leaked unless `app.debug`.
+- **`app/Support/ApiResponse.php`** — the envelope (`status`/`message`/`data`,
+  optional `errors`). `$legacy` carries v1-only aliases; `$extra` carries keys
+  that must survive into v2 (the auth token). Neither can overwrite a canonical
+  key. `ApiVersion` reads `Accept-Version`.
+- **`ApiCheckStatus`** read `auth()->check() && ...`, so unauthenticated requests
+  passed straight through — a no-op gate that only worked because of middleware
+  ordering. Now resolves `auth('api')` explicitly and folds in the
+  school-inactive rule that was duplicated in two controllers and enforced
+  nowhere else.
+- **Transactions** on the five unprotected multi-write paths. The worst was
+  `updateBatteryAndLoyalty`, which marked watch rows consumed *before* awarding
+  points and only re-reads unconsumed rows — a mid-loop failure lost them
+  permanently.
+- **`issueToken()`** replaced three drifted copies of the login token block,
+  removing a dead `$tokenIds` loop and three redundant writes per login.
+- **`App\Http\Requests\Api\ApiFormRequest`** — base whose `failedValidation` and
+  `failedAuthorization` render the envelope.
+
+### Schema alignment (`65457dc`, extended in `c1e1fb2`)
+
+Two guarded, idempotent migrations. Verified they round-trip and re-run as
+no-ops, including against a database already patched by hand.
+
+`users`: added `username` (unique), `dob` (`varchar(7)`, `YYYY-MM`),
+`loyalty_points` (`decimal(10,2)`, cast to float so it serialises as a number),
+`avtar_image`, `is_first_login`, `is_avatar_primary`, `is_mood_updated`. Added
+`'child'` to the `user_type` enum. Converted `is_mobile_verified` from
+`enum('0','1')` — which rejected every write the app made — to `enum('yes','no')`,
+translating existing rows.
+
+Supporting tables: `child_moods.date` (backfilled from `created_at`),
+`moods.type`, `user_content_watch_histories.is_completed`,
+`user_attempt_quizzes.user_id`, `email_templates.language`, `faqs.type`.
+
+Found by smoke-scanning all endpoints for 5xx — 10 were failing. Fixed:
+`individualLogin` read `$language` in its catch before assigning it (any bad
+payload was a 500), `childSupport` dereferenced a null parent, `logout` called
+`token()->revoke()` with no null guard, `storeChildMood` hit a not-null
+constraint on empty input.
+
+**Also fixed a regression introduced in Phase 1:** the handler intercepted
+`api/*` before `parent::render()`, so `HttpResponseException` — what every
+`FormRequest::failedValidation` throws — became a 500. Three tests pin it.
+
+### Phase 2 — In progress
+
+**The gate (`c1e1fb2`, `0eb6e73`) — build this understanding before continuing.**
+
+`tests/Feature/Api/ResponseContractSnapshotTest.php` records all 68 endpoint
+cases and enforces the additive-only contract: **status codes exact, body keys a
+recursive subset** — nothing removed, renamed or retyped; additions pass.
+
+Regenerate only after reviewing a diff:
+
+```bash
+UPDATE_API_SNAPSHOTS=1 php vendor/bin/phpunit tests/Feature/Api/ResponseContractSnapshotTest.php
+```
+
+> The first version of this gate did not work. `status:true` and `status:false`
+> both collapsed to `<bool>`, so an endpoint falling into its catch block looked
+> identical to one succeeding — it passed a deliberately injected canary.
+> Booleans now keep their value. **If you extend the signature, re-verify it
+> with a canary before trusting it.** That blind spot was also hiding the
+> `faqs.type` bug.
+
+**`HomeApiController` migrated (`98f01c4`).** 56 live hand-rolled blocks → 3,
+behind 58 `ApiResponse` calls, gate green throughout. Fixed three error-path
+bugs: `register`'s catch reported failures as `status: true` while leaking SQL;
+`passwordReset` referenced a `$language` never assigned anywhere in the method,
+so a *successful* reset raised `ErrorException`; `resetPassword` type-hinted a
+class it never imported.
+
+### Deep links (`d576817`)
+
+`/deeplink/resolve` returned `canonical_url` of `http://13.229.56.31/d/article/154`.
+Those links can never open the app — Universal Links and App Links require https
+on a domain verified through `.well-known`.
+
+Two causes: `config/deeplink.php` fell back to `APP_URL` (removed), and
+`canonical_url` is **persisted, not computed** — the backfill migration baked the
+wrong base into the table, and both `DeepLinkService::resolve()` and the model
+accessors prefer the stored value. Fixing the environment alone does not fix
+existing rows.
+
+Added `deeplink:rebase-canonical-urls`, which refuses to run when the configured
+base is itself unusable (bare IP, localhost, plain http), since re-baking a bad
+base is the failure being fixed.
+
+---
+
+## To do
+
+### 1. Finish Phase 2 — controller migration
+
+~109 hand-rolled `response()->json` calls remain. Order by traffic:
+
+| Controller | Remaining |
+|---|---|
+| `MoodTrackerController` | 19 |
+| `ChildController` | 17 |
+| `KnowledgeBaseController` | 17 |
+| `QuizController` | 17 |
+| `KnowledgeSessionController` | 8 |
+| `AvtarController` | 8 |
+| `NotificationController` | 5 |
+| `FaqController`, `PopupLoginController`, `UserArticleLikeController`, others | ~11 |
+
+Per controller: swap responses for `ApiResponse::*` keeping v1 keys, move
+validation into FormRequests, fix error-path bugs, run the gate.
+
+**Reuse the transformer.** The scripted approach used for `HomeApiController`
+converted 48 of 56 blocks and, importantly, *refused* the ambiguous ones —
+including three whose contract is `data: null`, which `ApiResponse` would render
+as `{}`. Have it report what it skips and handle those by hand. Do not
+bulk-rewrite without the gate green after each pass.
+
+Two shapes need conscious decisions each time:
+- `data => null` — converting changes the type the app receives. Leave it and
+  annotate, as in `HomeApiController`.
+- Responses carrying `token` — use `$extra`, not `$legacy`, or v2 clients
+  silently lose their token.
+
+### 2. Language extraction — sequence separately
+
+~130 `$language == 'english' ? 'A' : '中文'` ternaries should become `trans()`
+with `lang/en` + `lang/zh`. **The gate cannot verify this** — it checks shape,
+not message text.
+
+Do it as a mechanical pass that generates the lang files *from the existing
+pairs*, so text cannot drift. Several pairs are already mismatched and need
+deciding, not copying: `HomeApiController` pairs "Email doesn't Exists." with
+"您的帐户已成功删除。" ("account deleted successfully"); `ChildController` pairs
+"Data not found." with "数据更新成功。" ("update successful"). `editChild`
+hardcodes `$language = 'english'`, making its Chinese branch unreachable.
+
+### 3. Phase 3 — Performance (not started)
+
+- **Real pagination.** `KnowledgeBaseController:406` loads the entire result set
+  then `forPage()`s it in memory, so DB cost is independent of `page`. `per_page`
+  is uncapped — `per_page=100000` is accepted.
+- **N+1**: 2 `Category` queries per video/session across the content feeds;
+  `parentDashboard` runs a nested loop (~75 queries for 3 children × 12
+  categories); `QuizController:1597` runs a query per question and *discards* the
+  result (`'is_attempt' => $attempt ? 'no' : 'no'`).
+- Remove `->useWritePdo()` from two read paths; `MeetTeamController` orders by a
+  nested `REPLACE()` expression that forces a filesort.
+
+### 4. Deferred with a reason
+
+- **`primaryChild` still uses the `Child` table.** `is_primary` exists only
+  there, so unifying onto `User` needs a migration and a backfill decision. Its
+  security bug is fixed; the model choice is not.
+- **Passport tokens never expire** — nothing configures `tokensExpireIn`. Setting
+  it invalidates every live token at once, so it needs a rollout decision.
+- **`moods.type` is nullable and unpopulated.** No default was guessed, because a
+  wrong guess silently misclassifies existing moods. Someone must classify the
+  rows as positive/negative or the negative-mood streak logic stays inert.
+
+---
+
+## Environment notes
+
+- **This dev database has no Passport personal access client**, so
+  `createToken()` fails locally and login flows cannot be exercised end to end.
+  Fix with `php artisan passport:client --personal` — left undone because
+  creating an OAuth client is a credential operation on your database.
+- **`DEEPLINK_ANDROID_SHA256` is empty** in `.env` and `.env.example`. Without
+  the signing-certificate fingerprint, `assetlinks.json` cannot verify Android
+  App Links even once the domain is correct.
+
+## Production runbook — deep link repair
+
+Order matters; the command's guard will stop you otherwise, which is intended.
+
+```bash
+# 1. Set DEEPLINK_PUBLIC_BASE_URL=https://admin.empoweredhealth.asia and fix APP_URL
+php artisan config:clear && php artisan config:cache
+
+# 2. Inspect, then apply
+php artisan deeplink:rebase-canonical-urls --dry-run
+php artisan deeplink:rebase-canonical-urls
+```
+
+## Commands
+
+```bash
+php vendor/bin/phpunit                                  # 51 tests
+php vendor/bin/phpunit tests/Feature/Api                # API suites only
+php artisan migrate                                     # both alignment migrations are idempotent
+```
