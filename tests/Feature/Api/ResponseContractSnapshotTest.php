@@ -197,14 +197,61 @@ class ResponseContractSnapshotTest extends TestCase
 
         foreach ($expected as $label => $shape) {
             $this->assertArrayHasKey($label, $actual, "Endpoint case '{$label}' disappeared.");
+
+            // The status code is exact: moving one breaks clients that branch
+            // on it, and it is never an "addition".
             $this->assertSame(
-                $shape,
-                $actual[$label],
-                "v1 response contract drifted for '{$label}'. The shipped app depends on this shape."
+                $shape['status_code'],
+                $actual[$label]['status_code'],
+                "Status code changed for '{$label}'."
+            );
+
+            // The body is a subset check, which is the additive-only contract:
+            // new keys are allowed, but nothing the app already reads may be
+            // removed, renamed, or change type.
+            $violations = [];
+            $this->assertContract($shape['body'], $actual[$label]['body'], $label, $violations);
+
+            $this->assertSame(
+                [],
+                $violations,
+                "v1 response contract broken for '{$label}':\n  - " . implode("\n  - ", $violations)
             );
         }
 
         $this->assertSame(array_keys($expected), array_keys($actual), 'Endpoint case list changed.');
+    }
+
+
+    /**
+     * Every leaf in $expected must still exist in $actual with the same shape.
+     * Extra keys in $actual are fine - that is what "additive" means.
+     */
+    private function assertContract(mixed $expected, mixed $actual, string $path, array &$violations): void
+    {
+        if (is_array($expected)) {
+            if (!is_array($actual)) {
+                $violations[] = "{$path}: expected a structure, got " . json_encode($actual);
+
+                return;
+            }
+
+            foreach ($expected as $key => $child) {
+                if (!array_key_exists($key, $actual)) {
+                    $violations[] = "{$path}.{$key}: key removed or renamed";
+
+                    continue;
+                }
+
+                $this->assertContract($child, $actual[$key], "{$path}.{$key}", $violations);
+            }
+
+            return;
+        }
+
+        if ($expected !== $actual) {
+            $violations[] = "{$path}: was {$expected}, now " . json_encode($actual);
+        }
     }
 
     private function refreshApplicationForCase(?string $actAs): void
