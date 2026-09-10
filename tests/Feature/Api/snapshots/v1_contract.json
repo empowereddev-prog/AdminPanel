@@ -1,0 +1,1101 @@
+{
+    "activity-list": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "add-child:invalid": {
+        "status_code": 201,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "article-like:invalid": {
+        "status_code": 400,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "avtar-image": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "avtar-image:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<list:empty>",
+            "errors": {
+                "id": {
+                    "<list>": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "child-percentage": {
+        "status_code": 200,
+        "body": {
+            "battery_percentage": "<int>",
+            "earned_points": "<int>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "child-support": {
+        "status_code": 200,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "contact-support:invalid": {
+        "status_code": 422,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "delete-child:unknown": {
+        "status_code": 200,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "delete-notification": {
+        "status_code": 200,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "edit-child:invalid": {
+        "status_code": 201,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "faq": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "featured-content": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>",
+            "top_mood_emotion": "<list:empty>"
+        }
+    },
+    "featured-content-for-parent": {
+        "status_code": 200,
+        "body": {
+            "category": {
+                "<list>": {
+                    "category_name": "<string>",
+                    "color": "<null>",
+                    "created_at": "<string>",
+                    "id": "<int>",
+                    "priority": "<string>",
+                    "status": "<string>",
+                    "title_color": "<null>",
+                    "updated_at": "<string>"
+                }
+            },
+            "data": {
+                "<list>": {
+                    "age": "<null>",
+                    "banner_image": "<null>",
+                    "canonical_url": "<string>",
+                    "category_id": "<int>",
+                    "category_name": "<string>",
+                    "color": "<null>",
+                    "created_at": "<string>",
+                    "description": "<string>",
+                    "featured_key": "<null>",
+                    "id": "<int>",
+                    "is_featured": "<string>",
+                    "link": "<null>",
+                    "session_date": "<null>",
+                    "session_time": "<null>",
+                    "session_type": "<string>",
+                    "status": "<string>",
+                    "title": "<string>",
+                    "title_color": "<null>",
+                    "type": "<string>",
+                    "updated_at": "<string>",
+                    "user_type": "<string>",
+                    "venue": "<null>",
+                    "written_by": "<null>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "forgot-password:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<list:empty>",
+            "errors": {
+                "email": {
+                    "<list>": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "get-all-mood": {
+        "status_code": 200,
+        "body": {
+            "consecutiveDays": "<int>",
+            "data": "<list:empty>",
+            "negativeStatus": "<bool:false>",
+            "status": "<bool:true>"
+        }
+    },
+    "get-category": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "<list>": {
+                    "category_name": "<string>",
+                    "color": "<null>",
+                    "created_at": "<string>",
+                    "id": "<int>",
+                    "priority": "<string>",
+                    "status": "<string>",
+                    "title_color": "<null>",
+                    "updated_at": "<string>",
+                    "watched_percentage": "<int>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "get-child-mood": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "get-child-profile": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "avtar_image": "<null>",
+                "battery_points": "<int>",
+                "country_code": "<null>",
+                "created_at": "<string>",
+                "deleted_at": "<null>",
+                "device_token": "<null>",
+                "dob": "<string>",
+                "email": "<string>",
+                "email_verified_at": "<null>",
+                "gender": "<null>",
+                "id": "<int>",
+                "image": "<null>",
+                "is_account_active": "<bool:true>",
+                "is_avatar_primary": "<string>",
+                "is_first_login": "<string>",
+                "is_mobile_verified": "<string>",
+                "is_mood_updated": "<string>",
+                "is_notification": "<string>",
+                "is_verified": "<string>",
+                "language": "<string>",
+                "last_login_at": "<null>",
+                "loyalty_points": "<int>",
+                "name": "<string>",
+                "otp_attempts": "<int>",
+                "otp_blocked_until": "<null>",
+                "otp_expires_at": "<null>",
+                "otp_verified": "<int>",
+                "parent_id": "<int>",
+                "password_reset_expires_at": "<null>",
+                "phone_no": "<null>",
+                "pm_last_four": "<null>",
+                "pm_type": "<null>",
+                "popup_1": "<null>",
+                "popup_1_updated_at": "<null>",
+                "popup_2": "<null>",
+                "popup_2_updated_at": "<null>",
+                "profile_image": "<null>",
+                "school_id": "<null>",
+                "status": "<string>",
+                "stripe_id": "<null>",
+                "terms_n_conditions_accepted": "<string>",
+                "trial_ends_at": "<null>",
+                "updated_at": "<string>",
+                "user_role_id": "<string>",
+                "user_type": "<string>",
+                "username": "<string>"
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "get-child-support": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "get-profile": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "age": "<null>",
+                "avatar": "<null>",
+                "avtar_image": "<null>",
+                "battery": "<int>",
+                "battery_percentage": "<int>",
+                "battery_points": "<int>",
+                "country_code": "<string>",
+                "created_at": "<string>",
+                "deleted_at": "<null>",
+                "device_token": "<null>",
+                "dob": "<null>",
+                "email": "<string>",
+                "email_verified_at": "<null>",
+                "gender": "<null>",
+                "id": "<int>",
+                "image": "<null>",
+                "is_avatar_primary": "<string>",
+                "is_child_added": "<string>",
+                "is_first_login": "<string>",
+                "is_mobile_verified": "<string>",
+                "is_mood_updated": "<string>",
+                "is_notification": "<string>",
+                "is_verified": "<string>",
+                "language": "<string>",
+                "last_login_at": "<null>",
+                "loyalty_points": "<int>",
+                "name": "<string>",
+                "otp_attempts": "<int>",
+                "otp_blocked_until": "<null>",
+                "otp_expires_at": "<null>",
+                "otp_verified": "<int>",
+                "parent_id": "<null>",
+                "password_reset_expires_at": "<null>",
+                "phone_no": "<string>",
+                "pm_last_four": "<null>",
+                "pm_type": "<null>",
+                "popup_1": "<null>",
+                "popup_1_updated_at": "<null>",
+                "popup_2": "<null>",
+                "popup_2_updated_at": "<null>",
+                "profile_image": "<null>",
+                "school_code": "<null>",
+                "school_id": "<null>",
+                "status": "<string>",
+                "stripe_id": "<null>",
+                "subscription": "<null>",
+                "terms_n_conditions_accepted": "<string>",
+                "trial_ends_at": "<null>",
+                "updated_at": "<string>",
+                "user_avatar": "<null>",
+                "user_role_id": "<string>",
+                "user_type": "<string>",
+                "username": "<null>"
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "get-suggested-activity": {
+        "status_code": 200,
+        "body": {
+            "data": "<null>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "individual-login:invalid": {
+        "status_code": 201,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "knowledge-session": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "knowledge-session-details": {
+        "status_code": 404,
+        "body": {
+            "canonical_url": "<null>",
+            "data": "<null>",
+            "deeplink_status": "<string>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "knowledge-session-for-parent": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "<list>": {
+                    "age": "<null>",
+                    "banner_image": "<null>",
+                    "canonical_url": "<string>",
+                    "category_id": "<int>",
+                    "color": "<null>",
+                    "created_at": "<string>",
+                    "description": "<string>",
+                    "featured_key": "<null>",
+                    "id": "<int>",
+                    "is_featured": "<string>",
+                    "link": "<null>",
+                    "session_date": "<null>",
+                    "session_time": "<null>",
+                    "session_type": "<string>",
+                    "status": "<string>",
+                    "title": "<string>",
+                    "title_color": "<null>",
+                    "updated_at": "<string>",
+                    "user_type": "<string>",
+                    "venue": "<null>",
+                    "written_by": "<null>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "knowledge-session:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<list:empty>",
+            "errors": {
+                "user_id": {
+                    "<list>": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "login:invalid": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "login:missing-type": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "manage-notification:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<list:empty>",
+            "errors": {
+                "notification": {
+                    "<list>": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "mark-as-read": {
+        "status_code": 200,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "meet-team": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "mood-tracker": {
+        "status_code": 200,
+        "body": {
+            "calendar_data": {
+                "2026-09-01": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-02": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-03": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-04": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-05": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-06": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-07": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-08": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-09": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-10": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-11": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-12": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-13": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-14": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-15": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-16": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-17": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-18": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-19": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-20": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-21": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-22": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-23": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-24": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-25": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-26": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-27": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-28": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-29": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                },
+                "2026-09-30": {
+                    "color": "<null>",
+                    "comment": "<null>",
+                    "image": "<null>",
+                    "mood_name": "<null>",
+                    "points": "<null>"
+                }
+            },
+            "categories": {
+                "<list>": {
+                    "category_id": "<int>",
+                    "category_name": "<string>",
+                    "color": "<null>",
+                    "moods": "<list:empty>"
+                }
+            },
+            "message": "<string>",
+            "mood_ring": "<list:empty>",
+            "status": "<bool:true>",
+            "top_emotions": "<list:empty>"
+        }
+    },
+    "notification-list": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "parent-dashboard": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "<list>": {
+                    "category_watch_data": {
+                        "<list>": {
+                            "category": "<string>",
+                            "total_video_duration": "<string>",
+                            "watched_percentage": "<int>"
+                        }
+                    },
+                    "is_account_active": "<bool:true>",
+                    "top_mood_emotion": "<list:empty>",
+                    "user_id": "<int>",
+                    "user_name": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "popup": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "popup1": "<list:empty>",
+                "popup2": "<list:empty>"
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "popup-store": {
+        "status_code": 200,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "primary-child:unknown": {
+        "status_code": 200,
+        "body": {
+            "data": "<null>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "products": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "meta": {
+                "current_page": "<int>",
+                "last_page": "<int>",
+                "per_page": "<int>",
+                "total": "<int>"
+            },
+            "status": "<bool:true>"
+        }
+    },
+    "quiz-category": {
+        "status_code": 200,
+        "body": {
+            "category": {
+                "<list>": {
+                    "category_name": "<string>",
+                    "id": "<int>"
+                }
+            },
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "quiz-completion:invalid": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "attempt_quizz_marks": "<int>",
+                "category_description": "<null>",
+                "category_name": "<null>",
+                "referred_video": "<list:empty>"
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "quiz-question:invalid": {
+        "status_code": 200,
+        "body": {
+            "data": "<null>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "quiz:invalid": {
+        "status_code": 200,
+        "body": {
+            "data": "<null>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "register:invalid": {
+        "status_code": 200,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:false>",
+            "user": "<list:empty>"
+        }
+    },
+    "request-video:invalid": {
+        "status_code": 422,
+        "body": {
+            "errors": {
+                "user_message": {
+                    "<list>": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "resend-otp:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<list:empty>",
+            "errors": {
+                "country_code": {
+                    "<list>": "<string>"
+                },
+                "phone_no": {
+                    "<list>": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "reset-password:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "store-activity:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<list:empty>",
+            "errors": {
+                "date": {
+                    "<list>": "<string>"
+                },
+                "mood_id": {
+                    "<list>": "<string>"
+                },
+                "mood_name": {
+                    "<list>": "<string>"
+                },
+                "point": {
+                    "<list>": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "store-avtar:invalid": {
+        "status_code": 422,
+        "body": {
+            "errors": "<string>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "store-child-mood:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<list:empty>",
+            "errors": {
+                "mood_id": {
+                    "<list>": "<string>"
+                },
+                "mood_name": {
+                    "<list>": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "store-liked-content:invalid": {
+        "status_code": 200,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "student-login:invalid": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "subscription:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<list:empty>",
+            "errors": {
+                "currency": {
+                    "<list>": "<string>"
+                },
+                "end_date": {
+                    "<list>": "<string>"
+                },
+                "platform": {
+                    "<list>": "<string>"
+                },
+                "price": {
+                    "<list>": "<string>"
+                },
+                "start_date": {
+                    "<list>": "<string>"
+                },
+                "subscription_type": {
+                    "<list>": "<string>"
+                },
+                "subscription_type_id": {
+                    "<list>": "<string>"
+                },
+                "transactionReceipt": {
+                    "<list>": "<string>"
+                },
+                "user_type": {
+                    "<list>": "<string>"
+                }
+            },
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "unauthenticated": {
+        "status_code": 401,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "unknown-endpoint": {
+        "status_code": 404,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "unlock-avtars:invalid": {
+        "status_code": 422,
+        "body": {
+            "data": "<null>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "update-parent-profile": {
+        "status_code": 200,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "update-teacher-profile:invalid": {
+        "status_code": 403,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "user-attempt-questions:invalid": {
+        "status_code": 400,
+        "body": {
+            "marks_obtained": "<int>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "user-content-watch-histories:invalid": {
+        "status_code": 400,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "verify-otp:missing": {
+        "status_code": 422,
+        "body": {
+            "message": "<string>",
+            "success": "<bool:false>"
+        }
+    },
+    "verify-otp:wrong": {
+        "status_code": 200,
+        "body": {
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "video-content": {
+        "status_code": 200,
+        "body": {
+            "data": "<list:empty>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "video-content-details": {
+        "status_code": 404,
+        "body": {
+            "canonical_url": "<null>",
+            "data": "<null>",
+            "deeplink_status": "<string>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "video-content-for-child": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "current_page": "<int>",
+                "data": "<list:empty>",
+                "first_page_url": "<string>",
+                "from": "<null>",
+                "last_page": "<int>",
+                "last_page_url": "<string>",
+                "links": {
+                    "<list>": {
+                        "active": "<bool:false>",
+                        "label": "<string>",
+                        "url": "<null>"
+                    }
+                },
+                "next_page_url": "<null>",
+                "path": "<string>",
+                "per_page": "<int>",
+                "prev_page_url": "<null>",
+                "to": "<null>",
+                "total": "<int>"
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "video-content-for-parent": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "current_page": "<int>",
+                "data": "<list:empty>",
+                "first_page_url": "<string>",
+                "from": "<null>",
+                "last_page": "<int>",
+                "last_page_url": "<string>",
+                "links": {
+                    "<list>": {
+                        "active": "<bool:false>",
+                        "label": "<string>",
+                        "url": "<null>"
+                    }
+                },
+                "next_page_url": "<null>",
+                "path": "<string>",
+                "per_page": "<int>",
+                "prev_page_url": "<null>",
+                "to": "<null>",
+                "total": "<int>"
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    },
+    "video-content-quiz": {
+        "status_code": 200,
+        "body": {
+            "data": "<null>",
+            "message": "<string>",
+            "status": "<bool:false>"
+        }
+    },
+    "video-watch-status": {
+        "status_code": 200,
+        "body": {
+            "data": {
+                "category": "<string>",
+                "remaining_video_duration": "<string>",
+                "total_points": "<int>",
+                "total_video_duration": "<string>",
+                "video_durations": "<list:empty>",
+                "watched_percentage": "<int>"
+            },
+            "message": "<string>",
+            "status": "<bool:true>"
+        }
+    }
+}

@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Schema;
  *   user_content_watch_histories.is_completed  watch progress + point awards
  *   user_attempt_quizzes.user_id            every quiz attempt lookup
  *   email_templates.language                ___mail_sender / sendContactEmail
+ *   faqs.type                               FaqController::index (school/parent/child)
  *
  * Guarded so it is safe to re-run against a database patched by hand.
  */
@@ -27,7 +28,10 @@ return new class extends Migration
         if (Schema::hasTable('child_moods') && !Schema::hasColumn('child_moods', 'date')) {
             Schema::table('child_moods', function (Blueprint $table) {
                 $table->date('date')->nullable()->after('points');
-                $table->index(['child_id', 'date']);
+                // Indexed alone, not as (child_id, date): child_id's own index
+                // backs a foreign key, and a composite leading with it becomes
+                // the FK's index, which then cannot be dropped on rollback.
+                $table->index('date');
             });
 
             // Existing rows predate the column; fall back to the day they were
@@ -59,6 +63,16 @@ return new class extends Migration
             });
         }
 
+        // FaqController::index filters on school/parent/child. Without this the
+        // whole endpoint fell into its catch and returned "Something went
+        // wrong" with the SQL error, as a 200.
+        if (Schema::hasTable('faqs') && !Schema::hasColumn('faqs', 'type')) {
+            Schema::table('faqs', function (Blueprint $table) {
+                $table->enum('type', ['school', 'parent', 'child'])->nullable()->after('answer');
+                $table->index(['type', 'status']);
+            });
+        }
+
         if (Schema::hasTable('email_templates') && !Schema::hasColumn('email_templates', 'language')) {
             Schema::table('email_templates', function (Blueprint $table) {
                 $table->string('language', 20)->default('english')->after('variable_name');
@@ -71,7 +85,7 @@ return new class extends Migration
     {
         if (Schema::hasTable('child_moods') && Schema::hasColumn('child_moods', 'date')) {
             Schema::table('child_moods', function (Blueprint $table) {
-                $table->dropIndex(['child_id', 'date']);
+                $table->dropIndex(['date']);
                 $table->dropColumn('date');
             });
         }
@@ -91,6 +105,13 @@ return new class extends Migration
             Schema::table('user_attempt_quizzes', function (Blueprint $table) {
                 $table->dropIndex(['user_id']);
                 $table->dropColumn('user_id');
+            });
+        }
+
+        if (Schema::hasTable('faqs') && Schema::hasColumn('faqs', 'type')) {
+            Schema::table('faqs', function (Blueprint $table) {
+                $table->dropIndex(['type', 'status']);
+                $table->dropColumn('type');
             });
         }
 
