@@ -18,6 +18,8 @@ yarn-error.log
 /.idea
 /.vscode
 public/uploads
+# phpMyAdmin, vendored into the webroot. Being removed from the server;
+# never let it back into the repo.
 public/phpdb
 public/.htpasswd
 .env
@@ -25,6 +27,9 @@ public/.htpasswd
 .DS_Store
 *.sql
 code-db-20251010.zip
+.scannerwork
+# Firebase service-account keys now live in storage/app/firebase/, never public/.
+/storage/app/firebase/
 # Theme assets (css/js/plugins/avatar and root art) are tracked so a fresh
 # deploy renders correctly. Heavy media below is shipped out-of-band.
 /public/assets/video/
