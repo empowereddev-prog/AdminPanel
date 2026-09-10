@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\DB;
 
 class KnowledgeSessionController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesApiUser;
+
     public function KnowledgeSession(Request $request)
     {
         // Determine the language (default: English)
@@ -36,7 +38,12 @@ class KnowledgeSessionController extends Controller
         ], $messages);
 
         // Get child data
-        $child = User::findOrFail($request->user_id);
+        // exists:users,id proves the row exists, not that the caller owns it.
+        $child = $this->resolveTargetUser($request, 'user_id');
+
+        if (!$child) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
 
         // Calculate child's age
         $childAge = \Carbon\Carbon::parse($child->dob)->age;
@@ -244,7 +251,12 @@ class KnowledgeSessionController extends Controller
         ], $messages);
 
         // Get child data
-        $child = User::findOrFail($request->user_id);
+        // exists:users,id proves the row exists, not that the caller owns it.
+        $child = $this->resolveTargetUser($request, 'user_id');
+
+        if (!$child) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
 
         // Calculate child's age
         $childAge = \Carbon\Carbon::parse($child->dob)->age;
@@ -345,7 +357,13 @@ class KnowledgeSessionController extends Controller
     // =======================
     // CHILD + AGE
     // =======================
-    $child = User::findOrFail($request->user_id);
+    // exists:users,id proves the row exists, not that the caller owns it.
+    $child = $this->resolveTargetUser($request, 'user_id');
+
+    if (!$child) {
+        return $this->unauthorisedTargetResponse($request->language ?? 'english');
+    }
+
     $childAge = \Carbon\Carbon::parse($child->dob)->age;
 
     $parent = User::find($child->parent_id);
@@ -572,7 +590,12 @@ class KnowledgeSessionController extends Controller
         ], $messages);
 
         // Get child data
-        $child = User::findOrFail($request->user_id);
+        // exists:users,id proves the row exists, not that the caller owns it.
+        $child = $this->resolveTargetUser($request, 'user_id');
+
+        if (!$child) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
 
         // Calculate child's age
         //  $childAge = \Carbon\Carbon::parse($child->dob)->age;

@@ -30,6 +30,8 @@ use Illuminate\Support\Facades\Http;
 
 class ChildController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesApiUser;
+
     public function addChild(Request $request)
     {
         // try {
@@ -637,10 +639,19 @@ class ChildController extends Controller
 
     public function deleteChild(Request $request)
     {
-        $child = Child::find($request->id);
-        $child = User::where('id', $request->id)->first();
-        $language = $child->language;
+        $language = $request->language ?? 'english';
+
+        // Only the authenticated parent's own child may be deleted; this used to
+        // soft-delete any user id supplied in the body. Reading ->language before
+        // the null check also 500'd on an unknown id.
+        $child = $this->resolveTargetUser($request, 'id');
+
+        if ($child && (int) $child->id === (int) Auth::id()) {
+            $child = null; // deleting yourself is not this endpoint's job
+        }
+
         if ($child) {
+            $language = $child->language ?? $language;
 
             $child->delete();
 
@@ -659,9 +670,14 @@ class ChildController extends Controller
     {
         $user = User::where('id', Auth::id())->first();
         $language = $request->language;
-        $child = Child::where('id', $request->id)->first();
+
+        // parent_id used to come from the body; it is always the caller.
+        $child = Child::where('id', $request->id)
+            ->where('parent_id', Auth::id())
+            ->first();
+
         if ($child) {
-            $children = Child::whereNot('id', $child->id)->where('parent_id', $request->parent_id)->pluck('id');
+            $children = Child::whereNot('id', $child->id)->where('parent_id', Auth::id())->pluck('id');
             if (count($children) > 0) {
                 foreach ($children as $ch) {
                     Child::where('id', $ch)->update(['is_primary' => 'no']);
@@ -781,15 +797,19 @@ class ChildController extends Controller
         foreach ($users as $user) {
             $childId = $user->id;
 
-            $childData = Child::where('parent_id', $parentId)
-                ->where('id', $childId)
-                ->first();
-
+            // Children are User rows (addChild creates them there), so the
+            // Child lookup this used always returned null and pinned
+            // is_account_active to false for every child.
             $isAccountActive = false;
 
-            if ($childData && !empty($childData->dob)) {
-                $dob = Carbon::createFromFormat('Y-m', $childData->dob);
-                $isAccountActive = $dob->age >= 18;
+            if (!empty($user->dob)) {
+                try {
+                    // Matches the login age gate: >= 18 is deactivated.
+                    $dob = Carbon::createFromFormat('Y-m', $user->dob);
+                    $isAccountActive = $dob->age < 18;
+                } catch (\Exception $e) {
+                    \Log::error('DOB Parse Error: ' . $e->getMessage());
+                }
             }
 
             $categoryProgress = [];
@@ -1060,16 +1080,18 @@ class ChildController extends Controller
         // }
 
         if ($request->platform === 'android') {
-            // TEMP: Direct success for Android (bypass verification)
-            $receiptResult = [
-                'status' => true,
-                'transaction_id' => $request->transactionReceipt, // ya uniqid('android_txn_')
-            ];
+            $receiptResult = $this->validateGooglePlayReceipt(
+                $request->transactionReceipt,
+                $request->subscription_type_id
+            );
         } else {
             $receiptResult = $this->validateAppleReceipt(
                 $request->transactionReceipt
             );
         }
+
+        // Trust the verified receipt over the client for the entitlement window.
+        $verifiedEndDate = $receiptResult['expires_at'] ?? null;
 
 
         if (!$receiptResult['status']) {
@@ -1102,7 +1124,7 @@ class ChildController extends Controller
                 'subscription_type'    => $request->subscription_type,
                 'user_type'            => $request->user_type,
                 'start_date'           => $request->start_date,
-                'end_date'             => $request->end_date,
+                'end_date'             => $verifiedEndDate ?? $request->end_date,
                 'currency'             => $request->currency,
                 'price'                => $request->price,
                 'status'               => 'Successful',
@@ -1116,7 +1138,7 @@ class ChildController extends Controller
                 'subscription_type'    => $request->subscription_type,
                 'user_type'            => $request->user_type,
                 'start_date'           => $request->start_date,
-                'end_date'             => $request->end_date,
+                'end_date'             => $verifiedEndDate ?? $request->end_date,
                 'currency'             => $request->currency,
                 'price'                => $request->price,
                 'status'               => 'Successful',
@@ -1172,6 +1194,9 @@ class ChildController extends Controller
         return [
             'status' => true,
             'transaction_id' => $data['orderId'] ?? uniqid('txn_'),
+            'expires_at' => isset($data['expiryTimeMillis'])
+                ? Carbon::createFromTimestampMs((int) $data['expiryTimeMillis'])->toDateTimeString()
+                : null,
         ];
     }
     private function validateAppleReceipt($receipt)
@@ -1213,6 +1238,9 @@ class ChildController extends Controller
         return [
             'status' => true,
             'transaction_id' => $latest['transaction_id'] ?? uniqid('ios_txn_'),
+            'expires_at' => isset($latest['expires_date_ms'])
+                ? Carbon::createFromTimestampMs((int) $latest['expires_date_ms'])->toDateTimeString()
+                : null,
         ];
     }
     private function getGoogleAccessToken()

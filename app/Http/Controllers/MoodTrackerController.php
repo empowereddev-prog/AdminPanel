@@ -26,6 +26,8 @@ use Stichoza\GoogleTranslate\GoogleTranslate;
 
 class MoodTrackerController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesApiUser;
+
     private $moodTracker = 24;
     private $subadmin_menu_id = 24;
     private $user_attempt_quiz = 25;
@@ -564,7 +566,14 @@ public function getAllMood(Request $request)
 }
     public function storeChildMood(Request $request)
     {
-        $child_id = $request->child_id;
+        // child_id used to come straight from the body, letting any caller wipe
+        // and rewrite another child's mood history and loyalty points below.
+        $child_id = $this->resolveTargetUserId($request, 'child_id');
+
+        if (!$child_id) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
+
         $mood_id = $request->mood_id;
         $mood_name = $request->mood_name;
         $points = $request->points ?? 0;
@@ -610,7 +619,7 @@ public function getAllMood(Request $request)
             // Fetch child moods for the last 5 days
             $fromDate = Carbon::now()->subDays(5)->startOfDay()->format('Y-m-d');
 
-            $childMoodEntries = ChildMood::where('child_id', $request->child_id)
+            $childMoodEntries = ChildMood::where('child_id', $child_id)
                 ->whereIn('mood_id', $negativeMoodIds)
                 ->where('date', '>=', $fromDate)
                 ->get();

@@ -32,6 +32,8 @@ use Laravel\Passport\Token;
 
 class HomeApiController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesApiUser;
+
     protected $service;
 
     public function __construct(RegisterService $service)
@@ -602,11 +604,9 @@ class HomeApiController extends Controller
                 ], 200);
             }
 
-            // Attempt authentication credentials check using the username key
-            $credentials = auth()->attempt([
-                'username' => $request->username,
-                'password' => $request->password
-            ]);
+            // Attempt authentication using the full credential set, including
+            // user_role_id, so only teachers can authenticate on this endpoint.
+            $credentials = auth()->attempt($input);
 
             if (empty($credentials)) {
                 return response()->json([
@@ -754,26 +754,21 @@ class HomeApiController extends Controller
         $user = User::where('phone_no', $userPhone)->where('user_role_id', 3)->latest()->first();
         // dd($user);
 
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => $language == 'english' ? 'OTP does not match.' : 'OTP 不匹配。'
+            ], 200);
+        }
+
         $otp = $user->otp;
-        if ($otp == $userOtp) {
+        if ($otp !== null && (string) $otp === (string) $userOtp) {
             if ($request->phone_no && $request->country_code) {
                 User::where('country_code', $request->country_code)->where('phone_no', $userPhone)->where('user_role_id', 3)->update([
                     'is_mobile_verified' => 'yes',
                     // 'secondary_mobile_verified' => 'yes',
                 ]);
                 $user_data = User::where('country_code', $request->country_code)->where('phone_no', $request->phone_no)->where('user_role_id', $typeId)->latest()->first();
-            }
-            return response()->json([
-                'status' => true,
-                'message' => $language == 'english' ? 'OTP verified succesfully.' : 'OTP 验证成功。'
-            ], 200);
-        } elseif ($userOtp == '1111') {
-            if ($request->phone_no && $request->country_code) {
-                User::where('country_code', $request->country_code)->where('phone_no', $userPhone)->where('user_role_id', 3)->update([
-                    'otp' => $userOtp,
-                    'is_mobile_verified' => 'yes',
-                    // 'secondary_mobile_verified' => 'yes',
-                ]);
             }
             return response()->json([
                 'status' => true,
@@ -922,7 +917,7 @@ class HomeApiController extends Controller
                 ], 422);
             }
 
-            $user = User::find($request->user_id);
+            $user = auth()->user();
             if (!$user || !Hash::check($request->old_password, $user->password)) {
                 return response()->json([
                     'status' => false,
@@ -973,7 +968,27 @@ class HomeApiController extends Controller
                     'data' => (object)[],
                 ], 422);
             }
-            $child_user = User::find($request->user_id);
+            $auth_user = auth()->user();
+            $child_user = $request->filled('user_id')
+                ? User::find($request->user_id)
+                : $auth_user;
+
+            // A caller may only reset their own password, or that of their own
+            // child. Without this the body-supplied user_id targeted any account.
+            $isSelf = $child_user && $auth_user && $child_user->id === $auth_user->id;
+            $isOwnChild = $child_user && $auth_user
+                && $auth_user->user_type === 'parent'
+                && (int) $child_user->parent_id === (int) $auth_user->id;
+
+            if (!$child_user || (!$isSelf && !$isOwnChild)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => $language == 'english'
+                        ? 'You are not allowed to change this password.'
+                        : '您无权更改此密码。',
+                    'data' => (object)[],
+                ], 200);
+            }
 
             if (Hash::check($request->new_password, $child_user->password)) {
                 return response()->json([
@@ -984,9 +999,7 @@ class HomeApiController extends Controller
                     'data' => (object)[],
                 ], 200);
             }
-            $auth_user_id = auth()->user()->id;
-            $auth_user_type = User::where('id', $auth_user_id)->value('user_type');
-            if ($auth_user_type == 'parent') {
+            if ($auth_user->user_type == 'parent') {
                 $child_user->is_first_login = 'yes';
                 if ($child_user->token()) {
                     $child_user->token()->revoke();
@@ -1244,9 +1257,14 @@ class HomeApiController extends Controller
 
     public function getChildProfile(Request $request)
     {
-        $id = $request->child_id;
+        // child_id used to read any user row by id.
+        $target = $this->resolveTargetUser($request, 'child_id');
 
-        $details = User::where('id', $id)
+        if (!$target) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
+
+        $details = User::where('id', $target->id)
             ->where('status', 'active')
             ->first();
 

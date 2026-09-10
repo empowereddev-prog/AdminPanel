@@ -57,34 +57,4 @@ class PopupLoginController extends Controller
     }
 
 
-    public function check(Request $request)
-    {
-        $userId = $request->user_id ?? 425; // default test
-        $reason = $request->reason ?? 'manual_test';
-
-        // // 1) Battery event insert
-        // $battery = BatteryEvent::create([
-        //     'user_id' => $userId,
-        //     'direction' => 'debit',
-        //     'reason' => $reason,
-        //     'points' => 10,
-        //     'effective_date' => now(),
-        //     'meta' => [],
-        // ]);
-
-        // 2) Current balance calculate
-        $batteryLevel = BatteryEvent::where('user_id',  425)
-            ->selectRaw("SUM(CASE WHEN direction = 'credit' THEN points ELSE -points END) as balance")
-            ->value('balance');
-
-        $batteryLevel = max(0, $batteryLevel); // Negative hone par 0 dikhega
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Battery test executed',
-            'battery_level' => $batteryLevel ?? 0, // yaha null ki jagah actual value milega
-            'user_id' => $userId,
-            'reason' => $reason,
-        ]);
-    }
 }

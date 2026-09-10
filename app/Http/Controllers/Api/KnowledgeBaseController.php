@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\DB;
 
 class KnowledgeBaseController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesApiUser;
+
     // public function videoContent1(Request $request)
     // {
     //     $language = $request->language ?? 'english';
@@ -281,7 +283,12 @@ class KnowledgeBaseController extends Controller
 
         if ($request->user_id) {
 
-            $child = User::findOrFail($request->user_id);
+            $child = $this->resolveTargetUser($request, 'user_id');
+
+            if (!$child) {
+                return $this->unauthorisedTargetResponse($request->language ?? 'english');
+            }
+
             $childAge = \Carbon\Carbon::parse($child->dob)->age;
 
             $parent = User::find($child->parent_id);
@@ -371,7 +378,7 @@ class KnowledgeBaseController extends Controller
                 });
             }
 
-            $userId = $request->user_id;
+            $userId = $child->id;
 
             // =======================
             // FILTER
@@ -666,7 +673,15 @@ class KnowledgeBaseController extends Controller
             return response()->json(['status' => false, 'message' => 'Missing IDs'], 400);
         }
 
-        $history = UserContentWatchHistory::where('child_id', $request->user_id)
+        // The watch history and the loyalty points below belong to this user, so
+        // the id must be the caller or their own child - not any id they send.
+        $targetId = $this->resolveTargetUserId($request, 'user_id');
+
+        if (!$targetId) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
+
+        $history = UserContentWatchHistory::where('child_id', $targetId)
             ->where('video_content_id', $request->video_content_id)
             ->first();
 
@@ -681,7 +696,7 @@ class KnowledgeBaseController extends Controller
             ]);
         } else {
             $history = UserContentWatchHistory::create([
-                'child_id' => $request->user_id,
+                'child_id' => $targetId,
                 'video_content_id' => $request->video_content_id,
                 'last_watched_duration' => $request->last_watched_duration,
                 'total_video_duration' => $request->total_video_duration,
@@ -697,7 +712,7 @@ class KnowledgeBaseController extends Controller
             $pointsToAdd = is_numeric($points) ? (int)$points : 0;
 
             if ($pointsToAdd > 0) {
-                User::where('id', $request->user_id)->increment('loyalty_points', $pointsToAdd);
+                User::where('id', $targetId)->increment('loyalty_points', $pointsToAdd);
             }
         }
 
@@ -754,7 +769,11 @@ class KnowledgeBaseController extends Controller
     {
         $category_id = $request->category_id;
         $language = $request->language;
-        $child_id = $request->user_id;
+        $child_id = $this->resolveTargetUserId($request, 'user_id');
+
+        if (!$child_id) {
+            return $this->unauthorisedTargetResponse($language ?? 'english');
+        }
         $category_name = Category::where('id', $category_id)->value('category_name');
         $video_content_points = VideoContent::where('category_id', $category_id)
             // ->where('user_type', 'child')
@@ -797,9 +816,9 @@ class KnowledgeBaseController extends Controller
                 $seconds = (int) $last_watched_duration_parts[1];
                 $total_last_watched_duration_time += ($minutes * 60) + $seconds;
             } elseif (count($last_watched_duration_parts) == 3) { // HH:MM:SS format
-                $hours = (int) $parts[0];
-                $minutes = (int) $parts[1];
-                $seconds = (int) $parts[2];
+                $hours = (int) $last_watched_duration_parts[0];
+                $minutes = (int) $last_watched_duration_parts[1];
+                $seconds = (int) $last_watched_duration_parts[2];
                 $total_last_watched_duration_time += ($hours * 3600) + ($minutes * 60) + $seconds;
             }
         }
@@ -842,17 +861,23 @@ class KnowledgeBaseController extends Controller
             ], $deepLink['http_status']);
         }
 
+        $viewerId = $this->resolveTargetUserId($request, 'user_id');
+
+        if (!$viewerId) {
+            return $this->unauthorisedTargetResponse($language);
+        }
+
         $video_content = VideoContent::where('id', $videoId)->where('status', 'active')->first();
-        $last_watched_duration = UserContentWatchHistory::where('child_id', $request->user_id)->where('video_content_id', $videoId)->value('last_watched_duration');
+        $last_watched_duration = UserContentWatchHistory::where('child_id', $viewerId)->where('video_content_id', $videoId)->value('last_watched_duration');
         if ($video_content) {
             $video_content['title'] = $language === 'english' ? $video_content->title : $video_content->title_chinese;
             $video_content['description'] = $language === 'english' ? $video_content->description : $video_content->description_chinese;
             $video_content['video_link'] =  getImagePathUrl($video_content->video_link, 'assets/video');
             $video_content['watched_duration'] = $last_watched_duration ?? "00:00";
-            $is_video_completed =  UserContentWatchHistory::where('child_id', $request->user_id)->where('video_content_id', $videoId)->value('is_completed');
+            $is_video_completed =  UserContentWatchHistory::where('child_id', $viewerId)->where('video_content_id', $videoId)->value('is_completed');
             $video_content['is_video_completed'] = $is_video_completed;
 
-            $likeStatus = UserLikedVideo::where('user_id', $request->user_id)
+            $likeStatus = UserLikedVideo::where('user_id', $viewerId)
                 ->where('video_id', $videoId)
                 ->get()
                 ->pluck('type')
@@ -1174,8 +1199,19 @@ class KnowledgeBaseController extends Controller
         $loggedInUser = auth()->user();
         $targetUser   = null;
 
+        $isTeacher = ($loggedInUser && ($loggedInUser->user_role_id == 5 || $loggedInUser->user_type === 'teacher'));
+
         if ($request->filled('user_id')) {
-            $targetUser = User::find($request->user_id);
+            $candidate = User::find($request->user_id);
+
+            // A body-supplied user_id used to override the token unconditionally.
+            // Teachers keep their cross-child access; everyone else may only
+            // target themselves or their own child.
+            if ($isTeacher || $this->canActOnUser($candidate)) {
+                $targetUser = $candidate;
+            } else {
+                return $this->unauthorisedTargetResponse($language);
+            }
         } elseif ($loggedInUser && $loggedInUser->user_type === 'child') {
             $targetUser = $loggedInUser;
         }
@@ -1190,8 +1226,6 @@ class KnowledgeBaseController extends Controller
 
         // 2. Dynamic Senior-Level Role Bypass Check
         // ✅ Allow access if the target is a child OR if the logged-in user is a Teacher (Role 5)
-        $isTeacher = ($loggedInUser && ($loggedInUser->user_role_id == 5 || $loggedInUser->user_type === 'teacher'));
-
         if ($targetUser->user_type !== 'child' && !$isTeacher) {
             return response()->json([
                 'status'  => false,

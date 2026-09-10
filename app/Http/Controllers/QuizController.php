@@ -1565,9 +1565,12 @@ class QuizController extends Controller
         $filteredQuestions = $questions->filter(function ($question) use ($userAge) {
             if (!$userAge || !$question->age) return true;
 
-            return strpos($question->age, '-') !== false
-                ? between($userAge, ...explode('-', $question->age))
-                : $userAge == (int) $question->age;
+            if (strpos($question->age, '-') !== false) {
+                [$minAge, $maxAge] = explode('-', $question->age);
+                return $userAge >= (int) $minAge && $userAge <= (int) $maxAge;
+            }
+
+            return $userAge == (int) $question->age;
         });
 
         if ($filteredQuestions->isEmpty()) {
