@@ -162,37 +162,44 @@ class AvtarController extends Controller
         }
 
 
-        if ($childAvatar) {
-            $childAvatar->delete();
-            $childAvatar = UserAvtarImage::create([
-                'child_id' => $childId,
-                'expressions_id' => $request->expressions_id ?? null,
-                'glasses_id' => $request->glasses_id ?? null,
-                'backgrounds_id' => $request->backgrounds_id ?? null,
-                'shoes_id' => $request->shoes_id ?? null,
-                'hats_id' => $request->caps_id ?? null,
-                'scarves_id' => $request->scarves_id ?? null,
-                'yoga_mat_id' => $request->yoga_mat_id ?? null,
-                'bottles_id' => $request->bottles_id ?? null,
-                'image' => $imageName // Save only the filename
-            ]);
-        } else {
-            // Store data in the database
-            $childAvatar = UserAvtarImage::create([
-                'child_id' => $childId,
-                'expressions_id' => $request->expressions_id ?? null,
-                'glasses_id' => $request->glasses_id ?? null,
-                'backgrounds_id' => $request->backgrounds_id ?? null,
-                'shoes_id' => $request->shoes_id ?? null,
-                'hats_id' => $request->caps_id ?? null,
-                'scarves_id' => $request->scarves_id ?? null,
-                'yoga_mat_id' => $request->yoga_mat_id ?? null,
-                'bottles_id' => $request->bottles_id ?? null,
-                'image' => $imageName // Save only the filename
-            ]);
-        }
-        // Update child's image field
-        User::where('id', $childId)->update(['avtar_image' => $imageName]);
+        // delete-then-create: without a transaction a failure on the create left
+        // the child with no avatar row at all.
+        $childAvatar = DB::transaction(function () use ($childAvatar, $childId, $request, $imageName) {
+            if ($childAvatar) {
+                $childAvatar->delete();
+                $childAvatar = UserAvtarImage::create([
+                    'child_id' => $childId,
+                    'expressions_id' => $request->expressions_id ?? null,
+                    'glasses_id' => $request->glasses_id ?? null,
+                    'backgrounds_id' => $request->backgrounds_id ?? null,
+                    'shoes_id' => $request->shoes_id ?? null,
+                    'hats_id' => $request->caps_id ?? null,
+                    'scarves_id' => $request->scarves_id ?? null,
+                    'yoga_mat_id' => $request->yoga_mat_id ?? null,
+                    'bottles_id' => $request->bottles_id ?? null,
+                    'image' => $imageName // Save only the filename
+                ]);
+            } else {
+                // Store data in the database
+                $childAvatar = UserAvtarImage::create([
+                    'child_id' => $childId,
+                    'expressions_id' => $request->expressions_id ?? null,
+                    'glasses_id' => $request->glasses_id ?? null,
+                    'backgrounds_id' => $request->backgrounds_id ?? null,
+                    'shoes_id' => $request->shoes_id ?? null,
+                    'hats_id' => $request->caps_id ?? null,
+                    'scarves_id' => $request->scarves_id ?? null,
+                    'yoga_mat_id' => $request->yoga_mat_id ?? null,
+                    'bottles_id' => $request->bottles_id ?? null,
+                    'image' => $imageName // Save only the filename
+                ]);
+            }
+
+            // Update child's image field
+            User::where('id', $childId)->update(['avtar_image' => $imageName]);
+
+            return $childAvatar;
+        });
 
         // ✅ Battery Debit Logic
         // $usedAvatarParts = [

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ApiHitLog;
+use Illuminate\Support\Facades\DB;
 use App\Models\Child;
 use App\Models\User;
 use App\Models\AvatarImage;
@@ -84,27 +85,37 @@ class ChildController extends Controller
         $data['password'] = Hash::make($request->password);
 
         $birthDate = $request->dob;
-        $child = User::create([
-            'name' => $request->name,
-            'username' => $request->username,
-            'dob' => $birthDate,
-            // 'profile_image' => $imagePath ?? null,
-            'parent_id' => Auth::id(),
-            // 'loyalty_points' => 100,
-            'battery_points' => 100,
-            'user_role_id' => 4,
-            'user_type' => 'child',
-            'password' => $data['password'],
-            'is_first_login' => 'yes',
-            'is_avatar_primary' => 'no',
-        ]);
-        BatteryEvent::create([
-            'user_id' => $child->id,
-            'direction' => 'credit',
-            'points' => $child->battery_points,
-            'reason' => 'Initial default battery points',
-            'effective_date' => now(),
-        ]);
+
+        // The child row and its opening battery ledger entry must land together:
+        // getProfile derives the battery percentage from the ledger, so losing
+        // the event while users.battery_points is set to 100 silently diverges
+        // the two. The push notification stays outside the transaction.
+        $child = DB::transaction(function () use ($request, $birthDate, $data) {
+            $child = User::create([
+                'name' => $request->name,
+                'username' => $request->username,
+                'dob' => $birthDate,
+                // 'profile_image' => $imagePath ?? null,
+                'parent_id' => Auth::id(),
+                // 'loyalty_points' => 100,
+                'battery_points' => 100,
+                'user_role_id' => 4,
+                'user_type' => 'child',
+                'password' => $data['password'],
+                'is_first_login' => 'yes',
+                'is_avatar_primary' => 'no',
+            ]);
+
+            BatteryEvent::create([
+                'user_id' => $child->id,
+                'direction' => 'credit',
+                'points' => $child->battery_points,
+                'reason' => 'Initial default battery points',
+                'effective_date' => now(),
+            ]);
+
+            return $child;
+        });
 
         /** 🔔 Send notification of 100% battery */
         $content = getNotificationContent('child_add', [
@@ -936,47 +947,66 @@ class ChildController extends Controller
         $batterySum = 0;
         $batteryCount = 0;
 
-        foreach ($watchHistories as $watch) {
-            $video = VideoContent::find($watch->video_content_id); // Get video data
+        // The loop marks rows is_completed = 'yes' before the points are awarded
+        // below, and it only selects is_completed = 'no' rows, so a failure part
+        // way through used to consume the rows and lose the points for good.
+        DB::beginTransaction();
 
-            if (!$video || !$video->point) continue; // Skip if no video or point not defined
+        try {
+            foreach ($watchHistories as $watch) {
+                $video = VideoContent::find($watch->video_content_id); // Get video data
 
-            $videoPoint = $video->point;
+                if (!$video || !$video->point) continue; // Skip if no video or point not defined
 
-            $videoDurationSeconds = $this->convertTimeToSecondsNew($watch->total_video_duration);
-            $watchedDurationSeconds = $this->convertTimeToSecondsNew($watch->last_watched_duration);
+                $videoPoint = $video->point;
 
-            if ($videoDurationSeconds <= 0) continue;
+                $videoDurationSeconds = $this->convertTimeToSecondsNew($watch->total_video_duration);
+                $watchedDurationSeconds = $this->convertTimeToSecondsNew($watch->last_watched_duration);
 
-            $watchPercent = $watchedDurationSeconds / $videoDurationSeconds;
+                if ($videoDurationSeconds <= 0) continue;
 
-            $earnedPoint = round($watchPercent * $videoPoint, 2);
-            $batteryPercentage = round($watchPercent * 100, 2);
+                $watchPercent = $watchedDurationSeconds / $videoDurationSeconds;
 
-            $totalEarnedPoints += $earnedPoint;
-            $batterySum += $batteryPercentage;
-            $batteryCount++;
+                $earnedPoint = round($watchPercent * $videoPoint, 2);
+                $batteryPercentage = round($watchPercent * 100, 2);
 
-            // Mark as completed to prevent reprocessing
-            $watch->is_completed = 'yes';
-            $watch->save();
-        }
+                $totalEarnedPoints += $earnedPoint;
+                $batterySum += $batteryPercentage;
+                $batteryCount++;
 
-        $averageBattery = $batteryCount > 0 ? round($batterySum / $batteryCount, 2) : 0;
+                // Mark as completed to prevent reprocessing
+                $watch->is_completed = 'yes';
+                $watch->save();
+            }
 
-        // Update child table
-        $child = Child::find($childId);
-        if ($child) {
-            $child->battery_percentage = $averageBattery;
-            $child->loyalty_points += $totalEarnedPoints;
-            $child->save();
-        }
+            $averageBattery = $batteryCount > 0 ? round($batterySum / $batteryCount, 2) : 0;
 
-        // Update user table
-        $user = User::find($childId);
-        if ($user) {
-            $user->loyalty_points += $totalEarnedPoints;
-            $user->save();
+            // Update child table
+            $child = Child::find($childId);
+            if ($child) {
+                $child->battery_percentage = $averageBattery;
+                $child->loyalty_points += $totalEarnedPoints;
+                $child->save();
+            }
+
+            // Update user table
+            $user = User::find($childId);
+            if ($user) {
+                $user->loyalty_points += $totalEarnedPoints;
+                $user->save();
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            \Log::error('updateBatteryAndLoyalty failed: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to update battery and loyalty.',
+                'battery_percentage' => 0,
+                'earned_points' => 0
+            ], 200);
         }
 
         return response()->json([

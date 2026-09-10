@@ -34,6 +34,35 @@ class HomeApiController extends Controller
 {
     use \App\Http\Controllers\Concerns\ResolvesApiUser;
 
+    /**
+     * Issue a Passport token for the authenticated user and record their device.
+     *
+     * The three login branches each carried their own copy of this block. They
+     * had already drifted apart - that drift is what let any user log in through
+     * the teacher endpoint - and each one also built a $tokenIds array that was
+     * never used and wrote device_token/language two or three times over.
+     */
+    private function issueToken($user, ?string $deviceToken, ?string $language): string
+    {
+        $attributes = ['device_token' => $deviceToken];
+
+        if ($language !== null) {
+            $attributes['language'] = $language;
+        }
+
+        $user->update($attributes);
+
+        if (!empty($deviceToken)) {
+            DeviceToken::updateOrCreate(
+                ['user_id' => $user->id],
+                ['token' => $deviceToken]
+            );
+        }
+
+        return $user->createToken('authToken')->accessToken;
+    }
+
+
     protected $service;
 
     public function __construct(RegisterService $service)
@@ -441,21 +470,7 @@ class HomeApiController extends Controller
                         'data' => (object) []
                     ], 200);
                 }
-                auth()->user()->update(['device_token' => $request->device_token]);
-                $token = auth()->user()->createToken('authToken')->accessToken;
-                if (!empty($request->device_token)) {
-                    $notification = DeviceToken::updateOrCreate(
-                        ['user_id' => auth()->id()],
-                        ['token' => $request->device_token]
-                    );
-                }
-                $tokenIds = DeviceToken::select('id')->where('user_id', auth()->user()->id)->get()->toArray();
-                $tokenArray = [];
-                foreach ($tokenIds as $key => $value) {
-                    array_push($tokenArray, $value['id']);
-                }
-                User::where('id', auth()->user()->id)->update(['device_token' => $request->device_token]);
-                User::where('id', auth()->user()->id)->update(['language' => $language]);
+                $token = $this->issueToken(auth()->user(), $request->device_token, $language);
                 return response()->json([
                     'status' => true,
                     'message' => $language == 'english' ? "User logged in successfully." : "用户登录成功。",
@@ -537,21 +552,7 @@ class HomeApiController extends Controller
                 if ($request->hasFile('image')) {
                     $imagePath = $request->file('image')->store('children', 'public');
                 }
-                auth()->user()->update(['device_token' => $request->device_token]);
-                $token = auth()->user()->createToken('authToken')->accessToken;
-                if (!empty($request->device_token)) {
-                    $notification = DeviceToken::updateOrCreate(
-                        ['user_id' => auth()->id()],
-                        ['token' => $request->device_token]
-                    );
-                }
-                $tokenIds = DeviceToken::select('id')->where('user_id', auth()->user()->id)->get()->toArray();
-                $tokenArray = [];
-                foreach ($tokenIds as $key => $value) {
-                    array_push($tokenArray, $value['id']);
-                }
-                User::where('id', auth()->user()->id)->update(['device_token' => $request->device_token]);
-                User::where('id', auth()->user()->id)->update(['language' => $language]);
+                $token = $this->issueToken(auth()->user(), $request->device_token, $language);
                 return response()->json([
                     'status' => true,
                     'message' => $language == 'english' ? "Child logged in successfully." : "用户登录成功。",
@@ -639,21 +640,7 @@ class HomeApiController extends Controller
             }
 
             // Complete success pipeline: Tokenize and track mobile notifications
-            auth()->user()->update(['device_token' => $request->device_token, 'language' => $language]);
-            $token = auth()->user()->createToken('authToken')->accessToken;
-
-            if (!empty($request->device_token)) {
-                DeviceToken::updateOrCreate(
-                    ['user_id' => auth()->id()],
-                    ['token' => $request->device_token]
-                );
-            }
-
-            $tokenIds = DeviceToken::select('id')->where('user_id', auth()->user()->id)->get()->toArray();
-            $tokenArray = [];
-            foreach ($tokenIds as $key => $value) {
-                array_push($tokenArray, $value['id']);
-            }
+            $token = $this->issueToken(auth()->user(), $request->device_token, $language);
 
             return response()->json([
                 'status'  => true,

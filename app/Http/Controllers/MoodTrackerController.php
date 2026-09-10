@@ -581,31 +581,39 @@ public function getAllMood(Request $request)
             ->where('date', Carbon::now()->toDateString())
             ->first();
 
-        if ($todayChildRecord) {
-            $activityIds = ChildPerformedActivity::where('child_id', $child_id)
-                ->whereDate('created_at', Carbon::today())
-                ->pluck('activity_id')
-                ->toArray();
-            $points = Activity::whereIn('id', $activityIds)->sum('points');
+        // Re-recording today's mood debits points and deletes the day's
+        // activities and mood row before recreating it; a failure between those
+        // steps used to leave the child with the points already deducted and no
+        // mood at all.
+        $data = \DB::transaction(function () use ($todayChildRecord, $child_id, $mood_id, $mood_name, $points) {
+            if ($todayChildRecord) {
+                $activityIds = ChildPerformedActivity::where('child_id', $child_id)
+                    ->whereDate('created_at', Carbon::today())
+                    ->pluck('activity_id')
+                    ->toArray();
+                $points = Activity::whereIn('id', $activityIds)->sum('points');
 
-            $user = User::find($child_id);
-            $user->update([
-                'loyalty_points' => max(0, $user->loyalty_points - $points)
+                $user = User::find($child_id);
+                $user->update([
+                    'loyalty_points' => max(0, $user->loyalty_points - $points)
+                ]);
+
+                ChildPerformedActivity::where('child_id', $child_id)
+                    ->whereDate('created_at', Carbon::today())
+                    ->delete();
+
+                $todayChildRecord->delete();
+            }
+
+            return ChildMood::create([
+                'child_id' => $child_id,
+                'mood_id' => $mood_id,
+                'mood_name' => $mood_name,
+                'points' => $points,
+                'date' => Carbon::now()->format('Y-m-d')
             ]);
+        });
 
-            ChildPerformedActivity::where('child_id', $child_id)
-                ->whereDate('created_at', Carbon::today())
-                ->delete();
-
-            $todayChildRecord->delete();
-        }
-        $data = ChildMood::create([
-            'child_id' => $child_id,
-            'mood_id' => $mood_id,
-            'mood_name' => $mood_name,
-            'points' => $points,
-            'date' => Carbon::now()->format('Y-m-d')
-        ]);
         if ($data) {
             User::where('id', $child_id)->update(['is_mood_updated' => 'yes']);
 
