@@ -662,6 +662,14 @@ class HomeApiController extends Controller
                 'data'    => auth()->user(),
             ], 200);
         }
+
+        return response()->json([
+            'status' => false,
+            'message' => $language == 'english'
+                ? 'The type field is required. Use parent, child, or teacher.'
+                : 'type 字段是必填项。请使用 parent、child 或 teacher。',
+            'data' => (object) []
+        ], 200);
         // } catch (\Exception $e) { ... }
     }
 
