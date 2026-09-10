@@ -250,30 +250,6 @@ $(document).ready(function () {
         });
     }
 
-    /*======== 7. CODE EDITOR ========*/
-    var codeEditor = document.getElementById("code-editor");
-    if (codeEditor) {
-        var htmlCode = `<html style="color: green">
-  <!-- this is a comment -->
-  <head>"
-    <title>HTML Example</title>
-  </head>
-  <body>
-    The indentation tries to be <em>somewhat &quot;do what
-    I mean&quot;</em>... but might not match your style.
-  </body>
-</html>`;
-
-        var myCodeMirror = CodeMirror(codeEditor, {
-            value: htmlCode,
-            mode: "xml",
-            extraKeys: { "Ctrl-Space": "autocomplete" },
-            lineNumbers: true,
-            indentWithTabs: true,
-            lineWrapping: true,
-        });
-    }
-
     /*======== 8. QUILL TEXT EDITOR ========*/
     var quillHook = document.getElementById("editor");
     if (quillHook !== null) {
@@ -297,14 +273,6 @@ $(document).ready(function () {
     if (select2Country.length != 0) {
         select2Country.select2({
             minimumResultsForSearch: -1,
-        });
-    }
-
-    /*======== 10. LOADING BUTTON ========*/
-    var laddaButton = $(".ladda-button");
-    if (laddaButton.length != 0) {
-        Ladda.bind(".ladda-button", {
-            timeout: 1000,
         });
     }
 
