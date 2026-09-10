@@ -74,9 +74,6 @@ Route::post('reset-password', [LoginController::class, 'resetPasswordLink'])->na
 Route::get('reset-password/{token}', [LoginController::class, 'resetPasswordPage'])->name('reset.password.page');
 Route::post('reset-password/{token}', [LoginController::class, 'passwordReset'])->name('password-reset');
 Route::get('reset/{token}', [LoginController::class, 'reset'])->name('reset');
-Route::get('/temp-login', function () {
-    return view('temp.temp-login');
-})->name('temp-login');
 Route::get('/verify/{user_id}/{email}', [UsersController::class, 'verifyUser'])->name('user.verify');
 Route::get('/verify-signup', function () {
     return view('verifySignUp');
