@@ -2,7 +2,17 @@
 
 return [
 
-    'public_base_url' => rtrim(env('DEEPLINK_PUBLIC_BASE_URL', env('APP_URL', 'https://admin.empoweredhealth.asia')), '/'),
+    /*
+     * Deliberately does NOT fall back to APP_URL.
+     *
+     * APP_URL is legitimately localhost or a bare server IP in most
+     * environments, and this value is baked into every stored canonical_url and
+     * into the Universal Link / App Link association. Falling back to it is how
+     * http://<ec2-ip>/d/article/154 ended up persisted in production: those
+     * links can never open the app, because iOS and Android only honour https
+     * on a domain verified via .well-known.
+     */
+    'public_base_url' => rtrim(env('DEEPLINK_PUBLIC_BASE_URL', 'https://admin.empoweredhealth.asia'), '/'),
 
     'apple_team_id' => env('DEEPLINK_APPLE_TEAM_ID', 'R8V8Y45CQZ'),
 
