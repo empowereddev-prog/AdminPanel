@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Passport;
@@ -30,9 +31,21 @@ class ResponseContractSnapshotTest extends TestCase
     private User $parent;
     private User $child;
 
+    /**
+     * The clock is frozen because mood-tracker's calendar_data is keyed by the
+     * days of the current month. Left on the real clock the snapshot pins
+     * September 2026 and every run from 1 October reports 30 keys "removed or
+     * renamed" with no code change - and a gate that cries wolf gets
+     * regenerated reflexively, which is how a real break would get waved
+     * through. Any date inside the recorded month works; this one is it.
+     */
+    private const FROZEN_NOW = '2026-09-15 12:00:00';
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        Carbon::setTestNow(self::FROZEN_NOW);
 
         $this->parent = User::create([
             'name' => 'Snapshot Parent',
@@ -59,6 +72,13 @@ class ResponseContractSnapshotTest extends TestCase
             'dob' => '2015-04',
             'battery_points' => 100,
         ]);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     /**

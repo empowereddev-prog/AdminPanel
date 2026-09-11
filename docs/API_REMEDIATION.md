@@ -7,7 +7,7 @@ breaking the shipped mobile app.
   Phases 1 and 2 — worth renaming to `api-remediation` before opening a PR)
 - **Last updated:** 2026-09-11
 - **Tests:** 51 passing, 340 assertions, 0 skipped
-- **Phases 0 and 1 complete. Phase 2 in progress: 3 of 6 controllers migrated.**
+- **Phases 0 and 1 complete. Phase 2 in progress: 4 of 6 controllers migrated.**
 
 ---
 
@@ -139,8 +139,10 @@ UPDATE_API_SNAPSHOTS=1 php vendor/bin/phpunit tests/Feature/Api/ResponseContract
 > `KnowledgeBaseController` pass: assoc decoding collapsed `{}` and `[]` into the
 > same `<list:empty>` signature. Objects are now signed as `<object:empty>`.
 > **If you extend the signature, re-verify it with a canary before trusting it.**
-> The first blind spot was also hiding the `faqs.type` bug; assume there are
-> more.
+> The first blind spot was also hiding the `faqs.type` bug. A third problem —
+> the snapshot silently going stale with the calendar — turned up in the
+> `MoodTrackerController` pass. Three defects in three passes: assume there are
+> more, and prefer verifying a property to trusting it.
 
 **`HomeApiController` migrated (`98f01c4`).** 56 live hand-rolled blocks → 3,
 behind 58 `ApiResponse` calls, gate green throughout. Fixed three error-path
@@ -224,6 +226,43 @@ Gate-covered here: `video-content`, `video-content-quiz`,
 fixtures: the success paths of `videoContent`, `videoContentQuiz` and
 `videoContentdetails`, and `videoContentforchild`'s two access-denied branches.
 
+**`MoodTrackerController` migrated.** 19 live blocks → 4. This one is a shared
+web+API controller, so the first step was mapping every block to its route:
+all 19 sat in the nine API methods, and the admin methods return views, so
+nothing web-facing was touched. Check that before editing the two remaining
+shared controllers.
+
+Two shapes needed a decision:
+
+- `getAllMood` returns `negativeStatus`/`consecutiveDays` flat and has **no
+  `message` key at all**. They went in `$extra`, not `$legacy` — they are
+  payload the app reads, not aliases of a canonical key, so a v2 client must
+  keep receiving them. This is the second use of `$extra` after the auth token.
+- `moodTracker` returns `calendar_data`/`mood_ring`/`top_emotions`/`categories`
+  flat with no `data` key. All four now sit in `data` and are mirrored flat for
+  v1.
+
+Left hand-rolled: three `data => null` branches, plus `getAllMood11` — a dead
+method no route points at (`get-all-mood` routes to `getAllMood`). Annotated as
+dead rather than migrated; migrating dead code only makes it look maintained.
+It is ~60 lines and a near-duplicate of `getAllMood`, worth deleting on its own.
+
+**The gate had a time bomb, now defused.** `mood-tracker`'s `calendar_data` is
+keyed by the days of the current month, so the snapshot pinned the 30 days of
+September 2026. Travelling the clock one month forward produced **60 spurious
+violations with no code change** — verified, not assumed. A gate that cries wolf
+gets regenerated reflexively, which is exactly how a real break gets waved
+through. The snapshot test now freezes the clock at `2026-09-15` (inside the
+recorded month, so no regeneration was needed) and clears it in `tearDown`.
+`moodTracker` reads `Carbon::now()`, so the freeze genuinely reaches it.
+
+Gate-covered here: `get-all-mood`, `get-child-mood`, `mood-tracker`,
+`activity-list`, `child-support`, `get-suggested-activity`,
+`store-child-mood:invalid`, `store-activity:invalid`,
+`store-liked-content:invalid`. Unverified without fixtures: the success paths of
+`storeChildMood`, `storeChildActivity`, `getSuggestedActivity` and
+`storeLikedVideoContent`, and `childSupport`'s two mail-sent branches.
+
 ### Deep links (`d576817`)
 
 `/deeplink/resolve` returned `canonical_url` of `http://13.229.56.31/d/article/154`.
@@ -246,11 +285,10 @@ base is the failure being fixed.
 
 ### 1. Finish Phase 2 — controller migration
 
-~74 hand-rolled `response()->json` calls remain in unmigrated controllers. Order by traffic:
+~55 hand-rolled `response()->json` calls remain in unmigrated controllers. Order by traffic:
 
 | Controller | Remaining |
 |---|---|
-| `MoodTrackerController` | 19 |
 | `QuizController` | 17 |
 | `KnowledgeSessionController` | 8 |
 | `AvtarController` | 8 |
@@ -258,9 +296,14 @@ base is the failure being fixed.
 | `NotificationController` | 5 |
 | `FaqController`, `PopupLoginController`, `UserArticleLikeController`, others | ~11 |
 
-The three migrated controllers still hold 8 blocks between them, every one a
-deliberate `data => null` left for a client release. They are annotated as such
-in the source; do not "finish" them without one.
+The four migrated controllers still hold 12 blocks between them: 11 deliberate
+`data => null` contracts left for a client release, and one dead method. They
+are annotated as such in the source; do not "finish" them without one.
+
+`QuizController` and `NotificationController` are also shared web+API
+controllers. Map each block to its route before touching it, as
+`MoodTrackerController` required — an admin AJAX response is not on the mobile
+contract and is not covered by the gate.
 
 Per controller: swap responses for `ApiResponse::*` keeping v1 keys, move
 validation into FormRequests, fix error-path bugs, run the gate.
