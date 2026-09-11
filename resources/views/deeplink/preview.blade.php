@@ -78,7 +78,7 @@
             <strong>Empowered Health</strong>
             <span id="smart-banner-sub">Get the app — free</span>
         </div>
-        <a class="sb-get" id="smart-banner-get" href="{{ $iosStore }}">VIEW</a>
+        <a class="sb-get" id="smart-banner-get" href="{{ $iosStoreApp ?? $iosStore }}">VIEW</a>
     </div>
     <article class="page">
         <div class="hero">
@@ -116,6 +116,7 @@
             var scheme = @json($schemeUrl);
             var intent = @json($androidIntent);
             var iosStore = @json($iosStore);
+            var iosStoreApp = @json($iosStoreApp ?? $iosStore);
             var androidStore = @json($androidStore);
             var iosAppId = @json($iosAppId ?? '');
             var ua = navigator.userAgent || '';
@@ -125,6 +126,22 @@
             var dismissed = false;
             try { dismissed = sessionStorage.getItem('eh-smart-banner') === '1'; } catch (e) {}
 
+            function openIosAppThenStore() {
+                var started = Date.now();
+                var hidden = false;
+                function onHide() {
+                    hidden = document.hidden || document.webkitHidden;
+                }
+                document.addEventListener('visibilitychange', onHide);
+                window.location.href = scheme;
+                setTimeout(function () {
+                    document.removeEventListener('visibilitychange', onHide);
+                    if (!hidden && document.visibilityState !== 'hidden' && Date.now() - started < 2500) {
+                        window.location.href = iosStoreApp || iosStore;
+                    }
+                }, 1200);
+            }
+
             if (open && isAndroid) {
                 open.setAttribute('href', intent);
             }
@@ -132,17 +149,11 @@
                 open.addEventListener('click', function (e) {
                     if (!isIOS) return;
                     e.preventDefault();
-                    var t = Date.now();
-                    window.location.href = scheme;
-                    setTimeout(function () {
-                        if (Date.now() - t < 1800) {
-                            window.location.href = iosStore;
-                        }
-                    }, 1400);
+                    openIosAppThenStore();
                 });
             }
 
-            var showCustom = !dismissed && (isAndroid || (isIOS && !(isIOSSafari && iosAppId)));
+            var showCustom = !dismissed && (isAndroid || isIOS);
             if (banner && showCustom) {
                 banner.removeAttribute('hidden');
                 banner.classList.add('is-visible');
@@ -151,13 +162,17 @@
                     if (sub) sub.textContent = 'Free · Google Play';
                     if (getBtn) {
                         getBtn.textContent = 'INSTALL';
-                        getBtn.setAttribute('href', intent);
+                        getBtn.setAttribute('href', androidStore);
                     }
                 } else {
                     if (sub) sub.textContent = 'Free · App Store';
                     if (getBtn) {
                         getBtn.textContent = 'VIEW';
-                        getBtn.setAttribute('href', iosStore);
+                        getBtn.setAttribute('href', iosStoreApp || iosStore);
+                        getBtn.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            openIosAppThenStore();
+                        });
                     }
                 }
             }
