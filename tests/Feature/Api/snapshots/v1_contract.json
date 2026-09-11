@@ -10,7 +10,7 @@
     "add-child:invalid": {
         "status_code": 201,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -33,7 +33,7 @@
     "avtar-image:invalid": {
         "status_code": 422,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "errors": {
                 "id": {
                     "<list>": "<string>"
@@ -47,6 +47,10 @@
         "status_code": 200,
         "body": {
             "battery_percentage": "<int>",
+            "data": {
+                "battery_percentage": "<int>",
+                "earned_points": "<int>"
+            },
             "earned_points": "<int>",
             "message": "<string>",
             "status": "<bool:true>"
@@ -69,6 +73,7 @@
     "delete-child:unknown": {
         "status_code": 200,
         "body": {
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -83,7 +88,7 @@
     "edit-child:invalid": {
         "status_code": 201,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -154,7 +159,7 @@
     "forgot-password:invalid": {
         "status_code": 422,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "errors": {
                 "email": {
                     "<list>": "<string>"
@@ -337,7 +342,7 @@
     "individual-login:invalid": {
         "status_code": 201,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -395,7 +400,7 @@
     "knowledge-session:invalid": {
         "status_code": 422,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "errors": {
                 "user_id": {
                     "<list>": "<string>"
@@ -408,7 +413,7 @@
     "login:invalid": {
         "status_code": 200,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -416,7 +421,7 @@
     "login:missing-type": {
         "status_code": 200,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -424,7 +429,7 @@
     "manage-notification:invalid": {
         "status_code": 422,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "errors": {
                 "notification": {
                     "<list>": "<string>"
@@ -794,6 +799,7 @@
     "register:invalid": {
         "status_code": 200,
         "body": {
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>",
             "user": "<list:empty>"
@@ -814,7 +820,7 @@
     "resend-otp:invalid": {
         "status_code": 422,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "errors": {
                 "country_code": {
                     "<list>": "<string>"
@@ -830,7 +836,7 @@
     "reset-password:invalid": {
         "status_code": 422,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -838,7 +844,7 @@
     "store-activity:invalid": {
         "status_code": 422,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "errors": {
                 "date": {
                     "<list>": "<string>"
@@ -868,7 +874,7 @@
     "store-child-mood:invalid": {
         "status_code": 422,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "errors": {
                 "mood_id": {
                     "<list>": "<string>"
@@ -891,7 +897,7 @@
     "student-login:invalid": {
         "status_code": 200,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -899,7 +905,7 @@
     "subscription:invalid": {
         "status_code": 422,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "errors": {
                 "currency": {
                     "<list>": "<string>"
@@ -936,7 +942,7 @@
     "unauthenticated": {
         "status_code": 401,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -944,7 +950,7 @@
     "unknown-endpoint": {
         "status_code": 404,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -960,6 +966,7 @@
     "update-parent-profile": {
         "status_code": 200,
         "body": {
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:true>"
         }
@@ -967,7 +974,7 @@
     "update-teacher-profile:invalid": {
         "status_code": 403,
         "body": {
-            "data": "<list:empty>",
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }
@@ -990,13 +997,16 @@
     "verify-otp:missing": {
         "status_code": 422,
         "body": {
+            "data": "<object:empty>",
             "message": "<string>",
+            "status": "<bool:false>",
             "success": "<bool:false>"
         }
     },
     "verify-otp:wrong": {
         "status_code": 200,
         "body": {
+            "data": "<object:empty>",
             "message": "<string>",
             "status": "<bool:false>"
         }

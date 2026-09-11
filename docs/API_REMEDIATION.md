@@ -7,7 +7,7 @@ breaking the shipped mobile app.
   Phases 1 and 2 — worth renaming to `api-remediation` before opening a PR)
 - **Last updated:** 2026-09-11
 - **Tests:** 51 passing, 340 assertions, 0 skipped
-- **Phases 0 and 1 complete. Phase 2 in progress: 2 of 6 controllers migrated.**
+- **Phases 0 and 1 complete. Phase 2 in progress: 3 of 6 controllers migrated.**
 
 ---
 
@@ -135,9 +135,12 @@ UPDATE_API_SNAPSHOTS=1 php vendor/bin/phpunit tests/Feature/Api/ResponseContract
 > The first version of this gate did not work. `status:true` and `status:false`
 > both collapsed to `<bool>`, so an endpoint falling into its catch block looked
 > identical to one succeeding — it passed a deliberately injected canary.
-> Booleans now keep their value. **If you extend the signature, re-verify it
-> with a canary before trusting it.** That blind spot was also hiding the
-> `faqs.type` bug.
+> Booleans now keep their value. A second blind spot surfaced during the
+> `KnowledgeBaseController` pass: assoc decoding collapsed `{}` and `[]` into the
+> same `<list:empty>` signature. Objects are now signed as `<object:empty>`.
+> **If you extend the signature, re-verify it with a canary before trusting it.**
+> The first blind spot was also hiding the `faqs.type` bug; assume there are
+> more.
 
 **`HomeApiController` migrated (`98f01c4`).** 56 live hand-rolled blocks → 3,
 behind 58 `ApiResponse` calls, gate green throughout. Fixed three error-path
@@ -180,6 +183,47 @@ without fixtures, so unverified by the gate: the success paths of `addChild`,
 404/age/school branches. Each of those changes is additive by construction — a
 `data` key added — but that rests on reading, not on a test.
 
+**`KnowledgeBaseController` migrated.** 17 live blocks → 4, all four of them
+deliberate `data => null` contracts, annotated in place. The transformer
+converted 12; the refusals were the two `data => null` fallthroughs, the
+one-line `Missing IDs` 400, and both deep-link error blocks, which carry
+`deeplink_status`/`canonical_url` at top level *and* `data => null` — the
+snapshot pins that exact shape as `video-content-details`.
+
+**Two tooling defects were found and fixed doing this — read these before the
+next controller.**
+
+*The transformer could skip a block without reporting it.* When the status-code
+argument was not a literal (`], $deepLink['http_status'])`), the tail regex
+failed and the block fell through to the no-op branch — counted as neither
+converted nor skipped. A refusal-based tool that can refuse silently is worse
+than no tool: the block would simply have been forgotten. It now reports
+`could not parse the status-code argument`, and every skip carries a line
+number. Re-checking `HomeApiController` and `ChildController` against the fixed
+tool found nothing else hidden.
+
+*The gate could not tell `{}` from `[]`.* The snapshot decoded responses with
+`json_decode($content, true)`, so a JSON object and a JSON array both arrived as
+`[]` and both signed as `<list:empty>`. That is precisely the distinction this
+migration turns on — it is why `data => null` blocks are left alone — and
+retyping `data: []` to `data: {}` passed a canary. To a typed mobile client the
+two are not interchangeable: `{}` decoded into a `[Video]` fails outright.
+`ResponseSignature` now keeps objects as objects and signs an empty one as
+`<object:empty>`; the same canary fails correctly.
+
+The snapshot was regenerated for that change **with the controller migration
+stashed**, so the signature fix could be reviewed on its own. Every delta was
+either a `<list:empty>` → `<object:empty>` retype (18 cases that were always
+`{}`) or a `data` key added by the already-merged `HomeApiController` and
+`ChildController` work (6 cases). **No key was removed and no status code
+moved.**
+
+Gate-covered here: `video-content`, `video-content-quiz`,
+`video-content-details`, `video-content-for-parent`, `video-content-for-child`,
+`video-watch-status`, `user-content-watch-histories:invalid`. Unverified without
+fixtures: the success paths of `videoContent`, `videoContentQuiz` and
+`videoContentdetails`, and `videoContentforchild`'s two access-denied branches.
+
 ### Deep links (`d576817`)
 
 `/deeplink/resolve` returned `canonical_url` of `http://13.229.56.31/d/article/154`.
@@ -202,17 +246,21 @@ base is the failure being fixed.
 
 ### 1. Finish Phase 2 — controller migration
 
-~92 hand-rolled `response()->json` calls remain. Order by traffic:
+~74 hand-rolled `response()->json` calls remain in unmigrated controllers. Order by traffic:
 
 | Controller | Remaining |
 |---|---|
 | `MoodTrackerController` | 19 |
-| `KnowledgeBaseController` | 17 |
 | `QuizController` | 17 |
 | `KnowledgeSessionController` | 8 |
 | `AvtarController` | 8 |
+| `ResponseController` | 6 |
 | `NotificationController` | 5 |
 | `FaqController`, `PopupLoginController`, `UserArticleLikeController`, others | ~11 |
+
+The three migrated controllers still hold 8 blocks between them, every one a
+deliberate `data => null` left for a client release. They are annotated as such
+in the source; do not "finish" them without one.
 
 Per controller: swap responses for `ApiResponse::*` keeping v1 keys, move
 validation into FormRequests, fix error-path bugs, run the gate.

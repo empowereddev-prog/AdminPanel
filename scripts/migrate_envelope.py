@@ -71,6 +71,11 @@ def transform(path, dry=True):
         elif m2:
             code, end = '200', k + m2.end()
         else:
+            # Unparseable tail - e.g. a variable status code rather than a
+            # literal. This used to fall through silently, which is the one
+            # thing a refusal-based tool must never do: the block vanished
+            # from both the converted count and the skip list.
+            skipped.append((j, "could not parse the status-code argument"))
             out.append(src[i:j + 1]); i = j + 1; continue
 
         pairs = {}
@@ -107,7 +112,8 @@ def transform(path, dry=True):
 
 path = sys.argv[1]
 dry = '--apply' not in sys.argv
+src_text = io.open(path, encoding='utf-8').read()
 changed, skipped = transform(path, dry)
 print(("DRY RUN: " if dry else "APPLIED: ") + f"{changed} blocks converted, {len(skipped)} left for manual review")
-for _, why in skipped:
-    print("   skip:", why)
+for off, why in skipped:
+    print("   skip: line %d: %s" % (src_text[:off].count('\n') + 1, why))

@@ -174,7 +174,9 @@ class ResponseContractSnapshotTest extends TestCase
 
             $actual[$label] = ResponseSignature::of(
                 $response->getStatusCode(),
-                json_decode($response->getContent(), true)
+                // Not assoc: an empty object must stay distinguishable from
+                // an empty array. See ResponseSignature::shape().
+                json_decode($response->getContent())
             );
         }
 

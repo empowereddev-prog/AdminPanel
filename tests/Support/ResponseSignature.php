@@ -12,7 +12,7 @@ namespace Tests\Support;
  */
 class ResponseSignature
 {
-    public static function of(int $status, ?array $payload): array
+    public static function of(int $status, mixed $payload): array
     {
         return [
             'status_code' => $status,
@@ -22,6 +22,26 @@ class ResponseSignature
 
     public static function shape(mixed $value): mixed
     {
+        // A JSON object and a JSON array are different contracts to a typed
+        // mobile client: {} decoded into a [Video] fails. Decoding assoc made
+        // both arrive here as [], so `data: []` could silently become `data: {}`
+        // and the gate saw no change. Objects therefore stay objects.
+        if ($value instanceof \stdClass) {
+            $fields = get_object_vars($value);
+
+            if ($fields === []) {
+                return '<object:empty>';
+            }
+
+            $shape = [];
+            foreach ($fields as $key => $item) {
+                $shape[$key] = self::shape($item);
+            }
+            ksort($shape);
+
+            return $shape;
+        }
+
         if (is_array($value)) {
             // A list: collapse to the shape of its first element, so row count
             // and ordering do not make the snapshot brittle.

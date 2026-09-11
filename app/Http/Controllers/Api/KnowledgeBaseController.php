@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\ApiResponse;
 use Illuminate\Http\Request;
 use App\Models\VideoContent;
 use App\Models\Category;
@@ -432,11 +433,7 @@ class KnowledgeBaseController extends Controller
             $total = $filtered->count();
 
             if ($total === 0) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'No data found',
-                    'data' => []
-                ]);
+                return ApiResponse::error('No data found', 200, null, []);
             }
 
             // =======================
@@ -477,19 +474,18 @@ class KnowledgeBaseController extends Controller
                 return $video;
             });
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Data fetched successfully',
-                'data' => [
-                    'data' => $formattedData,
-                    'total' => $total,
-                    'per_page' => $perPage,
-                    'current_page' => $page,
-                    'last_page' => ceil($total / $perPage)
-                ]
-            ]);
+            return ApiResponse::success([
+                'data' => $formattedData,
+                'total' => $total,
+                'per_page' => $perPage,
+                'current_page' => $page,
+                'last_page' => ceil($total / $perPage),
+            ], 'Data fetched successfully');
         }
 
+        // Not migrated: the contract here is data => null, which ApiResponse
+        // renders as {} - a type change for the shipped app. Convert only
+        // alongside a client release.
         return response()->json([
             'status' => false,
             'message' => 'Invalid parameters',
@@ -581,11 +577,7 @@ class KnowledgeBaseController extends Controller
 
             $total = $filtered->count();
             if ($total === 0) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'No data found.',
-                    'data' => [],
-                ], 200);
+                return ApiResponse::error('No data found.', 200, null, []);
             }
             $paginatedItems = $filtered->forPage($page, $perPage);
 
@@ -620,19 +612,18 @@ class KnowledgeBaseController extends Controller
                 return $video;
             });
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Data fetched successfully!',
-                'data' => [
-                    'data' => $formattedData,
-                    'total' => $total,
-                    'per_page' => (int)$perPage,
-                    'current_page' => (int)$page,
-                    'last_page' => ceil($total / $perPage)
-                ]
-            ], 200);
+            return ApiResponse::success([
+                'data' => $formattedData,
+                'total' => $total,
+                'per_page' => (int)$perPage,
+                'current_page' => (int)$page,
+                'last_page' => ceil($total / $perPage),
+            ], 'Data fetched successfully!');
         }
 
+        // Not migrated: the contract here is data => null, which ApiResponse
+        // renders as {} - a type change for the shipped app. Convert only
+        // alongside a client release.
         return response()->json([
             'status' => false,
             'message' => 'Data not found',
@@ -670,7 +661,7 @@ class KnowledgeBaseController extends Controller
     {
         // 1. Validation check (Hamesha acchi practice hai)
         if (!$request->user_id || !$request->video_content_id) {
-            return response()->json(['status' => false, 'message' => 'Missing IDs'], 400);
+            return ApiResponse::error('Missing IDs', 400);
         }
 
         // The watch history and the loyalty points below belong to this user, so
@@ -716,11 +707,7 @@ class KnowledgeBaseController extends Controller
             }
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Data saved successfully!',
-            'data' => $history
-        ], 200);
+        return ApiResponse::success($history, 'Data saved successfully!', 200);
     }
     // public function userContentWatchHistories(Request $request)
     // {
@@ -829,10 +816,8 @@ class KnowledgeBaseController extends Controller
         $formatted_total_time = gmdate("H:i:s", $total_time);
         $formatted_remaining_time = gmdate("H:i:s", $remaining_seconds);
 
-        return response()->json([
-            'status' => true,
-            'message' => $language == 'chinese' ? '视频内容获取成功！' : 'Video content fetched successfully!',
-            'data' => [
+        return ApiResponse::success(
+            [
                 'total_points' => (int) $video_content_points,
                 'category' => $category_name,
                 'total_video_duration' => $formatted_total_time,
@@ -840,7 +825,8 @@ class KnowledgeBaseController extends Controller
                 'watched_percentage' => (int)$watched_percentage,
                 'video_durations' => $video_durations,
             ],
-        ], 200);
+            $language == 'chinese' ? '视频内容获取成功！' : 'Video content fetched successfully!'
+        );
     }
     public function videoContentdetails(Request $request)
     {
@@ -848,6 +834,9 @@ class KnowledgeBaseController extends Controller
         $language = $request->language ?? 'english';
         $deepLink = app(\App\Services\DeepLinkService::class)->resolve('podcast', $videoId, auth()->user(), false);
         if ($deepLink['status'] !== \App\Services\DeepLinkService::STATUS_OK) {
+            // Not migrated: data => null (see above), and the deep-link keys
+            // deeplink_status/canonical_url are read by the app at top level.
+            // The snapshot pins this exact shape as video-content-details.
             return response()->json([
                 'status' => false,
                 'deeplink_status' => $deepLink['status'],
@@ -888,12 +877,9 @@ class KnowledgeBaseController extends Controller
             $video_content->is_heart = in_array('favourite', $likeStatus) ? 'yes' : 'no';
             $video_content->category_name = $video_content->category->category_name;
             $video_content->canonical_url = $deepLink['canonical_url'];
-            return response()->json([
-                'status' => true,
-                'message' => 'Video content fetched successfully!',
-                'data' => $video_content
-            ]);
+            return ApiResponse::success($video_content, 'Video content fetched successfully!', 200);
         } else {
+            // Not migrated: data => null, plus a top-level deeplink_status.
             return response()->json([
                 'status' => false,
                 'deeplink_status' => 'not_found',
@@ -1048,11 +1034,7 @@ class KnowledgeBaseController extends Controller
         // Replace the collection with formatted data
         $paginated->setCollection($formattedData);
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Data fetched successfully!',
-            'data' => $paginated
-        ], 200);
+        return ApiResponse::success($paginated, 'Data fetched successfully!', 200);
     }
 
     public function videoContentforparent(Request $request)
@@ -1179,11 +1161,7 @@ class KnowledgeBaseController extends Controller
 
         $paginated->setCollection($formattedData);
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Data fetched successfully!',
-            'data' => $paginated
-        ], 200);
+        return ApiResponse::success($paginated, 'Data fetched successfully!', 200);
     }
 
     public function videoContentforchild(Request $request)
@@ -1217,21 +1195,23 @@ class KnowledgeBaseController extends Controller
         }
 
         if (!$targetUser) {
-            return response()->json([
-                'status'  => false,
-                'message' => $language == 'english' ? "Target user profile not found." : "找不到目标用户个人资料。",
-                'data'    => (object) []
-            ], 200);
+            return ApiResponse::error(
+                $language == 'english' ? "Target user profile not found." : "找不到目标用户个人资料。",
+                200,
+                null,
+                (object) []
+            );
         }
 
         // 2. Dynamic Senior-Level Role Bypass Check
         // ✅ Allow access if the target is a child OR if the logged-in user is a Teacher (Role 5)
         if ($targetUser->user_type !== 'child' && !$isTeacher) {
-            return response()->json([
-                'status'  => false,
-                'message' => $language == 'english' ? "Access denied. Target must be a child context." : "访问被拒绝。目标必须是儿童上下文。",
-                'data'    => (object) []
-            ], 200);
+            return ApiResponse::error(
+                $language == 'english' ? "Access denied. Target must be a child context." : "访问被拒绝。目标必须是儿童上下文。",
+                200,
+                null,
+                (object) []
+            );
         }
 
         // 3. Assign Parameters Safely
@@ -1356,10 +1336,6 @@ class KnowledgeBaseController extends Controller
 
         $paginated->setCollection($formattedData);
 
-        return response()->json([
-            'status'  => true,
-            'message' => 'Data fetched successfully!',
-            'data'    => $paginated
-        ], 200);
+        return ApiResponse::success($paginated, 'Data fetched successfully!', 200);
     }
 }
