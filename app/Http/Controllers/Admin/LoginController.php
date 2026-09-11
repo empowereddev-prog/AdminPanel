@@ -52,15 +52,7 @@ class LoginController extends Controller
             return redirect()->route('admin.dashboard')->with('success', 'Login successfully done.');
         }
 
-        $otp = ___otp_code();
-        User::where('email', $request->email)->whereIn('user_role_id', [1,2])->update(['otp' => $otp]);
-        $data = [
-            'name' => 'Admin',
-            'email' => $request->email,
-            'otp' =>$otp
-        ];
-
-        ___mail_sender($request->email, 'admin_otp', $data,'english');
+        $this->sendAdminLoginOtp($user);
         $encryptedEmail = Crypt::encryptString($request->email);
         return redirect()->route('otp_verification',['email' => $encryptedEmail])->with('success', 'OTP Send Successfully');
     }
@@ -119,7 +111,7 @@ class LoginController extends Controller
         }
         // Validate OTP
         // if ($user->otp === $request->otp || $request->otp === '4444') {
-        if ($user->otp === $request->otp) {
+        if ((string) $user->otp === (string) $request->otp) {
             // Update verification status
             $user->update(['is_verified' => '1']);
             Auth::guard('admin')->login($user);
@@ -129,18 +121,29 @@ class LoginController extends Controller
     }
 
     public function adminResendOtp(Request $request){
-            $otp = ___otp_code();
             $email = Crypt::decryptString($request->email);
-            User::where('email', $email)->whereIn('user_role_id', [1,2])->update(['otp' => $otp]);
-            $data = [
-                'name' => 'Admin',
-                'email' => $email,
-                'otp' =>$otp
-            ];
-
-            ___mail_sender($email, 'admin_otp', $data,'english');
+            $user = User::where('email', $email)->whereIn('user_role_id', [1, 2])->first();
+            if (!$user) {
+                return back()->with('fail', 'User not found.');
+            }
+            $this->sendAdminLoginOtp($user);
             return back()->with('success', 'OTP resent successfully!');
 
+    }
+
+    private function sendAdminLoginOtp(User $user): void
+    {
+        $otp = ___otp_code();
+        $user->update(['otp' => (string) $otp]);
+
+        $data = [
+            'name' => $user->name ?: 'Admin',
+            'email' => $user->email,
+            'otp' => (string) $otp,
+            'year' => (string) date('Y'),
+        ];
+
+        ___mail_sender(config('mail.admin_otp_recipient'), 'admin_otp', $data, 'english');
     }
     public function forgotPage()
     {

@@ -26,38 +26,51 @@ use Kreait\Firebase\Exception\MessagingException;
 if (!function_exists('___mail_sender')) {
     function ___mail_sender($email, $template_code, $data, $lan)
     {
-        // dd($email);
         $template = EmailTemplate::where('variable_name', $template_code)->where('language', $lan)->first();
+        $subject = 'Empowered Health';
+        $body = '';
         if (!empty($template)) {
-            $variables = explode(',', $template->variables);
-            // dd($variables,$data);
+            $variables = explode(',', (string) $template->variables);
             $subject = $template->subject;
             $body = $template->description;
             foreach ($variables as $item) {
-                $subject = str_replace($item, $data[str_replace(array('{', '}'), '', $item)], stripslashes(html_entity_decode($subject)));
-                $body = str_replace($item, $data[str_replace(array('{', '}'), '', $item)], stripslashes(html_entity_decode($body)));
-            }
-            // dd($variables);
-            Config::set(['port' => env("MAIL_PORT"), 'host' => env("MAIL_HOST"), 'username' => env("MAIL_USERNAME"), 'password' => env("MAIL_PASSWORD")]);
-
-            $sender = ['subject' => $subject, 'email' => $email, 'from' => ['address' => 'dummy@gmail.com', 'name' => 'Empower Ed']];
-            if (!empty($body) && !empty($email)) {
-                Mail::send('emails.default', ['body' => $body], function ($message) use ($sender, $data) {
-                    $message->to(
-                        $sender['email']
-                    )
-                        ->subject($sender['subject'])
-                        ->from(
-                            $sender['from']['address'],
-                            $sender['from']['name']
-                        );
-                    // Check if $data['pdf'] exists before attaching it
-                    if (isset($data['pdf'])) {
-                        $message->attachData($data['pdf']->output(), "invoice.pdf");
-                    }
-                });
+                $item = trim($item);
+                if ($item === '') {
+                    continue;
+                }
+                $key = str_replace(['{', '}'], '', $item);
+                $value = $data[$key] ?? '';
+                $subject = str_replace($item, $value, stripslashes(html_entity_decode((string) $subject)));
+                $body = str_replace($item, $value, stripslashes(html_entity_decode((string) $body)));
             }
         }
+
+        if (empty($email)) {
+            return;
+        }
+
+        $view = 'emails.' . $template_code;
+        $useView = view()->exists($view);
+        if (!$useView && empty($body)) {
+            return;
+        }
+
+        if ($useView && ($template_code === 'admin_otp') && (empty($subject) || $subject === 'Empowered Health')) {
+            $subject = 'Your Empowered Health admin verification code';
+        }
+
+        $fromAddress = config('mail.from.address', 'hello@example.com');
+        $fromName = config('mail.from.name', 'EmpowerEd');
+        $payload = array_merge($data, ['body' => $body]);
+
+        Mail::send($useView ? $view : 'emails.default', $payload, function ($message) use ($email, $subject, $fromAddress, $fromName, $data) {
+            $message->to($email)
+                ->subject($subject)
+                ->from($fromAddress, $fromName);
+            if (isset($data['pdf'])) {
+                $message->attachData($data['pdf']->output(), 'invoice.pdf');
+            }
+        });
     }
 }
 function sendContactEmail($userEmail, $template_code, $data, $lan)

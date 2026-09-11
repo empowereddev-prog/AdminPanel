@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
                 AdminUserSeeder::class,
                 FeaturesContentSeeder::class,
                 StaticContentSeeder::class,
+                AdminOtpEmailTemplateSeeder::class,
             ]);
 
     }
