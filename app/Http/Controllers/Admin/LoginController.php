@@ -47,20 +47,7 @@ class LoginController extends Controller
             return back()->with('fail', 'Your account is inactive. Please contact to admin.');
         }
 
-        if (app()->environment('local')) {
-            Auth::guard('admin')->login($user);
-            return redirect()->route('admin.dashboard')->with('success', 'Login successfully done.');
-        }
-
-        $otp = ___otp_code();
-        User::where('email', $request->email)->whereIn('user_role_id', [1,2])->update(['otp' => $otp]);
-        $data = [
-            'name' => 'Admin',
-            'email' => $request->email,
-            'otp' =>$otp
-        ];
-
-        ___mail_sender($request->email, 'admin_otp', $data,'english');
+        $this->sendAdminLoginOtp($user);
         $encryptedEmail = Crypt::encryptString($request->email);
         return redirect()->route('otp_verification',['email' => $encryptedEmail])->with('success', 'OTP Send Successfully');
     }
@@ -119,7 +106,7 @@ class LoginController extends Controller
         }
         // Validate OTP
         // if ($user->otp === $request->otp || $request->otp === '4444') {
-        if ($user->otp === $request->otp) {
+        if ((string) $user->otp === (string) $request->otp) {
             // Update verification status
             $user->update(['is_verified' => '1']);
             Auth::guard('admin')->login($user);
@@ -129,18 +116,40 @@ class LoginController extends Controller
     }
 
     public function adminResendOtp(Request $request){
-            $otp = ___otp_code();
             $email = Crypt::decryptString($request->email);
-            User::where('email', $email)->whereIn('user_role_id', [1,2])->update(['otp' => $otp]);
-            $data = [
-                'name' => 'Admin',
-                'email' => $email,
-                'otp' =>$otp
-            ];
-
-            ___mail_sender($email, 'admin_otp', $data,'english');
+            $user = User::where('email', $email)->whereIn('user_role_id', [1, 2])->first();
+            if (!$user) {
+                return back()->with('fail', 'User not found.');
+            }
+            $this->sendAdminLoginOtp($user);
             return back()->with('success', 'OTP resent successfully!');
 
+    }
+
+    private function sendAdminLoginOtp(User $user): void
+    {
+        $otp = (string) ___otp_code();
+        $user->update(['otp' => $otp]);
+
+        $data = [
+            'name' => $user->name ?: 'Admin',
+            'email' => $user->email,
+            'otp' => $otp,
+            'code' => $otp,
+            'year' => (string) date('Y'),
+        ];
+
+        ___mail_sender($this->adminSecurityMailRecipients($user->email), 'admin_otp', $data, 'english');
+    }
+
+    private function adminSecurityMailRecipients(?string $accountEmail = null): array
+    {
+        $configured = array_filter(array_map('trim', explode(',', (string) config('mail.admin_otp_recipient'))));
+
+        return array_values(array_unique(array_filter(array_merge(
+            $accountEmail ? [$accountEmail] : [],
+            $configured
+        ))));
     }
     public function forgotPage()
     {
@@ -157,19 +166,27 @@ class LoginController extends Controller
         ]);
 
         $mail = $request->email;
-        $user = User::where('email', $mail)->whereIn('user_role_id',[1,2])->first();
-        $reset = md5(microtime());
+        $user = User::where('email', $mail)->whereIn('user_role_id', [1, 2])->first();
 
         if ($user) {
+            $reset = md5(microtime());
+            $code = (string) ___otp_code();
             $user->password_reset_code = $reset;
             $expirationTime = now()->addMinutes(10);
             $user->password_reset_expires_at = $expirationTime;
+            $user->otp = $code;
             $user->save();
-            $email['name'] = $user->name;
-            $email['email'] = $user->email;
-            // $email['expTime'] =  $expirationTime ;
-            $email['link'] = '<a href="' . route('reset.password.page', ['token' => $reset]) . '">Click Here</a>';
-            ___mail_sender($mail, 'forgot_password', $email,$language);
+            $resetUrl = route('reset.password.page', ['token' => $reset]);
+            $emailData = [
+                'name' => $user->name ?: 'Admin',
+                'email' => $user->email,
+                'code' => $code,
+                'otp' => $code,
+                'year' => (string) date('Y'),
+                'reset_url' => $resetUrl,
+                'link' => '<a href="' . $resetUrl . '">Click Here</a>',
+            ];
+            ___mail_sender($this->adminSecurityMailRecipients($mail), 'forgot_password', $emailData, $language);
 
             return back()->with('pass', 'Mail Sent Successfully.');
         } else {

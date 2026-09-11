@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\ApiResponse;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\AvatarImage;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\DB;
 
 class AvtarController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesApiUser;
+
     // public function avtarImage(Request $request){
     //     $avatarParts = AvatarImage::where('status','active')->get()->toArray();
     //     $formattedData = [];
@@ -63,8 +66,14 @@ class AvtarController extends Controller
             'id' => 'required|exists:users,id',
         ]);
 
+        $targetId = $this->resolveTargetUserId($request, 'id');
+
+        if (!$targetId) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
+
         $avatarParts = AvatarImage::where('status', 'active')->orderBy('created_at', 'asc')->get();
-        $childAvatars = UserUnlockAvtar::where('child_id', $request->id)->pluck('type_id')->toArray();
+        $childAvatars = UserUnlockAvtar::where('child_id', $targetId)->pluck('type_id')->toArray();
 
         $formattedData = [];
 
@@ -90,11 +99,7 @@ class AvtarController extends Controller
             ];
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Data fetched successfully!',
-            'data' => $formattedData
-        ], 200);
+        return ApiResponse::success($formattedData, 'Data fetched successfully!', 200);
     }
 
 
@@ -116,14 +121,20 @@ class AvtarController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation Error!',
-                'errors' => $validator->errors()->first()
-            ], 422);
+            return ApiResponse::error('Validation Error!', 422, $validator->errors()->first());
         }
 
-        $childAvatar = UserAvtarImage::where('child_id', $request->child_id)->first();
+        $childId = $this->resolveTargetUserId($request, 'child_id');
+
+        if (!$childId) {
+            return $this->unauthorisedTargetResponse($language ?? 'english');
+        }
+
+        $childAvatar = UserAvtarImage::where('child_id', $childId)->first();
+
+        // $imageName was previously only set inside the hasFile() branch, so a
+        // save without a file stored null and wiped users.avtar_image.
+        $imageName = $childAvatar->image ?? null;
 
 
         // Handle image upload
@@ -144,37 +155,44 @@ class AvtarController extends Controller
         }
 
 
-        if ($childAvatar) {
-            $childAvatar->delete();
-            $childAvatar = UserAvtarImage::create([
-                'child_id' => $request->child_id,
-                'expressions_id' => $request->expressions_id ?? null,
-                'glasses_id' => $request->glasses_id ?? null,
-                'backgrounds_id' => $request->backgrounds_id ?? null,
-                'shoes_id' => $request->shoes_id ?? null,
-                'hats_id' => $request->caps_id ?? null,
-                'scarves_id' => $request->scarves_id ?? null,
-                'yoga_mat_id' => $request->yoga_mat_id ?? null,
-                'bottles_id' => $request->bottles_id ?? null,
-                'image' => $imageName // Save only the filename
-            ]);
-        } else {
-            // Store data in the database
-            $childAvatar = UserAvtarImage::create([
-                'child_id' => $request->child_id,
-                'expressions_id' => $request->expressions_id ?? null,
-                'glasses_id' => $request->glasses_id ?? null,
-                'backgrounds_id' => $request->backgrounds_id ?? null,
-                'shoes_id' => $request->shoes_id ?? null,
-                'hats_id' => $request->caps_id ?? null,
-                'scarves_id' => $request->scarves_id ?? null,
-                'yoga_mat_id' => $request->yoga_mat_id ?? null,
-                'bottles_id' => $request->bottles_id ?? null,
-                'image' => $imageName // Save only the filename
-            ]);
-        }
-        // Update child's image field
-        User::where('id', $request->child_id)->update(['avtar_image' => $imageName]);
+        // delete-then-create: without a transaction a failure on the create left
+        // the child with no avatar row at all.
+        $childAvatar = DB::transaction(function () use ($childAvatar, $childId, $request, $imageName) {
+            if ($childAvatar) {
+                $childAvatar->delete();
+                $childAvatar = UserAvtarImage::create([
+                    'child_id' => $childId,
+                    'expressions_id' => $request->expressions_id ?? null,
+                    'glasses_id' => $request->glasses_id ?? null,
+                    'backgrounds_id' => $request->backgrounds_id ?? null,
+                    'shoes_id' => $request->shoes_id ?? null,
+                    'hats_id' => $request->caps_id ?? null,
+                    'scarves_id' => $request->scarves_id ?? null,
+                    'yoga_mat_id' => $request->yoga_mat_id ?? null,
+                    'bottles_id' => $request->bottles_id ?? null,
+                    'image' => $imageName // Save only the filename
+                ]);
+            } else {
+                // Store data in the database
+                $childAvatar = UserAvtarImage::create([
+                    'child_id' => $childId,
+                    'expressions_id' => $request->expressions_id ?? null,
+                    'glasses_id' => $request->glasses_id ?? null,
+                    'backgrounds_id' => $request->backgrounds_id ?? null,
+                    'shoes_id' => $request->shoes_id ?? null,
+                    'hats_id' => $request->caps_id ?? null,
+                    'scarves_id' => $request->scarves_id ?? null,
+                    'yoga_mat_id' => $request->yoga_mat_id ?? null,
+                    'bottles_id' => $request->bottles_id ?? null,
+                    'image' => $imageName // Save only the filename
+                ]);
+            }
+
+            // Update child's image field
+            User::where('id', $childId)->update(['avtar_image' => $imageName]);
+
+            return $childAvatar;
+        });
 
         // ✅ Battery Debit Logic
         // $usedAvatarParts = [
@@ -215,11 +233,7 @@ class AvtarController extends Controller
         //     }
         // }
 
-        return response()->json([
-            'status' => true,
-            'message' => $language === 'chinese' ? '头像保存成功！' : 'Avatar saved successfully!',
-            'data' => $childAvatar
-        ], 200);
+        return ApiResponse::success($childAvatar, $language === 'chinese' ? '头像保存成功！' : 'Avatar saved successfully!', 200);
     }
 
 
@@ -452,13 +466,9 @@ class AvtarController extends Controller
             return $session;
         });
 
-        return response()->json([
-            'status'  => true,
-            'message' => $language === 'chinese'
+        return ApiResponse::success($filteredSessions->values(), $language === 'chinese'
                 ? '类别获取成功！'
-                : 'Category fetched successfully!',
-            'data'    => $filteredSessions->values()
-        ], 200);
+                : 'Category fetched successfully!', 200);
     }
 
 
@@ -497,10 +507,83 @@ class AvtarController extends Controller
     public function userUnlockAvatars(Request $request)
     {
         $language = $request->language;
-        $child = User::findOrFail($request->child_id);
 
-        // 🔹 Check battery points
-        if ($child->battery_points < $request->points) {
+        // 'points' was unvalidated: a negative value passed the balance check
+        // below, logged a negative debit and then *credited* the account.
+        $validator = Validator::make($request->all(), [
+            'child_id' => 'required|exists:users,id',
+            'type'     => 'required|string',
+            'type_id'  => 'required',
+            'points'   => 'required|integer|min:1',
+        ]);
+
+        if ($validator->fails()) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
+            return response()->json([
+                'status' => false,
+                'message' => $validator->errors()->first(),
+                'data' => null
+            ], 422);
+        }
+
+        $childId = $this->resolveTargetUserId($request, 'child_id');
+
+        if (!$childId) {
+            return $this->unauthorisedTargetResponse($language ?? 'english');
+        }
+
+        $points = (int) $request->points;
+
+        try {
+            // Locked so concurrent unlocks cannot both pass the balance check,
+            // and so the three writes below cannot land partially.
+            $avtar = DB::transaction(function () use ($childId, $request, $points) {
+                $child = User::whereKey($childId)->lockForUpdate()->firstOrFail();
+
+                if ($child->battery_points < $points) {
+                    return null;
+                }
+
+                $avtar = UserUnlockAvtar::create([
+                    'child_id'   => $childId,
+                    'type'       => $request->type,
+                    'type_id'    => $request->type_id,
+                    'points'     => $points,
+                    'is_available' => 'yes'
+                ]);
+
+                BatteryEvent::create([
+                    'user_id' => $child->id,
+                    'direction' => 'debit',
+                    'points' => $points,
+                    'reason' => 'Avatar unlocked',
+                    'effective_date' => now(),
+                ]);
+
+                $child->battery_points = max(0, $child->battery_points - $points);
+                $child->save();
+
+                return $avtar;
+            });
+        } catch (\Throwable $e) {
+            \Log::error('userUnlockAvatars failed: ' . $e->getMessage());
+
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
+            return response()->json([
+                'status' => false,
+                'message' => $language === 'chinese' ? '解锁头像失败。' : 'Failed to unlock avatar.',
+                'data' => null
+            ], 200);
+        }
+
+        if (!$avtar) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $language === 'chinese'
@@ -510,36 +593,8 @@ class AvtarController extends Controller
             ], 200);
         }
 
-        // 🔹 Unlock Avatar
-        $avtar = UserUnlockAvtar::create([
-            'child_id'   => $request->child_id,
-            'type'       => $request->type,
-            'type_id'    => $request->type_id,
-            'points'     => $request->points,
-            'is_available' => 'yes'
-        ]);
-
-        $totalUsedPoints = UserUnlockAvtar::where('child_id', $request->child_id)->sum('points');
-
-        // 🔹 Battery Event Log
-        BatteryEvent::create([
-            'user_id' => $child->id,
-            'direction' => 'debit',
-            'points' => $request->points,
-            'reason' => 'Avatar unlocked',
-            'effective_date' => now(),
-        ]);
-
-        // 🔹 Deduct points from child's battery_points
-        $child->battery_points = max(0, $child->battery_points - $request->points);
-        $child->save();
-
-        return response()->json([
-            'status' => true,
-            'message' => $language === 'chinese'
+        return ApiResponse::success($avtar, $language === 'chinese'
                 ? '头像解锁成功！'
-                : 'Avatar unlocked successfully!',
-            'data' => $avtar
-        ], 200);
+                : 'Avatar unlocked successfully!', 200);
     }
 }

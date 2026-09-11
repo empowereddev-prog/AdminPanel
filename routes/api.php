@@ -112,7 +112,6 @@ Route::middleware('auth:api', 'apicheckstatus')->group(function () {
   Route::post('notification-list', [NotificationController::class, 'notificationList']);
   Route::post('manage-notification', [NotificationController::class, 'manageNotification']);
   Route::post('contact-support', [NotificationController::class, 'sendMessage']);
-  Route::post('send-notification', [NotificationController::class, 'sendNotification']);
   Route::post('mark-as-read', [NotificationController::class, 'markAsRead']);
   Route::post('delete-notification', [NotificationController::class, 'deleteNotification']);
   Route::post('store-liked-content', [MoodTrackerController::class, 'storeLikedVideoContent']);
@@ -128,7 +127,6 @@ Route::middleware('auth:api', 'apicheckstatus')->group(function () {
   Route::controller(PopupLoginController::class)->group(function () {
     Route::get('popup', 'index');
     Route::post('popup-store', 'store');
-    Route::post('test-battery', 'check');
   });
 
   Route::post('request-video', [VideoRequestController::class, 'requestVideo']);

@@ -101,17 +101,20 @@ class DeepLinkController extends Controller
         $resolved = $this->deepLinks->withPreviewDetails($resolved);
         $scheme = $resolved['custom_scheme_url'];
         $package = config('deeplink.android_package');
+        $iosStore = $this->iosStoreUrl();
+        $androidStore = (string) config('deeplink.android_store_url');
         $androidIntent = 'intent://' . $resolved['type'] . '/' . $resolved['id']
             . '#Intent;scheme=' . config('deeplink.scheme')
             . ';package=' . $package
-            . ';S.browser_fallback_url=' . rawurlencode($resolved['canonical_url'])
+            . ';S.browser_fallback_url=' . rawurlencode($androidStore)
             . ';end';
 
         return response()
             ->view('deeplink.preview', [
                 'item' => $resolved,
-                'iosStore' => config('deeplink.ios_store_url'),
-                'androidStore' => config('deeplink.android_store_url'),
+                'iosStore' => $iosStore,
+                'iosStoreApp' => $this->iosStoreAppUrl($iosStore),
+                'androidStore' => $androidStore,
                 'iosAppId' => $this->iosAppId(),
                 'appIcon' => $this->appIconUrl(),
                 'schemeUrl' => $scheme,
@@ -143,6 +146,27 @@ class DeepLinkController extends Controller
         }
 
         return '';
+    }
+
+    protected function iosStoreUrl(): string
+    {
+        $url = trim((string) config('deeplink.ios_store_url'));
+        $id = $this->iosAppId();
+        if ($id !== '' && ($url === '' || $url === 'https://apps.apple.com' || !preg_match('/id' . preg_quote($id, '/') . '/', $url))) {
+            return 'https://apps.apple.com/app/id' . $id;
+        }
+
+        return $url !== '' ? $url : 'https://apps.apple.com';
+    }
+
+    protected function iosStoreAppUrl(string $httpsUrl): string
+    {
+        $id = $this->iosAppId();
+        if ($id !== '') {
+            return 'itms-apps://apps.apple.com/app/id' . $id;
+        }
+
+        return preg_replace('#^https?://#', 'itms-apps://', $httpsUrl) ?: $httpsUrl;
     }
 
     protected function appIconUrl(): string

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\ApiResponse;
 use Illuminate\Http\Request;
 use App\Models\PermissionUser;
 use App\Models\Mood;
@@ -26,6 +27,8 @@ use Stichoza\GoogleTranslate\GoogleTranslate;
 
 class MoodTrackerController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesApiUser;
+
     private $moodTracker = 24;
     private $subadmin_menu_id = 24;
     private $user_attempt_quiz = 25;
@@ -514,6 +517,9 @@ class MoodTrackerController extends Controller
         }
     }
 
+    // Left hand-rolled deliberately: getAllMood11 is dead - no route points
+    // at it (api.php routes get-all-mood to getAllMood below). Migrating dead
+    // code only makes it look maintained. @envelope-exempt
     return response()->json([
         'status' => true,
         'message' => 'Data fetched successfully!',
@@ -555,16 +561,26 @@ public function getAllMood(Request $request)
         }
     }
 
-    return response()->json([
-        'status' => true,
-        'negativeStatus' => $negativeStatus,
-        'consecutiveDays' => $consecutiveCount,
-        'data' => Mood::with('activity')->where('status', 'active')->get(),
-    ], 200);
+    return ApiResponse::success(
+        Mood::with('activity')->where('status', 'active')->get(),
+        'Data fetched successfully!',
+        200,
+        [],
+        // $extra, not $legacy: these are payload the app reads, not aliases of
+        // a canonical key, so a v2 client must keep receiving them.
+        ['negativeStatus' => $negativeStatus, 'consecutiveDays' => $consecutiveCount]
+    );
 }
-    public function storeChildMood(Request $request)
+    public function storeChildMood(\App\Http\Requests\Api\StoreChildMoodRequest $request)
     {
-        $child_id = $request->child_id;
+        // child_id used to come straight from the body, letting any caller wipe
+        // and rewrite another child's mood history and loyalty points below.
+        $child_id = $this->resolveTargetUserId($request, 'child_id');
+
+        if (!$child_id) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
+
         $mood_id = $request->mood_id;
         $mood_name = $request->mood_name;
         $points = $request->points ?? 0;
@@ -572,31 +588,39 @@ public function getAllMood(Request $request)
             ->where('date', Carbon::now()->toDateString())
             ->first();
 
-        if ($todayChildRecord) {
-            $activityIds = ChildPerformedActivity::where('child_id', $child_id)
-                ->whereDate('created_at', Carbon::today())
-                ->pluck('activity_id')
-                ->toArray();
-            $points = Activity::whereIn('id', $activityIds)->sum('points');
+        // Re-recording today's mood debits points and deletes the day's
+        // activities and mood row before recreating it; a failure between those
+        // steps used to leave the child with the points already deducted and no
+        // mood at all.
+        $data = \DB::transaction(function () use ($todayChildRecord, $child_id, $mood_id, $mood_name, $points) {
+            if ($todayChildRecord) {
+                $activityIds = ChildPerformedActivity::where('child_id', $child_id)
+                    ->whereDate('created_at', Carbon::today())
+                    ->pluck('activity_id')
+                    ->toArray();
+                $points = Activity::whereIn('id', $activityIds)->sum('points');
 
-            $user = User::find($child_id);
-            $user->update([
-                'loyalty_points' => max(0, $user->loyalty_points - $points)
+                $user = User::find($child_id);
+                $user->update([
+                    'loyalty_points' => max(0, $user->loyalty_points - $points)
+                ]);
+
+                ChildPerformedActivity::where('child_id', $child_id)
+                    ->whereDate('created_at', Carbon::today())
+                    ->delete();
+
+                $todayChildRecord->delete();
+            }
+
+            return ChildMood::create([
+                'child_id' => $child_id,
+                'mood_id' => $mood_id,
+                'mood_name' => $mood_name,
+                'points' => $points,
+                'date' => Carbon::now()->format('Y-m-d')
             ]);
+        });
 
-            ChildPerformedActivity::where('child_id', $child_id)
-                ->whereDate('created_at', Carbon::today())
-                ->delete();
-
-            $todayChildRecord->delete();
-        }
-        $data = ChildMood::create([
-            'child_id' => $child_id,
-            'mood_id' => $mood_id,
-            'mood_name' => $mood_name,
-            'points' => $points,
-            'date' => Carbon::now()->format('Y-m-d')
-        ]);
         if ($data) {
             User::where('id', $child_id)->update(['is_mood_updated' => 'yes']);
 
@@ -610,7 +634,7 @@ public function getAllMood(Request $request)
             // Fetch child moods for the last 5 days
             $fromDate = Carbon::now()->subDays(5)->startOfDay()->format('Y-m-d');
 
-            $childMoodEntries = ChildMood::where('child_id', $request->child_id)
+            $childMoodEntries = ChildMood::where('child_id', $child_id)
                 ->whereIn('mood_id', $negativeMoodIds)
                 ->where('date', '>=', $fromDate)
                 ->get();
@@ -627,12 +651,11 @@ public function getAllMood(Request $request)
             $referred_video = Mood::where('id', $mood_id)->value('referred_video');
             $data->referred_video = json_decode($referred_video, true);
 
-            return response()->json([
-                'status' => true,
-                'message' => $request->language == 'english' ? 'Data stored successfully!' : '数据存储成功！',
-                'data' => $data
-            ], 200);
+            return ApiResponse::success($data, $request->language == 'english' ? 'Data stored successfully!' : '数据存储成功！', 200);
         } else {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $request->language == 'english' ? 'Data not stored' : '数据未存储',
@@ -680,17 +703,9 @@ public function getAllMood(Request $request)
         });
 
         if ($child_mood_details->isNotEmpty()) {
-            return response()->json([
-                'data' => $child_mood_details->values(),
-                'status' => true,
-                'message' => $language == 'english' ? 'Details fetched successfully!' : '详细信息获取成功！',
-            ], 200);
+            return ApiResponse::success($child_mood_details->values(), $language == 'english' ? 'Details fetched successfully!' : '详细信息获取成功！', 200);
         } else {
-            return response()->json([
-                'data' => [],
-                'status' => true,
-                'message' => $language == 'english' ? 'Details not found' : '未找到详细信息',
-            ], 200);
+            return ApiResponse::success([], $language == 'english' ? 'Details not found' : '未找到详细信息', 200);
         }
     }
 
@@ -1023,16 +1038,25 @@ $moodRing = collect($groupedByColor)
         ];
     }
 
-    return response()->json([
-        'calendar_data' => $allDates,
-        'mood_ring' => $moodRing,
-        'top_emotions' => $topEmotions,
-        'categories' => $categoriesData,
-        'status' => true,
-        'message' => $language === 'english'
+    return ApiResponse::success(
+        [
+            'calendar_data' => $allDates,
+            'mood_ring' => $moodRing,
+            'top_emotions' => $topEmotions,
+            'categories' => $categoriesData,
+        ],
+        $language === 'english'
             ? 'Mood data fetched successfully!'
             : '成功获取心情数据！',
-    ]);
+        200,
+        // v1 reads all four at the top level.
+        [
+            'calendar_data' => $allDates,
+            'mood_ring' => $moodRing,
+            'top_emotions' => $topEmotions,
+            'categories' => $categoriesData,
+        ]
+    );
 }
 
     public function activityIndex($id)
@@ -1210,11 +1234,7 @@ $moodRing = collect($groupedByColor)
             ->value('mood_id');
 
         if (!$mood_id) {
-            return response()->json([
-                'status' => true,
-                'message' => 'No mood selected for today',
-                'data' => []
-            ]);
+            return ApiResponse::success([], 'No mood selected for today', 200);
         }
 
         // Fetch activities for that mood
@@ -1278,11 +1298,7 @@ $moodRing = collect($groupedByColor)
         // Merge both collections
         $mergedData = $activityData->merge($videoData);
 
-        return response()->json([
-            'status' => true,
-            'message' => $language == 'english' ? 'Data fetched successfully!' : '数据获取成功！',
-            'data' => $mergedData
-        ]);
+        return ApiResponse::success($mergedData, $language == 'english' ? 'Data fetched successfully!' : '数据获取成功！', 200);
     }
 
 
@@ -1518,10 +1534,7 @@ $moodRing = collect($groupedByColor)
             }
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Child Mood stored successfully!',
-        ], 200);
+        return ApiResponse::success(null, 'Child Mood stored successfully!');
     }
 
     public function getSuggestedActivity(Request $request)
@@ -1535,6 +1548,9 @@ $moodRing = collect($groupedByColor)
         ])->first();
 
         if (!$childPerformedActivity) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'Activity not performed by child.',
@@ -1545,6 +1561,9 @@ $moodRing = collect($groupedByColor)
         $activity = Activity::find($childPerformedActivity->activity_id);
 
         if (!$activity) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'Activity not found.',
@@ -1579,11 +1598,7 @@ $moodRing = collect($groupedByColor)
         $moodData = $mood->toArray();
         $moodData['videos'] = $videos;
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Get Suggested Activity Data.',
-            'data' => $moodData,
-        ], 200);
+        return ApiResponse::success($moodData, 'Get Suggested Activity Data.', 200);
     }
 
 
@@ -1613,19 +1628,24 @@ $moodRing = collect($groupedByColor)
                 $user_details,
                 'child_support'
             );
-            return response()->json([
-                'status' => true,
-                'message' => $language == 'english' ? 'Mail send to parent' : '数据获取成功！',
-            ]);
+            return ApiResponse::success(
+                null,
+                $language == 'english' ? 'Mail send to parent' : '数据获取成功！'
+            );
         } else {
             $user =  User::where('id', auth()->user()->id)->first();
             $user_details = User::where('id', $user->parent_id)->first();
-            $school_details =  School::where('id', $user_details->school_id)->where('status', 'active')->latest()->first();
+
+            // A caller with no parent_id (a parent or teacher hitting this
+            // branch) left $user_details null and 500'd on ->school_id.
+            $school_details = $user_details
+                ? School::where('id', $user_details->school_id)->where('status', 'active')->latest()->first()
+                : null;
             if (!$school_details) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'School not found.' : '未找到学校。',
-                ]);
+                return ApiResponse::error(
+                    $language == 'english' ? 'School not found.' : '未找到学校。',
+                    200
+                );
             }
             $emailData = [
                 'parent_name' => $user_details->name,
@@ -1635,10 +1655,10 @@ $moodRing = collect($groupedByColor)
             ];
             // dd($emailData,$school_details->email);
             ___mail_sender($school_details->email, 'child_support', $emailData, 'english');
-            return response()->json([
-                'status' => true,
-                'message' => $language == 'english' ? 'Mail send to school' : '数据获取成功！',
-            ]);
+            return ApiResponse::success(
+                null,
+                $language == 'english' ? 'Mail send to school' : '数据获取成功！'
+            );
         }
     }
 
@@ -1967,10 +1987,10 @@ $moodRing = collect($groupedByColor)
         $type = $request->type;
 
         if (!$video_id || !in_array($type, ['like', 'dislike', 'favourite'])) {
-            return response()->json([
-                'status' => false,
-                'message' => $language === 'english' ? 'Invalid request.' : '无效的请求。',
-            ], 200);
+            return ApiResponse::error(
+                $language === 'english' ? 'Invalid request.' : '无效的请求。',
+                200
+            );
         }
 
         // if ($type === 'favourite') {
@@ -2014,12 +2034,10 @@ $moodRing = collect($groupedByColor)
         if ($existing) {
             $existing->delete();
             $msg = $type === 'favourite' ? '已成功移除收藏！' : '已成功移除！';
-            return response()->json([
-                'status' => true,
-                'message' => $language === 'english'
-                    ? ucfirst($type) . ' removed successfully!'
-                    : $msg,
-            ], 200);
+            return ApiResponse::success(
+                null,
+                $language === 'english' ? ucfirst($type) . ' removed successfully!' : $msg
+            );
         } else {
             UserLikedVideo::create([
                 'user_id' => $user_id,
@@ -2027,12 +2045,10 @@ $moodRing = collect($groupedByColor)
                 'type' => $type,
             ]);
             $msg = $type === 'favourite' ? '收藏成功！' : '添加成功！';
-            return response()->json([
-                'status' => true,
-                'message' => $language === 'english'
-                    ? ucfirst($type) . ' added successfully!'
-                    : $msg,
-            ], 200);
+            return ApiResponse::success(
+                null,
+                $language === 'english' ? ucfirst($type) . ' added successfully!' : $msg
+            );
         }
     }
 }

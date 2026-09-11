@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\ApiResponse;
 use App\Models\Category;
 use App\Models\DeviceToken;
 use Illuminate\Http\Request;
@@ -716,6 +717,8 @@ class QuizController extends Controller
             return redirect()->back()->with('success', 'Question options has been marked as inactive and soft deleted.');
         }
 
+        // @envelope-exempt. Web route (quiz-questions admin UI), not the mobile API - deliberately
+        // left off the ApiResponse envelope. The snapshot gate does not cover it.
         return response()->json(['message' => 'No options found for this question.'], 404);
     }
 
@@ -723,6 +726,8 @@ class QuizController extends Controller
     public function countQuestionOptions($id)
     {
         $optionCount = QuizQuestionOption::where('question_id', $id)->count();
+
+        // Web route (admin UI), not the mobile API. See deleteQuestionOption. @envelope-exempt
         return response()->json(['count' => $optionCount]);
     }
 
@@ -1459,17 +1464,23 @@ class QuizController extends Controller
                 ];
             });
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Question category fetched successfully!',
-            'data' => $questionCategory,
-            'category' => $category,
-        ]);
+        return ApiResponse::success(
+            $questionCategory,
+            'Question category fetched successfully!',
+            200,
+            [],
+            // $extra, not $legacy: `category` is a second list the app reads,
+            // not an alias of data, so v2 must keep receiving it.
+            ['category' => $category]
+        );
     }
 
     public function quiz(Request $request)
     {
         if (!$request->quiz_category_id) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'quiz_category_id is required',
@@ -1486,6 +1497,9 @@ class QuizController extends Controller
             ->get();
 
         if ($quizzes->isEmpty()) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'No quizzes found for this category',
@@ -1505,6 +1519,9 @@ class QuizController extends Controller
         });
 
         if ($filteredQuizzes->isEmpty()) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'No quizzes available for your age group',
@@ -1527,17 +1544,16 @@ class QuizController extends Controller
             ];
         });
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Quiz list fetched successfully!',
-            'data' => $response->values()
-        ]);
+        return ApiResponse::success($response->values(), 'Quiz list fetched successfully!', 200);
     }
 
 
     public function quizQuestion(Request $request)
     {
         if (!$request->quiz_id) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'quiz_id is required',
@@ -1555,6 +1571,9 @@ class QuizController extends Controller
             ->get();
 
         if ($questions->isEmpty()) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'No questions found for this quiz',
@@ -1565,12 +1584,18 @@ class QuizController extends Controller
         $filteredQuestions = $questions->filter(function ($question) use ($userAge) {
             if (!$userAge || !$question->age) return true;
 
-            return strpos($question->age, '-') !== false
-                ? between($userAge, ...explode('-', $question->age))
-                : $userAge == (int) $question->age;
+            if (strpos($question->age, '-') !== false) {
+                [$minAge, $maxAge] = explode('-', $question->age);
+                return $userAge >= (int) $minAge && $userAge <= (int) $maxAge;
+            }
+
+            return $userAge == (int) $question->age;
         });
 
         if ($filteredQuestions->isEmpty()) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'No questions available for your age group',
@@ -1620,11 +1645,7 @@ class QuizController extends Controller
             ];
         });
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Questions fetched successfully!',
-            'data' => $response->values()
-        ], 200);
+        return ApiResponse::success($response->values(), 'Questions fetched successfully!', 200);
     }
 
     public function userAttemptQuiz(Request $request)
@@ -1635,20 +1656,24 @@ class QuizController extends Controller
         $selectedOptionId = $request->selected_option_id;
 
         if (!$quizId || !$questionId) {
-            return response()->json([
-                'status' => false,
-                'message' => 'quiz_id, attempt_question_id and selected_option_id are required',
-                'marks_obtained' => 0
-            ], 400);
+            return ApiResponse::error(
+                'quiz_id, attempt_question_id and selected_option_id are required',
+                400,
+                null,
+                ['marks_obtained' => 0],
+                ['marks_obtained' => 0]
+            );
         }
 
         $question = QuizQuestion::where('quiz_id', $quizId)->find($questionId);
         if (!$question) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Question not found for this quiz.',
-                'marks_obtained' => 0
-            ], 200);
+            return ApiResponse::error(
+                'Question not found for this quiz.',
+                200,
+                null,
+                ['marks_obtained' => 0],
+                ['marks_obtained' => 0]
+            );
         }
 
         $correctOption = QuizQuestionOption::where('question_id', $questionId)
@@ -1660,20 +1685,23 @@ class QuizController extends Controller
             : 0;
 
         if ($marksObtained === 0) {
-            return response()->json([
-                'status' => true,
-                'message' => 'Incorrect answer — not saved.',
-                'marks_obtained' => 0
-            ]);
+            return ApiResponse::success(
+                ['marks_obtained' => 0],
+                'Incorrect answer — not saved.',
+                200,
+                ['marks_obtained' => 0]
+            );
         }
 
         $user = User::find($userId);
         if (!$user) {
-            return response()->json([
-                'status' => false,
-                'message' => 'User not found.',
-                'marks_obtained' => 0
-            ], 200);
+            return ApiResponse::error(
+                'User not found.',
+                200,
+                null,
+                ['marks_obtained' => 0],
+                ['marks_obtained' => 0]
+            );
         }
 
         $attempt = UserAttemptQuiz::where('user_id', $userId)
@@ -1722,11 +1750,12 @@ class QuizController extends Controller
             ]);
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Quiz attempt processed successfully.',
-            'marks_obtained' => $marksObtained
-        ]);
+        return ApiResponse::success(
+            ['marks_obtained' => $marksObtained],
+            'Quiz attempt processed successfully.',
+            200,
+            ['marks_obtained' => $marksObtained]
+        );
     }
 
     // public function quizCompletionContent(Request $request)
@@ -1799,10 +1828,6 @@ class QuizController extends Controller
             $data['referred_video'] = [];
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Data fetched successfully!',
-            'data' => $data
-        ]);
+        return ApiResponse::success($data, 'Data fetched successfully!', 200);
     }
 }

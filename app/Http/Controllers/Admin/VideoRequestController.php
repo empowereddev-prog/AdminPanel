@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\PermissionUser;
 use App\Models\VideoRequest;
@@ -11,6 +12,13 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Yajra\DataTables\Facades\DataTables;
 
+/**
+ * Mixed: requestVideo is the mobile endpoint api/request-video and is on the
+ * ApiResponse envelope. Every other action here is the admin video-requests
+ * CRUD, whose JSON is read by the admin UI rather than the shipped app.
+ *
+ * @envelope-exempt
+ */
 class VideoRequestController extends Controller
 {
     private $subadmin_menu_id = 39;
@@ -139,7 +147,9 @@ class VideoRequestController extends Controller
     }
 
     /**
-     * Mobile App API Endpoint
+     * Mobile App API Endpoint - the only action in this class on the mobile
+     * contract (api/request-video). Everything else here is the admin
+     * video-requests CRUD, deliberately left off the ApiResponse envelope.
      */
     public function requestVideo(Request $request)
     {
@@ -150,11 +160,7 @@ class VideoRequestController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'status'  => false,
-                'message' => $validator->errors()->first(),
-                'errors'  => $validator->errors()
-            ], 422);
+            return ApiResponse::error($validator->errors()->first(), 422, $validator->errors());
         }
 
         $user = auth('api')->user();
@@ -166,10 +172,6 @@ class VideoRequestController extends Controller
             'status'       => 'new',
         ]);
 
-        return response()->json([
-            'status'  => true,
-            'message' => 'Video request submitted successfully',
-            'data'    => $videoRequest
-        ], 200);
+        return ApiResponse::success($videoRequest, 'Video request submitted successfully');
     }
 }

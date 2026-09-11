@@ -12,6 +12,13 @@ class Authenticate extends Middleware
      */
     protected function redirectTo(Request $request): ?string
     {
+        // API clients that omit Accept: application/json were redirected to the
+        // web login page. Returning null lets the AuthenticationException reach
+        // the handler, which renders a 401 JSON body.
+        if ($request->is('api/*') || $request->is('api')) {
+            return null;
+        }
+
         return $request->expectsJson() ? null : route('login');
     }
 }
