@@ -5,6 +5,17 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Subscription;
 
+/**
+ * Deliberately NOT on the ApiResponse envelope.
+ *
+ * These two actions are routed under api/ but their peer is Google Play and
+ * Apple's server-to-server notification infrastructure, not the shipped mobile
+ * app. What those senders read is the status code; wrapping the bodies in the
+ * mobile envelope would change a contract the app never sees and the snapshot
+ * gate does not cover.
+ *
+ * @envelope-exempt
+ */
 class WebhookController extends Controller
 {
     public function google(Request $request)

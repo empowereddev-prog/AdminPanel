@@ -6,8 +6,8 @@ breaking the shipped mobile app.
 - **Branch:** `phase0-api-hotfix` (branched from `sprint1_dev`; the name predates
   Phases 1 and 2 — worth renaming to `api-remediation` before opening a PR)
 - **Last updated:** 2026-09-11
-- **Tests:** 51 passing, 340 assertions, 0 skipped
-- **Phases 0 and 1 complete. Phase 2 in progress: 4 of 6 controllers migrated.**
+- **Tests:** 53 passing, 342 assertions, 0 skipped
+- **Phases 0, 1 and 2 complete.** Phase 3 (performance) has not started.
 
 ---
 
@@ -118,7 +118,7 @@ constraint on empty input.
 `api/*` before `parent::render()`, so `HttpResponseException` — what every
 `FormRequest::failedValidation` throws — became a 500. Three tests pin it.
 
-### Phase 2 — In progress
+### Phase 2 — Complete
 
 **The gate (`c1e1fb2`, `0eb6e73`) — build this understanding before continuing.**
 
@@ -263,6 +263,56 @@ Gate-covered here: `get-all-mood`, `get-child-mood`, `mood-tracker`,
 `storeChildMood`, `storeChildActivity`, `getSuggestedActivity` and
 `storeLikedVideoContent`, and `childSupport`'s two mail-sent branches.
 
+**Phase 2 finished.** The remaining controllers went over in one pass:
+`QuizController`, `NotificationController`, `KnowledgeSessionController`,
+`AvtarController`, `FaqController`, `UserArticleLikeController`,
+`PopupLoginController`, `ProductRecommendationController`, `MeetTeamController`,
+the shared `ResolvesApiUser` concern, and `HomeApiController::resendOtp`.
+`Api\ResponseController` was deleted - unreferenced anywhere outside its own
+file, and its own docblock said to delete it once this finished.
+
+*The `$legacy` / `$extra` rule, now settled.* `$legacy` is for a key that
+**duplicates** something already in the canonical shape - `child` in `addChild`
+mirrors `data`, so v2 dropping it loses nothing. `$extra` is for a key that is
+**separate payload** - v2 dropping it loses data the app reads. On that rule
+`quizCategory`'s `category` was initially wrong: it is a second list, not an
+alias, and `$legacy` would have deleted it for every v2 client. Corrected to
+`$extra`, along with `top_mood_emotion`, `meta` and `category` elsewhere. The
+gate cannot see this mistake - both maps emit the key at the top level under v1.
+
+*Three contracts are deliberately off the envelope*, beyond the `data => null`
+ones:
+
+- `DeepLinkResolveController` - `status` is a **string** (`'not_found'`), not a
+  boolean. `ApiResponse` forces a boolean, so migrating would retype the key
+  the app branches on.
+- `WebhookController` - routed under `api/`, but the peer is Google Play and
+  Apple's notification infrastructure, not the shipped app.
+- The admin actions inside `QuizController` and `Admin\VideoRequestController`,
+  which share a file with mobile endpoints.
+
+**Two new tests, because two bugs got through the gate.**
+
+*`ApiResponseImportTest`.* A file calling `ApiResponse::` without importing it
+lints clean - `php -l` does not resolve class names - and only 500s at runtime.
+This happened twice, in `QuizController` and `MeetTeamController`, both times
+because the import step anchored on a `use ...\Controller;` line that
+same-namespace controllers do not have. Both times the only thing that caught it
+was a snapshot case that happened to exercise the endpoint; an endpoint with no
+case would have shipped broken. The transformer now inserts the import itself,
+and the test checks every controller statically.
+
+*`EnvelopeCoverageTest`.* Every hand-rolled `response()->json` on an api-routed
+controller must carry an `@envelope-exempt` comment saying why. This exists
+because working controller-by-controller **missed `Admin\VideoRequestController`
+entirely** - only one of its eight actions is on an api route, and the file sits
+under `Admin/`. The test derives its list from `routes/api.php` rather than from
+a reading of the tree, which is the whole point. It found three more unannotated
+blocks when first run.
+
+Both were canaried: removing an import and removing a marker each fail as
+intended.
+
 ### Deep links (`d576817`)
 
 `/deeplink/resolve` returned `canonical_url` of `http://13.229.56.31/d/article/154`.
@@ -283,44 +333,33 @@ base is the failure being fixed.
 
 ## To do
 
-### 1. Finish Phase 2 — controller migration
+### 1. Phase 2 — done, with a residue
 
-~55 hand-rolled `response()->json` calls remain in unmigrated controllers. Order by traffic:
+Every mobile endpoint is on the envelope. What is left is **28 deliberately
+hand-rolled blocks**, each carrying an `@envelope-exempt` comment and each
+enforced by `EnvelopeCoverageTest`. They fall into four groups:
 
-| Controller | Remaining |
-|---|---|
-| `QuizController` | 17 |
-| `KnowledgeSessionController` | 8 |
-| `AvtarController` | 8 |
-| `ResponseController` | 6 |
-| `NotificationController` | 5 |
-| `FaqController`, `PopupLoginController`, `UserArticleLikeController`, others | ~11 |
+| Group | Count | Why it stays |
+|---|---|---|
+| `data => null` contracts | 14 | `ApiResponse` renders null as `{}`; converting retypes what the app receives |
+| Deep-link responses | 5 | `data => null` plus top-level `deeplink_status`/`canonical_url`; one has a **string** `status` |
+| Admin actions sharing a mobile controller | 8 | Read by the admin UI, not the app; not covered by the gate |
+| `getAllMood11` | 1 | Dead - no route points at it |
 
-The four migrated controllers still hold 12 blocks between them: 11 deliberate
-`data => null` contracts left for a client release, and one dead method. They
-are annotated as such in the source; do not "finish" them without one.
+The `data => null` group is the only one that should ever move, and only
+**alongside a mobile client release**. Do not "finish" them to make a count go
+to zero; the count is not the goal.
 
-`QuizController` and `NotificationController` are also shared web+API
-controllers. Map each block to its route before touching it, as
-`MoodTrackerController` required — an admin AJAX response is not on the mobile
-contract and is not covered by the gate.
+Still open from the original per-controller recipe:
 
-Per controller: swap responses for `ApiResponse::*` keeping v1 keys, move
-validation into FormRequests, fix error-path bugs, run the gate.
-
-**Reuse the transformer**, now committed as `scripts/migrate_envelope.py`
-(it previously lived only in a scratchpad). It converted 48 of 56 blocks in
-`HomeApiController` and 7 of 17 in `ChildController` and, importantly, *refused*
-the ambiguous ones —
-including three whose contract is `data: null`, which `ApiResponse` would render
-as `{}`. Have it report what it skips and handle those by hand. Do not
-bulk-rewrite without the gate green after each pass.
-
-Two shapes need conscious decisions each time:
-- `data => null` — converting changes the type the app receives. Leave it and
-  annotate, as in `HomeApiController`.
-- Responses carrying `token` — use `$extra`, not `$legacy`, or v2 clients
-  silently lose their token.
+- **Validation was not moved into FormRequests.** `addChild`/`editChild` answer a
+  validation failure with **201** and `ApiFormRequest` renders **422**, so moving
+  them is a client-release change, not an additive one. The same applies
+  wherever an endpoint answers a failure with a 2xx.
+- **`WebhookController` is unreviewed.** It is api-routed and exempted from the
+  envelope for a good reason, but its logic was never part of this remediation.
+  It handles Google Play and Apple subscription notifications - the same surface
+  Phase 0 found trusting client-supplied receipts. Worth a pass of its own.
 
 ### 2. Language extraction — sequence separately
 
@@ -386,7 +425,23 @@ php artisan deeplink:rebase-canonical-urls
 ## Commands
 
 ```bash
-php vendor/bin/phpunit                                  # 51 tests
+php vendor/bin/phpunit                                  # 53 tests
 php vendor/bin/phpunit tests/Feature/Api                # API suites only
 php artisan migrate                                     # both alignment migrations are idempotent
+
+# Convert hand-rolled envelopes. Refuses the ambiguous shapes and reports each
+# refusal with a line number; inserts the ApiResponse import itself.
+python3 scripts/migrate_envelope.py <file>              # dry run
+python3 scripts/migrate_envelope.py <file> --apply
 ```
+
+The three API guards, and what each is for:
+
+| Test | Catches |
+|---|---|
+| `ResponseContractSnapshotTest` | v1 shape drift on the 68 recorded endpoint cases |
+| `ApiResponseImportTest` | `ApiResponse::` used without an import - lints clean, 500s at runtime |
+| `EnvelopeCoverageTest` | a hand-rolled response on an api-routed controller with no `@envelope-exempt` rationale |
+
+The snapshot gate only sees endpoints it has a case for, which is why the other
+two are static.

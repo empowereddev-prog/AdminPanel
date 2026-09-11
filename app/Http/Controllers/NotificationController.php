@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\ApiResponse;
 use Illuminate\Http\Request;
 use App\Models\PermissionUser;
 use App\Models\Mood;
@@ -53,10 +54,7 @@ class NotificationController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'message' => $validator->errors()->first(),
-            ], 422);
+            return ApiResponse::error($validator->errors()->first(), 422);
         }
 
         $user = auth()->user();
@@ -83,11 +81,7 @@ class NotificationController extends Controller
         if ($user->email) {
             ___mail_sender($user->email, 'contact_support_user', $emailData, $lan);
         }
-        return response()->json([
-            "status" => true,
-            "message" => $lan == "english" ? "Your message has been sent successfully!" : "您的消息已成功发送！",
-            "data" => $emailData,
-        ]);
+        return ApiResponse::success($emailData, $lan == "english" ? "Your message has been sent successfully!" : "您的消息已成功发送！", 200);
     }
 
     public function markAsRead(Request $request)
@@ -98,10 +92,10 @@ class NotificationController extends Controller
             ->update([
                 'status' => 'seen'
             ]);
-        return response()->json([
-            "status" => true,
-            "message" => $language == 'english' ? "Status marked as read" : '状态标记为已读',
-        ]);
+        return ApiResponse::success(
+            null,
+            $language == 'english' ? "Status marked as read" : '状态标记为已读'
+        );
     }
 
     public function deleteNotification(Request $request)
@@ -110,10 +104,10 @@ class NotificationController extends Controller
         AppNotification::where('id', $request->notification_id)
             ->where('user_id', auth()->id())
             ->delete();
-        return response()->json([
-            "status" => true,
-            "message" => $language == 'english' ? "Notification Deleted Successfully" : '通知已成功删除',
-        ]);
+        return ApiResponse::success(
+            null,
+            $language == 'english' ? "Notification Deleted Successfully" : '通知已成功删除'
+        );
     }
 
     public function manageNotification(Request $request)
@@ -133,10 +127,11 @@ class NotificationController extends Controller
 
         $msg = $notification ? 'ON' : 'OFF';
 
-        return response()->json([
-            "status" => true,
-            "message" => "Notification turned {$msg} successfully!",
-            "is_notification" => $msg
-        ], 200);
+        return ApiResponse::success(
+            ['is_notification' => $msg],
+            "Notification turned {$msg} successfully!",
+            200,
+            ['is_notification' => $msg]
+        );
     }
 }

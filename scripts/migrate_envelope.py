@@ -82,7 +82,10 @@ def transform(path, dry=True):
         order = []
         ok = True
         for part in split_top(body):
-            pm = re.match(r"\s*'([a-z_0-9]+)'\s*=>\s*(.*)$", part, re.S)
+            # Both quote styles: NotificationController writes "status" => ...,
+            # and a single-quote-only pattern reported those blocks as keys=[],
+            # which reads like an unparseable block rather than a normal one.
+            pm = re.match(r"\s*['\"]([a-z_0-9]+)['\"]\s*=>\s*(.*)$", part, re.S)
             if not pm:
                 ok = False; break
             pairs[pm.group(1)] = pm.group(2).strip()
@@ -106,6 +109,19 @@ def transform(path, dry=True):
         out.append(src[i:j + 1]); i = j + 1
 
     result = ''.join(out)
+
+    # Insert the import ourselves. Doing this by hand cost two 500s: the file
+    # still lints clean without it (php -l does not resolve classes), so the
+    # only thing that caught it was the snapshot gate. Same-namespace
+    # controllers have no `use ...\Controller;` line to anchor to, which is
+    # exactly where the manual step silently did nothing.
+    if changed and 'use App\\Support\\ApiResponse;' not in result:
+        m = re.search(r'^use .+;$', result, re.M)
+        if m:
+            result = result[:m.start()] + "use App\\Support\\ApiResponse;\n" + result[m.start():]
+        else:
+            skipped.append((0, "COULD NOT INSERT the ApiResponse import - add it by hand"))
+
     if not dry:
         io.open(path, 'w', encoding='utf-8').write(result)
     return changed, skipped

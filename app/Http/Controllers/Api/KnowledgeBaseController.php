@@ -485,7 +485,7 @@ class KnowledgeBaseController extends Controller
 
         // Not migrated: the contract here is data => null, which ApiResponse
         // renders as {} - a type change for the shipped app. Convert only
-        // alongside a client release.
+        // alongside a client release. @envelope-exempt
         return response()->json([
             'status' => false,
             'message' => 'Invalid parameters',
@@ -623,7 +623,7 @@ class KnowledgeBaseController extends Controller
 
         // Not migrated: the contract here is data => null, which ApiResponse
         // renders as {} - a type change for the shipped app. Convert only
-        // alongside a client release.
+        // alongside a client release. @envelope-exempt
         return response()->json([
             'status' => false,
             'message' => 'Data not found',
@@ -834,7 +834,7 @@ class KnowledgeBaseController extends Controller
         $language = $request->language ?? 'english';
         $deepLink = app(\App\Services\DeepLinkService::class)->resolve('podcast', $videoId, auth()->user(), false);
         if ($deepLink['status'] !== \App\Services\DeepLinkService::STATUS_OK) {
-            // Not migrated: data => null (see above), and the deep-link keys
+            // @envelope-exempt. Not migrated: data => null (see above), and the deep-link keys
             // deeplink_status/canonical_url are read by the app at top level.
             // The snapshot pins this exact shape as video-content-details.
             return response()->json([
@@ -879,7 +879,7 @@ class KnowledgeBaseController extends Controller
             $video_content->canonical_url = $deepLink['canonical_url'];
             return ApiResponse::success($video_content, 'Video content fetched successfully!', 200);
         } else {
-            // Not migrated: data => null, plus a top-level deeplink_status.
+            // Not migrated: data => null, plus a top-level deeplink_status. @envelope-exempt
             return response()->json([
                 'status' => false,
                 'deeplink_status' => 'not_found',

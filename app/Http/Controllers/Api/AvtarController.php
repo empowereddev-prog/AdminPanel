@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\ApiResponse;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\AvatarImage;
@@ -98,11 +99,7 @@ class AvtarController extends Controller
             ];
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Data fetched successfully!',
-            'data' => $formattedData
-        ], 200);
+        return ApiResponse::success($formattedData, 'Data fetched successfully!', 200);
     }
 
 
@@ -124,11 +121,7 @@ class AvtarController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation Error!',
-                'errors' => $validator->errors()->first()
-            ], 422);
+            return ApiResponse::error('Validation Error!', 422, $validator->errors()->first());
         }
 
         $childId = $this->resolveTargetUserId($request, 'child_id');
@@ -240,11 +233,7 @@ class AvtarController extends Controller
         //     }
         // }
 
-        return response()->json([
-            'status' => true,
-            'message' => $language === 'chinese' ? '头像保存成功！' : 'Avatar saved successfully!',
-            'data' => $childAvatar
-        ], 200);
+        return ApiResponse::success($childAvatar, $language === 'chinese' ? '头像保存成功！' : 'Avatar saved successfully!', 200);
     }
 
 
@@ -477,13 +466,9 @@ class AvtarController extends Controller
             return $session;
         });
 
-        return response()->json([
-            'status'  => true,
-            'message' => $language === 'chinese'
+        return ApiResponse::success($filteredSessions->values(), $language === 'chinese'
                 ? '类别获取成功！'
-                : 'Category fetched successfully!',
-            'data'    => $filteredSessions->values()
-        ], 200);
+                : 'Category fetched successfully!', 200);
     }
 
 
@@ -533,6 +518,9 @@ class AvtarController extends Controller
         ]);
 
         if ($validator->fails()) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $validator->errors()->first(),
@@ -582,6 +570,9 @@ class AvtarController extends Controller
         } catch (\Throwable $e) {
             \Log::error('userUnlockAvatars failed: ' . $e->getMessage());
 
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $language === 'chinese' ? '解锁头像失败。' : 'Failed to unlock avatar.',
@@ -590,6 +581,9 @@ class AvtarController extends Controller
         }
 
         if (!$avtar) {
+            // Not migrated: the contract is data => null, which ApiResponse renders
+            // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $language === 'chinese'
@@ -599,12 +593,8 @@ class AvtarController extends Controller
             ], 200);
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => $language === 'chinese'
+        return ApiResponse::success($avtar, $language === 'chinese'
                 ? '头像解锁成功！'
-                : 'Avatar unlocked successfully!',
-            'data' => $avtar
-        ], 200);
+                : 'Avatar unlocked successfully!', 200);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Support\ApiResponse;
 use App\Models\User;
 use Illuminate\Http\Request;
 
@@ -68,12 +69,13 @@ trait ResolvesApiUser
      */
     protected function unauthorisedTargetResponse(string $language = 'english')
     {
-        return response()->json([
-            'status' => false,
-            'message' => $language === 'english'
+        return ApiResponse::error(
+            $language === 'english'
                 ? 'You are not allowed to access this record.'
                 : '您无权访问此记录。',
-            'data' => (object) [],
-        ], 200);
+            200,
+            null,
+            (object) []
+        );
     }
 }

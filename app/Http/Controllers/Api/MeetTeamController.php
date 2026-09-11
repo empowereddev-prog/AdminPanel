@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\MeetTeamResource;
 use App\Models\MeetTeam;
@@ -44,10 +45,6 @@ class MeetTeamController extends Controller
 
         $data = MeetTeamResource::collection($product);
 
-        return response()->json([
-            'status' => true,
-            'message' => "Get Meet Team data successfully done (Showing ALL records)",
-            'data' => $data
-        ]);
+        return ApiResponse::success($data, "Get Meet Team data successfully done (Showing ALL records)", 200);
     }
 }

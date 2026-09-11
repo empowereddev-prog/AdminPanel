@@ -146,9 +146,12 @@ class HomeApiController extends Controller
         if (!$user) {
             return ApiResponse::error($language == 'english' ? 'User not found' : '未找到用户', 404);
         }
+        // RegisterService::resendOtp returns {status, message} on every path.
         $response = $this->service->resendOtp(['user_id' => $user->id]);
 
-        return response()->json($response);
+        return $response['status']
+            ? ApiResponse::success(null, $response['message'])
+            : ApiResponse::error($response['message'], 200);
     }
 
     // public function login(Request $request)
@@ -1170,7 +1173,7 @@ class HomeApiController extends Controller
         } else {
 
             // Left hand-rolled: ApiResponse renders a null data payload as {},
-            // and this endpoint's contract is data: null.
+            // and this endpoint's contract is data: null. @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $request->language == 'english'
@@ -1221,7 +1224,7 @@ class HomeApiController extends Controller
         $user = User::where('id', auth()->user()->id)->where('status', 'active')->first();
         if (!$user) {
             // Left hand-rolled: ApiResponse renders a null data payload as {},
-            // and this endpoint's contract is data: null.
+            // and this endpoint's contract is data: null. @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $request->language == 'english' ? "User details not found" : "未找到用户详细信息",
@@ -1245,6 +1248,8 @@ class HomeApiController extends Controller
 
             $imageName = uploadFile($file, 'assets/avtar', $user->image);
             if (!$imageName) {
+                // Left hand-rolled: this endpoint's contract is data: null, which
+                // ApiResponse renders as {}. @envelope-exempt
                 return response()->json([
                     'status' => false,
                     'message' => $request->language == 'english' ? 'Failed to upload image.' : '上传图片失败。',

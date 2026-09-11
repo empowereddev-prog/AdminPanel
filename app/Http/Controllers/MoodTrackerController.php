@@ -519,7 +519,7 @@ class MoodTrackerController extends Controller
 
     // Left hand-rolled deliberately: getAllMood11 is dead - no route points
     // at it (api.php routes get-all-mood to getAllMood below). Migrating dead
-    // code only makes it look maintained.
+    // code only makes it look maintained. @envelope-exempt
     return response()->json([
         'status' => true,
         'message' => 'Data fetched successfully!',
@@ -655,6 +655,7 @@ public function getAllMood(Request $request)
         } else {
             // Not migrated: the contract is data => null, which ApiResponse renders
             // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $request->language == 'english' ? 'Data not stored' : '数据未存储',
@@ -1549,6 +1550,7 @@ $moodRing = collect($groupedByColor)
         if (!$childPerformedActivity) {
             // Not migrated: the contract is data => null, which ApiResponse renders
             // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'Activity not performed by child.',
@@ -1561,6 +1563,7 @@ $moodRing = collect($groupedByColor)
         if (!$activity) {
             // Not migrated: the contract is data => null, which ApiResponse renders
             // as {} - a type change for the shipped app. Convert with a client release.
+            // @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => 'Activity not found.',
