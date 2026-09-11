@@ -5,9 +5,9 @@ breaking the shipped mobile app.
 
 - **Branch:** `phase0-api-hotfix` (branched from `sprint1_dev`; the name predates
   Phases 1 and 2 — worth renaming to `api-remediation` before opening a PR)
-- **Last updated:** 2026-09-10
+- **Last updated:** 2026-09-11
 - **Tests:** 51 passing, 340 assertions, 0 skipped
-- **Phases 0 and 1 complete. Phase 2 in progress: 1 of 6 controllers migrated.**
+- **Phases 0 and 1 complete. Phase 2 in progress: 2 of 6 controllers migrated.**
 
 ---
 
@@ -146,6 +146,40 @@ bugs: `register`'s catch reported failures as `status: true` while leaking SQL;
 so a *successful* reset raised `ErrorException`; `resetPassword` type-hinted a
 class it never imported.
 
+**`ChildController` migrated.** 17 hand-rolled `response()->json` blocks and 4
+bare-array envelope returns → 0 live blocks, behind 21 `ApiResponse` calls, gate
+green. The transformer converted 7 and refused 10; the refusals were the ones
+that mattered:
+
+- `addChild`/`editChild` success return `child` with **no `data` key at all** —
+  migrated as `data` plus `child` in `$legacy`.
+- `updateBatteryAndLoyalty` returns `battery_percentage`/`earned_points` flat.
+  They go in `data` *and* `$legacy`, so v2 keeps them rather than losing them.
+- `primaryChild`'s not-found branch is `data => null` — **left unmigrated and
+  annotated**, same call as `HomeApiController`. The snapshot confirms it:
+  `primary-child:unknown` records `"data": "<null>"`.
+- `deleteChild` returned bare arrays, which Laravel serialised at 200. Kept at
+  200 — the shipped app reads status, not the code.
+
+Validation stays inline in `addChild`/`editChild` rather than moving to
+FormRequests: both answer a validation failure with **201**, and `ApiFormRequest`
+renders 422. Moving them is a client-release change, not an additive one.
+
+Error-path fix: `getProfile` read `$user->language` one line *above* its own
+`!$user` guard, warning on every unknown id. Now `$user?->language`.
+
+**The gate was canaried on this controller**, per the warning below: dropping the
+`$legacy` array from `updateBatteryAndLoyalty` produced
+`child-percentage.battery_percentage: key removed or renamed`. It is live here.
+
+Covered by snapshot cases: `add-child:invalid`, `edit-child:invalid`,
+`delete-child:unknown`, `primary-child:unknown`, `get-profile`,
+`parent-dashboard`, `child-percentage`, `subscription:invalid`. Not reachable
+without fixtures, so unverified by the gate: the success paths of `addChild`,
+`editChild`, `deleteChild`, `primaryChild` and `subscription`, and `getProfile`'s
+404/age/school branches. Each of those changes is additive by construction — a
+`data` key added — but that rests on reading, not on a test.
+
 ### Deep links (`d576817`)
 
 `/deeplink/resolve` returned `canonical_url` of `http://13.229.56.31/d/article/154`.
@@ -168,12 +202,11 @@ base is the failure being fixed.
 
 ### 1. Finish Phase 2 — controller migration
 
-~109 hand-rolled `response()->json` calls remain. Order by traffic:
+~92 hand-rolled `response()->json` calls remain. Order by traffic:
 
 | Controller | Remaining |
 |---|---|
 | `MoodTrackerController` | 19 |
-| `ChildController` | 17 |
 | `KnowledgeBaseController` | 17 |
 | `QuizController` | 17 |
 | `KnowledgeSessionController` | 8 |
@@ -184,8 +217,10 @@ base is the failure being fixed.
 Per controller: swap responses for `ApiResponse::*` keeping v1 keys, move
 validation into FormRequests, fix error-path bugs, run the gate.
 
-**Reuse the transformer.** The scripted approach used for `HomeApiController`
-converted 48 of 56 blocks and, importantly, *refused* the ambiguous ones —
+**Reuse the transformer**, now committed as `scripts/migrate_envelope.py`
+(it previously lived only in a scratchpad). It converted 48 of 56 blocks in
+`HomeApiController` and 7 of 17 in `ChildController` and, importantly, *refused*
+the ambiguous ones —
 including three whose contract is `data: null`, which `ApiResponse` would render
 as `{}`. Have it report what it skips and handle those by hand. Do not
 bulk-rewrite without the gate green after each pass.

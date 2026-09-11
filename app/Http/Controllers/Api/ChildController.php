@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ApiHitLog;
+use App\Support\ApiResponse;
 use Illuminate\Support\Facades\DB;
 use App\Models\Child;
 use App\Models\User;
@@ -71,11 +72,7 @@ class ChildController extends Controller
         ], $messages);
 
         if ($validator->fails()) {
-            return response()->json([
-                'data' => (object)[],
-                'status' => false,
-                'message' => $validator->errors()->first(),
-            ], 201);
+            return ApiResponse::error($validator->errors()->first(), 201, null, (object)[]);
         }
 
         $imagePath = null;
@@ -152,11 +149,12 @@ class ChildController extends Controller
             }
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => $language == 'english' ? 'Child added successfully' : '孩子添加成功',
-            'child' => $child
-        ], 201);
+        return ApiResponse::success(
+            $child,
+            $language == 'english' ? 'Child added successfully' : '孩子添加成功',
+            201,
+            ['child' => $child]
+        );
         // } catch (\Exception $e) {
         //     return response()->json([
         //         'data' => (object)[],
@@ -200,20 +198,16 @@ class ChildController extends Controller
             ], $messages);
 
             if ($validator->fails()) {
-                return response()->json([
-                    'data' => (object)[],
-                    'status' => false,
-                    'message' => $validator->errors()->first(),
-                ], 201);
+                return ApiResponse::error($validator->errors()->first(), 201, null, (object)[]);
             }
             // $child = Child::where('id', $request->id)->where('parent_id', Auth::id())->first();
             $child = user::where('id', $request->id)->where('parent_id', Auth::id())->first();
 
             if (!$child) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'Child not found or unauthorized access' : '未找到孩子或未经授权的访问',
-                ], 404);
+                return ApiResponse::error(
+                    $language == 'english' ? 'Child not found or unauthorized access' : '未找到孩子或未经授权的访问',
+                    404
+                );
             }
             // if ($request->hasFile('image')) {
             //     if ($child->image) {
@@ -238,16 +232,17 @@ class ChildController extends Controller
             $child->name = $request->name;
             $child->dob = $birthDate;
             $child->save();
-            return response()->json([
-                'status' => true,
-                'message' => $language == 'english' ? 'Child updated successfully' : '子项更新成功',
-                'child' => $child
-            ], 200);
+            return ApiResponse::success(
+                $child,
+                $language == 'english' ? 'Child updated successfully' : '子项更新成功',
+                200,
+                ['child' => $child]
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $language == 'english' ? 'Failed to update child' : '无法更新子项',
-            ], 500);
+            return ApiResponse::error(
+                $language == 'english' ? 'Failed to update child' : '无法更新子项',
+                500
+            );
         }
     }
 
@@ -490,14 +485,10 @@ class ChildController extends Controller
             ->with('userAvatar')
             ->first();
 
-        $language = $user->language ?? 'english';
+        $language = $user?->language ?? 'english';
 
         if (!$user) {
-            return response()->json([
-                'status' => false,
-                'message' => $language === 'english' ? 'User not found' : '未找到用户',
-                'data' => (object)[]
-            ], 404);
+            return ApiResponse::error($language === 'english' ? 'User not found' : '未找到用户', 404, null, (object)[]);
         }
 
         if (!empty($user->dob)) {
@@ -505,13 +496,14 @@ class ChildController extends Controller
                 $dob = Carbon::createFromFormat('Y-m-d', $user->dob . '-01');
 
                 if ($dob->age >= 18) {
-                    return response()->json([
-                        'status' => false,
-                        'message' => $language === 'english'
+                    return ApiResponse::error(
+                        $language === 'english'
                             ? 'Account deactivated due to age limit.'
                             : '账户因年龄限制已停用。',
-                        'data' => (object)[]
-                    ], 200);
+                        200,
+                        null,
+                        (object)[]
+                    );
                 }
             } catch (\Exception $e) {
                 \Log::error('DOB Parse Error in getProfile: ' . $e->getMessage());
@@ -523,13 +515,14 @@ class ChildController extends Controller
                 $schoolStatus = \DB::table('schools')->where('id', $user->school_id)->value('status');
 
                 if ($schoolStatus === 'inactive') {
-                    return response()->json([
-                        'status' => false,
-                        'message' => $language === 'english'
+                    return ApiResponse::error(
+                        $language === 'english'
                             ? 'Your school account has been deactivated. Please contact your administration.'
                             : '您的学校账户已停用。请联系学校管理员。',
-                        'data' => (object)[]
-                    ], 200);
+                        200,
+                        null,
+                        (object)[]
+                    );
                 }
             }
         }
@@ -638,13 +631,12 @@ class ChildController extends Controller
             $user->school_code = null;
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => $language === 'english'
+        return ApiResponse::success(
+            $user,
+            $language === 'english'
                 ? 'User Profile Fetched Successfully'
-                : '已成功获取用户个人资料',
-            'data' => $user
-        ], 200);
+                : '已成功获取用户个人资料'
+        );
     }
 
 
@@ -666,15 +658,16 @@ class ChildController extends Controller
 
             $child->delete();
 
-            return [
-                'status' => true,
-                'message' => $language == 'english' ? 'Your child account has been deleted successfully.' : '您的帐户已成功删除。',
-            ];
+            return ApiResponse::success(
+                null,
+                $language == 'english' ? 'Your child account has been deleted successfully.' : '您的帐户已成功删除。'
+            );
         } else {
-            return [
-                'status' => false,
-                'message' => $language == 'english' ? 'Your Child not found.' : '孩子没找到',
-            ];
+            // 200, not 404: the shipped app reads this as a plain envelope.
+            return ApiResponse::error(
+                $language == 'english' ? 'Your Child not found.' : '孩子没找到',
+                200
+            );
         }
     }
     public function primaryChild(Request $request)
@@ -695,12 +688,14 @@ class ChildController extends Controller
                 }
             }
             $child->update(['is_primary' => 'yes']);
-            return [
-                'status' => true,
-                'message' => $language == 'english' ? 'Data updated successfully.' : '数据更新成功。',
-                'data' => $child
-            ];
+            return ApiResponse::success(
+                $child,
+                $language == 'english' ? 'Data updated successfully.' : '数据更新成功。'
+            );
         } else {
+            // Not migrated on purpose: this contract is data => null, and
+            // ApiResponse renders null as {} - a type change for the shipped
+            // app. Convert only alongside a client release.
             return [
                 'status' => false,
                 'message' => $language == 'english' ? 'Data not found.' : '数据更新成功。',
@@ -870,11 +865,10 @@ class ChildController extends Controller
             ];
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => $language === 'chinese' ? '视频内容获取成功！' : 'Data fetched successfully!',
-            'data' => $dashboardData,
-        ], 200);
+        return ApiResponse::success(
+            $dashboardData,
+            $language === 'chinese' ? '视频内容获取成功！' : 'Data fetched successfully!'
+        );
     }
 
 
@@ -1001,20 +995,21 @@ class ChildController extends Controller
             DB::rollBack();
             \Log::error('updateBatteryAndLoyalty failed: ' . $e->getMessage());
 
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to update battery and loyalty.',
-                'battery_percentage' => 0,
-                'earned_points' => 0
-            ], 200);
+            return ApiResponse::error(
+                'Failed to update battery and loyalty.',
+                200,
+                null,
+                ['battery_percentage' => 0, 'earned_points' => 0],
+                ['battery_percentage' => 0, 'earned_points' => 0]
+            );
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Battery and loyalty updated successfully.',
-            'battery_percentage' => $averageBattery,
-            'earned_points' => $totalEarnedPoints
-        ]);
+        return ApiResponse::success(
+            ['battery_percentage' => $averageBattery, 'earned_points' => $totalEarnedPoints],
+            'Battery and loyalty updated successfully.',
+            200,
+            ['battery_percentage' => $averageBattery, 'earned_points' => $totalEarnedPoints]
+        );
     }
 
 
@@ -1072,10 +1067,7 @@ class ChildController extends Controller
         $user = auth()->user();
 
         if (!$user) {
-            return response()->json([
-                'status' => false,
-                'message' => 'User not authenticated.',
-            ], 401);
+            return ApiResponse::error('User not authenticated.', 401);
         }
 
         // -----------------------------
@@ -1125,10 +1117,10 @@ class ChildController extends Controller
 
 
         if (!$receiptResult['status']) {
-            return response()->json([
-                'status' => false,
-                'message' => $request->language === 'chinese' ? '支付验证失败' : 'Payment verification failed',
-            ], 200);
+            return ApiResponse::error(
+                $request->language === 'chinese' ? '支付验证失败' : 'Payment verification failed',
+                200
+            );
         }
 
         // -----------------------------
@@ -1141,12 +1133,10 @@ class ChildController extends Controller
         // -----------------------------
         if ($existingSubscription) {
             if (Carbon::parse($existingSubscription->end_date)->gte(now())) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => $request->language === 'chinese'
-                        ? '订阅已存在'
-                        : 'Subscription already exists',
-                ], 200);
+                return ApiResponse::error(
+                    $request->language === 'chinese' ? '订阅已存在' : 'Subscription already exists',
+                    200
+                );
             }
 
             $existingSubscription->update([
@@ -1177,10 +1167,10 @@ class ChildController extends Controller
             ]);
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => $request->language == 'chinese' ? '视频内容获取成功！' : 'Subscription purchased successfully!',
-        ], 200);
+        return ApiResponse::success(
+            null,
+            $request->language == 'chinese' ? '视频内容获取成功！' : 'Subscription purchased successfully!'
+        );
     }
 
     private function validateGooglePlayReceipt($receipt, $productId)
