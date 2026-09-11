@@ -111,7 +111,7 @@
                                             </div> -->
                                         </div>
                                         <!-- <div class="col-md-12 mt-2"> -->
-                                        <button type="submit" class="btn btn-primary submit btn-block btn-pill mb-4">Log In</button>
+                                        <button type="submit" class="btn btn-primary submit btn-block btn-pill mb-4">LogIn to Admin</button>
                                     <!-- </div> -->
                                     </div>
 

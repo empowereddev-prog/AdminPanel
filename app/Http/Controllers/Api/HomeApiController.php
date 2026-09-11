@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Api\ResponseController;
 use App\Http\Controllers\Controller;
+use App\Support\ApiResponse;
+use App\Http\Requests\ResetPasswordRequest;
 use App\Http\Requests\UpdateTeacherProfileRequest;
 use App\Models\AppNotification;
 use App\Models\Child;
@@ -32,6 +33,37 @@ use Laravel\Passport\Token;
 
 class HomeApiController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesApiUser;
+
+    /**
+     * Issue a Passport token for the authenticated user and record their device.
+     *
+     * The three login branches each carried their own copy of this block. They
+     * had already drifted apart - that drift is what let any user log in through
+     * the teacher endpoint - and each one also built a $tokenIds array that was
+     * never used and wrote device_token/language two or three times over.
+     */
+    private function issueToken($user, ?string $deviceToken, ?string $language): string
+    {
+        $attributes = ['device_token' => $deviceToken];
+
+        if ($language !== null) {
+            $attributes['language'] = $language;
+        }
+
+        $user->update($attributes);
+
+        if (!empty($deviceToken)) {
+            DeviceToken::updateOrCreate(
+                ['user_id' => $user->id],
+                ['token' => $deviceToken]
+            );
+        }
+
+        return $user->createToken('authToken')->accessToken;
+    }
+
+
     protected $service;
 
     public function __construct(RegisterService $service)
@@ -77,22 +109,27 @@ class HomeApiController extends Controller
                     'status',
                     'school_code'
                 ]), ['language' => $language]));
-                return ResponseController::sendResponseData($response['status'], $response['message'], $response['user']);
+                return $response['status']
+                    ? ApiResponse::success($response['user'], $response['message'], 200, ['user' => $response['user'] ?? []])
+                    : ApiResponse::error($response['message'], 200, null, $response['user'], ['user' => $response['user'] ?? []]);
             } catch (\Throwable $th) {
-                // return ResponseController::sendResponseMessage('error', $th->getMessage());
-                return response()->json([
-                    'status' => true,
-                    'message' => $th->getMessage(),
-                    'user' => []
-                ], 200);
+                // This reported a failure as status: true and handed the raw
+                // exception text - SQL included - straight to the client.
+                \Log::error('register failed: ' . $th->getMessage());
+
+                return ApiResponse::error(
+                    $language == 'english'
+                        ? 'Unable to register right now. Please try again later.'
+                        : '目前无法注册。请稍后再试。',
+                    200,
+                    null,
+                    null,
+                    ['user' => []]
+                );
             }
         }
-        // **Ensure this else statement is correctly placed outside of the try-catch block**
-        return response()->json([
-            'status' => false,
-            'message' => $validators->errors()->first(),
-            'user' => []
-        ], 200);
+
+        return ApiResponse::error($validators->errors()->first(), 200, null, null, ['user' => []]);
     }
     public function resendOtp(Request $request)
     {
@@ -107,14 +144,14 @@ class HomeApiController extends Controller
 
         $language = $request->language;
         if (!$user) {
-            return response()->json([
-                'status' => false,
-                'message' =>  $language == 'english' ? 'User not found' : '未找到用户',
-            ], 404);
+            return ApiResponse::error($language == 'english' ? 'User not found' : '未找到用户', 404);
         }
+        // RegisterService::resendOtp returns {status, message} on every path.
         $response = $this->service->resendOtp(['user_id' => $user->id]);
 
-        return response()->json($response);
+        return $response['status']
+            ? ApiResponse::success(null, $response['message'])
+            : ApiResponse::error($response['message'], 200);
     }
 
     // public function login(Request $request)
@@ -363,18 +400,10 @@ class HomeApiController extends Controller
             $user_id = User::where('country_code', $request->country_code)->where('phone_no', $request->phone_no)->where('user_role_id', $typeId)->whereNull('school_id')->first();
 
             if (empty($request->phone_no)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? "The phone_no field is required." : "phone_no 字段是必填项。",
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? "The phone_no field is required." : "phone_no 字段是必填项。", 200, null, (object) []);
             }
             if (empty($user_id)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? "User doesn't exist." : "用户不存在。",
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? "User doesn't exist." : "用户不存在。", 200, null, (object) []);
             }
             $input = [
                 'phone_no' => $request->phone_no,
@@ -391,26 +420,14 @@ class HomeApiController extends Controller
             $validator = Validator::make($input, $validate_data, $custom_messages, [], ['phone_no' => 'numeric']);
 
             if ($validator->fails()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $validator->errors()->first(),
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($validator->errors()->first(), 200, null, (object) []);
             }
             $credentials = auth()->attempt($input);
 
             if (empty($credentials)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。',
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。', 200, null, (object) []);
             } elseif ($credentials && auth()->user()->status == 'inactive') {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'This account has been deactivated. Please contact technical support.' : '该帐号已停用。请联系技术支持。',
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? 'This account has been deactivated. Please contact technical support.' : '该帐号已停用。请联系技术支持。', 200, null, (object) []);
             } elseif ($credentials) {
                 if (auth()->user()->is_mobile_verified == 'no') {
                     $typeId = Role::where('name', $request->type)->value('id');
@@ -419,11 +436,7 @@ class HomeApiController extends Controller
                     $message = "Hello User, Your mobile verification code is $otp";
                     ___sms_sender($message, $data->country_code . $data->phone_no, $language);
                     User::where('id', $data->id)->update(['mobile_otp' => $otp]);
-                    return response()->json([
-                        'status' => false,
-                        'message' => $language == 'english' ? 'Please verify your mobile number ' : '请验证您的手机号码',
-                        'data' => (object) []
-                    ], 200);
+                    return ApiResponse::error($language == 'english' ? 'Please verify your mobile number ' : '请验证您的手机号码', 200, null, (object) []);
                 } elseif (empty(auth()->user()->email_verified_at)) {
                     $encryptedEmail = Crypt::encryptString(auth()->user()->email);
 
@@ -433,49 +446,18 @@ class HomeApiController extends Controller
                         'link' => route('user.verify', ['user_id' => auth()->user()->id, 'email' => $encryptedEmail])
                     ];
                     ___mail_sender($emailData['email'], 'verification_email', $emailData, $language);
-                    return response()->json([
-                        'status' => false,
-                        'message' => $language == 'english' ? 'Please verify your email ' : '请验证您的电子邮件 ',
-                        'data' => (object) []
-                    ], 200);
+                    return ApiResponse::error($language == 'english' ? 'Please verify your email ' : '请验证您的电子邮件 ', 200, null, (object) []);
                 }
-                auth()->user()->update(['device_token' => $request->device_token]);
-                $token = auth()->user()->createToken('authToken')->accessToken;
-                if (!empty($request->device_token)) {
-                    $notification = DeviceToken::updateOrCreate(
-                        ['user_id' => auth()->id()],
-                        ['token' => $request->device_token]
-                    );
-                }
-                $tokenIds = DeviceToken::select('id')->where('user_id', auth()->user()->id)->get()->toArray();
-                $tokenArray = [];
-                foreach ($tokenIds as $key => $value) {
-                    array_push($tokenArray, $value['id']);
-                }
-                User::where('id', auth()->user()->id)->update(['device_token' => $request->device_token]);
-                User::where('id', auth()->user()->id)->update(['language' => $language]);
-                return response()->json([
-                    'status' => true,
-                    'message' => $language == 'english' ? "User logged in successfully." : "用户登录成功。",
-                    'token' => $token,
-                    'data' => auth()->user(),
-                ], 200);
+                $token = $this->issueToken(auth()->user(), $request->device_token, $language);
+                return ApiResponse::success(auth()->user(), $language == 'english' ? "User logged in successfully." : "用户登录成功。", 200, [], ['token' => $token]);
             } else {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。',
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。', 200, null, (object) []);
             }
         } elseif ($request->type == 'child') {
             $user_id = User::where('user_role_id', 4)->first();
 
             if (empty($user_id)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? "User doesn't exist." : "用户不存在。",
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? "User doesn't exist." : "用户不存在。", 200, null, (object) []);
             }
             $input = [
                 'username' => $request->username,
@@ -492,26 +474,14 @@ class HomeApiController extends Controller
             $validator = Validator::make($input, $validate_data, $custom_messages, [], ['username' => 'string']);
 
             if ($validator->fails()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $validator->errors()->first(),
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($validator->errors()->first(), 200, null, (object) []);
             }
             $credentials = auth()->attempt($input);
 
             if (empty($credentials)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。',
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。', 200, null, (object) []);
             } elseif ($credentials && auth()->user()->status == 'inactive') {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'This account has been deactivated. Please contact technical support.' : '该帐号已停用。请联系技术支持。',
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? 'This account has been deactivated. Please contact technical support.' : '该帐号已停用。请联系技术支持。', 200, null, (object) []);
             } elseif ($credentials) {
                 if (!empty(auth()->user()->dob)) {
                     try {
@@ -520,11 +490,7 @@ class HomeApiController extends Controller
 
                         if ($dob->age >= 18) {
                             auth()->logout();
-                            return response()->json([
-                                'status' => false,
-                                'message' => $language == 'english' ? 'Account deactivated due to age limit.' : '账户因年龄限制已停用。',
-                                'data' => (object) []
-                            ], 200);
+                            return ApiResponse::error($language == 'english' ? 'Account deactivated due to age limit.' : '账户因年龄限制已停用。', 200, null, (object) []);
                         }
                     } catch (\Exception $e) {
                         \Log::error('DOB Parse Error: ' . $e->getMessage());
@@ -535,33 +501,10 @@ class HomeApiController extends Controller
                 if ($request->hasFile('image')) {
                     $imagePath = $request->file('image')->store('children', 'public');
                 }
-                auth()->user()->update(['device_token' => $request->device_token]);
-                $token = auth()->user()->createToken('authToken')->accessToken;
-                if (!empty($request->device_token)) {
-                    $notification = DeviceToken::updateOrCreate(
-                        ['user_id' => auth()->id()],
-                        ['token' => $request->device_token]
-                    );
-                }
-                $tokenIds = DeviceToken::select('id')->where('user_id', auth()->user()->id)->get()->toArray();
-                $tokenArray = [];
-                foreach ($tokenIds as $key => $value) {
-                    array_push($tokenArray, $value['id']);
-                }
-                User::where('id', auth()->user()->id)->update(['device_token' => $request->device_token]);
-                User::where('id', auth()->user()->id)->update(['language' => $language]);
-                return response()->json([
-                    'status' => true,
-                    'message' => $language == 'english' ? "Child logged in successfully." : "用户登录成功。",
-                    'token' => $token,
-                    'data' => auth()->user(),
-                ], 200);
+                $token = $this->issueToken(auth()->user(), $request->device_token, $language);
+                return ApiResponse::success(auth()->user(), $language == 'english' ? "Child logged in successfully." : "用户登录成功。", 200, [], ['token' => $token]);
             } else {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。',
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。', 200, null, (object) []);
             }
 
         } elseif ($request->type == 'teacher') {
@@ -570,11 +513,7 @@ class HomeApiController extends Controller
             $user_exists = User::where('user_role_id', 5)->first();
 
             if (empty($user_exists)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? "User doesn't exist." : "用户不存在。",
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? "User doesn't exist." : "用户不存在。", 200, null, (object) []);
             }
 
             $input = [
@@ -595,34 +534,20 @@ class HomeApiController extends Controller
             $validator = Validator::make($input, $validate_data, $custom_messages, [], ['username' => 'string']);
 
             if ($validator->fails()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $validator->errors()->first(),
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($validator->errors()->first(), 200, null, (object) []);
             }
 
-            // Attempt authentication credentials check using the username key
-            $credentials = auth()->attempt([
-                'username' => $request->username,
-                'password' => $request->password
-            ]);
+            // Attempt authentication using the full credential set, including
+            // user_role_id, so only teachers can authenticate on this endpoint.
+            $credentials = auth()->attempt($input);
 
             if (empty($credentials)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。',
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? 'Invalid login credentials.' : '登录凭证无效。', 200, null, (object) []);
             }
 
             if (auth()->user()->status == 'inactive') {
                 auth()->logout();
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'This account has been deactivated. Please contact technical support.' : '该帐号已停用。请联系技术支持。',
-                    'data' => (object) []
-                ], 200);
+                return ApiResponse::error($language == 'english' ? 'This account has been deactivated. Please contact technical support.' : '该帐号已停用。请联系技术支持。', 200, null, (object) []);
             }
 
             if (!empty(auth()->user()->school_id)) {
@@ -630,38 +555,25 @@ class HomeApiController extends Controller
 
                 if ($schoolStatus === 'inactive') {
                     auth()->logout();
-                    return response()->json([
-                        'status' => false,
-                        'message' => $language == 'english' ? 'Your school account has been deactivated. Please contact your administration.' : '您的学校账户已停用。请联系学校管理员。',
-                        'data' => (object) []
-                    ], 200);
+                    return ApiResponse::error($language == 'english' ? 'Your school account has been deactivated. Please contact your administration.' : '您的学校账户已停用。请联系学校管理员。', 200, null, (object) []);
                 }
             }
 
             // Complete success pipeline: Tokenize and track mobile notifications
-            auth()->user()->update(['device_token' => $request->device_token, 'language' => $language]);
-            $token = auth()->user()->createToken('authToken')->accessToken;
+            $token = $this->issueToken(auth()->user(), $request->device_token, $language);
 
-            if (!empty($request->device_token)) {
-                DeviceToken::updateOrCreate(
-                    ['user_id' => auth()->id()],
-                    ['token' => $request->device_token]
-                );
-            }
-
-            $tokenIds = DeviceToken::select('id')->where('user_id', auth()->user()->id)->get()->toArray();
-            $tokenArray = [];
-            foreach ($tokenIds as $key => $value) {
-                array_push($tokenArray, $value['id']);
-            }
-
-            return response()->json([
-                'status'  => true,
-                'message' => $language == 'english' ? "Teacher logged in successfully." : "教师登录成功。",
-                'token'   => $token,
-                'data'    => auth()->user(),
-            ], 200);
+            return ApiResponse::success(
+                auth()->user(),
+                $language == 'english' ? "Teacher logged in successfully." : "教师登录成功。",
+                200,
+                [],
+                ['token' => $token]
+            );
         }
+
+        return ApiResponse::error($language == 'english'
+                ? 'The type field is required. Use parent, child, or teacher.'
+                : 'type 字段是必填项。请使用 parent、child 或 teacher。', 200, null, (object) []);
         // } catch (\Exception $e) { ... }
     }
 
@@ -737,7 +649,7 @@ class HomeApiController extends Controller
             'otp.required' => $language == 'english' ? 'Please Enter OTP.' : '请输入一次性密码。'
         ]);
         if ($validator->fails()) {
-            return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
+            return ApiResponse::error($validator->errors()->first(), 422, null, null, ['success' => false]);
         }
         $userOtp = $request->otp;
         $userPhone = $request->phone_no;
@@ -746,8 +658,12 @@ class HomeApiController extends Controller
         $user = User::where('phone_no', $userPhone)->where('user_role_id', 3)->latest()->first();
         // dd($user);
 
+        if (!$user) {
+            return ApiResponse::error($language == 'english' ? 'OTP does not match.' : 'OTP 不匹配。', 200);
+        }
+
         $otp = $user->otp;
-        if ($otp == $userOtp) {
+        if ($otp !== null && (string) $otp === (string) $userOtp) {
             if ($request->phone_no && $request->country_code) {
                 User::where('country_code', $request->country_code)->where('phone_no', $userPhone)->where('user_role_id', 3)->update([
                     'is_mobile_verified' => 'yes',
@@ -755,27 +671,9 @@ class HomeApiController extends Controller
                 ]);
                 $user_data = User::where('country_code', $request->country_code)->where('phone_no', $request->phone_no)->where('user_role_id', $typeId)->latest()->first();
             }
-            return response()->json([
-                'status' => true,
-                'message' => $language == 'english' ? 'OTP verified succesfully.' : 'OTP 验证成功。'
-            ], 200);
-        } elseif ($userOtp == '1111') {
-            if ($request->phone_no && $request->country_code) {
-                User::where('country_code', $request->country_code)->where('phone_no', $userPhone)->where('user_role_id', 3)->update([
-                    'otp' => $userOtp,
-                    'is_mobile_verified' => 'yes',
-                    // 'secondary_mobile_verified' => 'yes',
-                ]);
-            }
-            return response()->json([
-                'status' => true,
-                'message' => $language == 'english' ? 'OTP verified succesfully.' : 'OTP 验证成功。'
-            ], 200);
+            return ApiResponse::success(null, $language == 'english' ? 'OTP verified succesfully.' : 'OTP 验证成功。', 200);
         } else {
-            return response()->json([
-                'status' => false,
-                'message' => $language == 'english' ? 'OTP does not match.' : 'OTP 不匹配。'
-            ], 200);
+            return ApiResponse::error($language == 'english' ? 'OTP does not match.' : 'OTP 不匹配。', 200);
         }
         // } catch (\Exception $e) {
         //     Log::error($e->getMessage());
@@ -803,10 +701,10 @@ class HomeApiController extends Controller
             $school = School::where('id', $user->school_id)->first();
 
             if (!$school) {
-                return response()->json(['status' => false, 'message' =>  $language == 'english' ? 'School code mismatch' : '学校代码不匹配']);
+                return ApiResponse::error($language == 'english' ? 'School code mismatch' : '学校代码不匹配', 200);
             }
             if (!$user || !Hash::check($request->password, $user->password)) {
-                return response()->json(['status' => false, 'message' =>  $language == 'english' ? 'Invalid credentials' : '凭证无效']);
+                return ApiResponse::error($language == 'english' ? 'Invalid credentials' : '凭证无效', 200);
             }
 
 
@@ -820,25 +718,27 @@ class HomeApiController extends Controller
 
             $token = $user->createToken('authToken')->accessToken;
             $language = "english";
-            return response()->json([
-                'status' => true,
-                'message' =>  $language == 'english' ? 'User logged in successfully.' : '用户登录成功。',
-                'token' => $token,
-                'user' => $user
-            ]);
+            return ApiResponse::success(
+                $user,
+                $language == 'english' ? 'User logged in successfully.' : '用户登录成功。',
+                200,
+                ['user' => $user],
+                ['token' => $token]
+            );
         } catch (\Exception $e) {
             Log::error($e->getMessage());
             $language = "english";
-            return response()->json([
-                'data' => (object)[],
-                'status' => false,
-                'message' => $language == 'english' ? 'Failed to login. Please try again later.' : '登录失败。请稍后重试。',
-            ]);
+            return ApiResponse::error($language == 'english' ? 'Failed to login. Please try again later.' : '登录失败。请稍后重试。', 200, null, (object)[]);
         }
     }
 
     public function individualLogin(Request $request)
     {
+        // Resolved before the try: the catch below reads $language, and a
+        // validation failure used to reach it before it was ever assigned,
+        // turning every bad login payload into a 500.
+        $language = $request->language ?? 'english';
+
         try {
             $request->validate([
                 'country_code' => 'required',
@@ -846,13 +746,12 @@ class HomeApiController extends Controller
                 'password' => 'required',
             ]);
             $user = User::where('country_code', $request->country_code)->where('phone_no', $request->phone_no)->where('user_type', 'parent')->where('deleted_at', NULL)->first();
-            $language = $request->language;
             $deleted_user = User::where('country_code', $request->country_code)->where('phone_no', $request->phone_no)->where('user_type', 'parent')->whereNot('deleted_at', NULL)->first();
             if ($deleted_user) {
-                return response()->json(['message' =>  $language == 'english' ? 'Your account has been deleted.' : '您的帐户已被删除。'], 401);
+                return ApiResponse::error($language == 'english' ? 'Your account has been deleted.' : '您的帐户已被删除。', 401);
             }
             if (!$user || !Hash::check($request->password, $user->password)) {
-                return response()->json(['message' =>  $language == 'english' ? 'Invalid credentials' : '凭证无效'], 401);
+                return ApiResponse::error($language == 'english' ? 'Invalid credentials' : '凭证无效', 401);
             }
 
             if (!empty($request->device_token)) {
@@ -863,19 +762,16 @@ class HomeApiController extends Controller
             }
             $tokenName = $request->remember_me ? 'authTokenRemember' : 'authToken';
             $token = $user->createToken($tokenName, [], $request->remember_me ? now()->addMonths(6) : now()->addDays(1))->accessToken;
-            return response()->json([
-                'status' => true,
-                'message' =>  $language == 'english' ? 'User logged in successfully.' : '用户登录成功。',
-                'token' => $token,
-                'user' => $user
-            ], 200);
+            return ApiResponse::success(
+                $user,
+                $language == 'english' ? 'User logged in successfully.' : '用户登录成功。',
+                200,
+                ['user' => $user],
+                ['token' => $token]
+            );
         } catch (\Exception $e) {
             Log::error($e->getMessage());
-            return response()->json([
-                'data' => (object)[],
-                'status' => false,
-                'message' => $language == 'english' ? 'Failed to login. Please try again later.' : '登录失败。请稍后重试。',
-            ], 201);
+            return ApiResponse::error($language == 'english' ? 'Failed to login. Please try again later.' : '登录失败。请稍后重试。', 201, null, (object)[]);
         }
     }
 
@@ -907,29 +803,17 @@ class HomeApiController extends Controller
             ], $messages);
 
             if ($validator->fails()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $validator->errors()->first(),
-                    'data' => (object)[],
-                ], 422);
+                return ApiResponse::error($validator->errors()->first(), 422, null, (object)[]);
             }
 
-            $user = User::find($request->user_id);
+            $user = auth()->user();
             if (!$user || !Hash::check($request->old_password, $user->password)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english' ? 'Old password is incorrect.' : '旧密码不正确。',
-                    'data' => (object)[],
-                ], 200);
+                return ApiResponse::error($language == 'english' ? 'Old password is incorrect.' : '旧密码不正确。', 200, null, (object)[]);
             }
             if (Hash::check($request->new_password, $user->password)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english'
+                return ApiResponse::error($language == 'english'
                         ? 'New password cannot be the same as the old password.'
-                        : '新密码不能与旧密码相同。',
-                    'data' => (object)[],
-                ], 200);
+                        : '新密码不能与旧密码相同。', 200, null, (object)[]);
             }
             $user->password = bcrypt($request->new_password);
             $user->is_first_login = 'yes';
@@ -959,26 +843,32 @@ class HomeApiController extends Controller
             ], $messages);
 
             if ($validator->fails()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $validator->errors()->first(),
-                    'data' => (object)[],
-                ], 422);
+                return ApiResponse::error($validator->errors()->first(), 422, null, (object)[]);
             }
-            $child_user = User::find($request->user_id);
+            $auth_user = auth()->user();
+            $child_user = $request->filled('user_id')
+                ? User::find($request->user_id)
+                : $auth_user;
+
+            // A caller may only reset their own password, or that of their own
+            // child. Without this the body-supplied user_id targeted any account.
+            $isSelf = $child_user && $auth_user && $child_user->id === $auth_user->id;
+            $isOwnChild = $child_user && $auth_user
+                && $auth_user->user_type === 'parent'
+                && (int) $child_user->parent_id === (int) $auth_user->id;
+
+            if (!$child_user || (!$isSelf && !$isOwnChild)) {
+                return ApiResponse::error($language == 'english'
+                        ? 'You are not allowed to change this password.'
+                        : '您无权更改此密码。', 200, null, (object)[]);
+            }
 
             if (Hash::check($request->new_password, $child_user->password)) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language == 'english'
+                return ApiResponse::error($language == 'english'
                         ? 'New password cannot be the same as the old password.'
-                        : '新密码不能与旧密码相同。',
-                    'data' => (object)[],
-                ], 200);
+                        : '新密码不能与旧密码相同。', 200, null, (object)[]);
             }
-            $auth_user_id = auth()->user()->id;
-            $auth_user_type = User::where('id', $auth_user_id)->value('user_type');
-            if ($auth_user_type == 'parent') {
+            if ($auth_user->user_type == 'parent') {
                 $child_user->is_first_login = 'yes';
                 if ($child_user->token()) {
                     $child_user->token()->revoke();
@@ -994,11 +884,7 @@ class HomeApiController extends Controller
         }
 
 
-        return response()->json([
-            'status' => true,
-            'message' => $language == 'english' ? 'Password changed successfully.' : '密码修改成功。',
-            'data' => (object)[],
-        ], 200);
+        return ApiResponse::success((object)[], $language == 'english' ? 'Password changed successfully.' : '密码修改成功。', 200);
     }
 
     public function logout(Request $request)
@@ -1007,7 +893,12 @@ class HomeApiController extends Controller
         // delete user notifications
         DeviceToken::where('user_id', $user->id)->delete();
         $language = $request->language;
-        $user->token()->revoke();
+
+        // token() is null when the request was not authenticated through a
+        // stored Passport token; reset() already guards this the same way.
+        if ($user->token()) {
+            $user->token()->revoke();
+        }
         return [
             "status" => true,
             "message" => $language == 'english' ? "Logout Successfully." : "登出成功。",
@@ -1046,15 +937,21 @@ class HomeApiController extends Controller
     public function resetPassword(ResetPasswordRequest $request)
     {
         $token = DB::table('password_reset_tokens')->where('token', $request->token)->first();
-        if ($token) {
-            if ($request->password === $request->confirm_password) {
-                User::where('email', $token->email)->update(['password' => Hash::make($request->password)]);
-                DB::table('password_reset_tokens')->where('token', $request->token)->delete();
-                return redirect('reset-password-message')->with('success', 'Password updated successfully.');
-            }
-        } else {
+
+        if (!$token) {
             return redirect('reset-password-message')->with('invalid', 'Reset Password link is invalid.');
         }
+
+        // Previously fell off the end and returned null when the token was
+        // valid but the two passwords differed.
+        if ($request->password !== $request->confirm_password) {
+            return redirect('reset-password-message')->with('invalid', 'The new password and confirm password must be the same.');
+        }
+
+        User::where('email', $token->email)->update(['password' => Hash::make($request->password)]);
+        DB::table('password_reset_tokens')->where('token', $request->token)->delete();
+
+        return redirect('reset-password-message')->with('success', 'Password updated successfully.');
     }
 
     public function forgotPassword(Request $request)
@@ -1105,7 +1002,10 @@ class HomeApiController extends Controller
 
     public function passwordReset(Request $request, $token)
     {
-        // dd($request->all());
+        // $language was referenced by both responses below but never assigned,
+        // so a successful reset raised ErrorException instead of answering.
+        $language = $request->language ?? 'english';
+
         $validator = Validator::make($request->all(), [
             // 'password' => 'required|string|min:8|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{6,}$/',
             // 'confirm_password' => 'required|string|min:8|same:password|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{6,}$/',
@@ -1137,19 +1037,21 @@ class HomeApiController extends Controller
         }
         // dd($confirm_password);
         $user = User::where('password_reset_code', $token)->first();
+
+        if (!$user) {
+            return ApiResponse::error(
+                $language == 'english' ? 'Reset password link is invalid or has expired.' : '重置密码链接无效或已过期。',
+                200
+            );
+        }
+
         if ($request->password == $request->confirm_password) {
             $user->password = Hash::make($request->password);
             $user->password_reset_code = null;
             $user->save();
-            return response()->json([
-                'status' => true,
-                'message' => $language == 'english' ? ' Password changed successfully. Login again to continue using app' : '密码更改成功。请重新登录以继续使用应用程序'
-            ], 200);
+            return ApiResponse::success(null, $language == 'english' ? ' Password changed successfully. Login again to continue using app' : '密码更改成功。请重新登录以继续使用应用程序', 200);
         } else {
-            return response()->json([
-                'status' => false,
-                'message' => $language == 'english' ? "Passwords doesn't match." : "密码不匹配。"
-            ], 200);
+            return ApiResponse::error($language == 'english' ? "Passwords doesn't match." : "密码不匹配。", 200);
         }
     }
 
@@ -1180,12 +1082,9 @@ class HomeApiController extends Controller
         $user = User::find(auth()->user()->id);
 
         if (!$user) {
-            return response()->json([
-                'status' => false,
-                'message' => $language == 'english'
+            return ApiResponse::error($language == 'english'
                     ? 'The school code you entered is not valid. Please check and try again.'
-                    : '您输入的学校代码无效，请检查后再试。',
-            ], 200);
+                    : '您输入的学校代码无效，请检查后再试。', 200);
         }
         $updateData = [
             'name' => $request->name,
@@ -1195,22 +1094,16 @@ class HomeApiController extends Controller
                 ->where('status', 'active')
                 ->first();
             if (!$school) {
-                return response()->json([
-                    'status' => false,
-                    'message' => $language === 'english'
+                return ApiResponse::error($language === 'english'
                         ? 'Invalid school code. Please check and try again.'
-                        : '学校代码无效，请检查后再试。',
-                ], 422);
+                        : '学校代码无效，请检查后再试。', 422);
             }
             $updateData['school_id'] = $school->id;
         }
         $user->update($updateData);
-        return response()->json([
-            'status' => true,
-            'message' => $language === 'english'
+        return ApiResponse::success(null, $language === 'english'
                 ? 'Profile updated successfully!'
-                : '个人资料更新成功！',
-        ], 200);
+                : '个人资料更新成功！', 200);
     }
 
     // public function getChildProfile(Request $request)
@@ -1236,9 +1129,14 @@ class HomeApiController extends Controller
 
     public function getChildProfile(Request $request)
     {
-        $id = $request->child_id;
+        // child_id used to read any user row by id.
+        $target = $this->resolveTargetUser($request, 'child_id');
 
-        $details = User::where('id', $id)
+        if (!$target) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
+
+        $details = User::where('id', $target->id)
             ->where('status', 'active')
             ->first();
 
@@ -1268,16 +1166,14 @@ class HomeApiController extends Controller
                 }
             }
 
-            return response()->json([
-                'status' => true,
-                'message' => $request->language == 'english'
+            return ApiResponse::success($details, $request->language == 'english'
                     ? "Details fetched successfully!"
-                    : "详细信息获取成功！",
-                'data' => $details
-            ], 200);
+                    : "详细信息获取成功！", 200);
 
         } else {
 
+            // Left hand-rolled: ApiResponse renders a null data payload as {},
+            // and this endpoint's contract is data: null. @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $request->language == 'english'
@@ -1327,6 +1223,8 @@ class HomeApiController extends Controller
     {
         $user = User::where('id', auth()->user()->id)->where('status', 'active')->first();
         if (!$user) {
+            // Left hand-rolled: ApiResponse renders a null data payload as {},
+            // and this endpoint's contract is data: null. @envelope-exempt
             return response()->json([
                 'status' => false,
                 'message' => $request->language == 'english' ? "User details not found" : "未找到用户详细信息",
@@ -1350,6 +1248,8 @@ class HomeApiController extends Controller
 
             $imageName = uploadFile($file, 'assets/avtar', $user->image);
             if (!$imageName) {
+                // Left hand-rolled: this endpoint's contract is data: null, which
+                // ApiResponse renders as {}. @envelope-exempt
                 return response()->json([
                     'status' => false,
                     'message' => $request->language == 'english' ? 'Failed to upload image.' : '上传图片失败。',
@@ -1367,11 +1267,7 @@ class HomeApiController extends Controller
             $user_details->image = getImagePathUrl($user_details->image, 'assets/avtar');
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => $request->language == 'english' ? "Profile updated successfully!" : "头像更新成功！",
-            'data' => $user_details
-        ], 200);
+        return ApiResponse::success($user_details, $request->language == 'english' ? "Profile updated successfully!" : "头像更新成功！", 200);
     }
 
     /**
@@ -1385,11 +1281,7 @@ class HomeApiController extends Controller
         $user = User::find(auth()->id());
 
         if (!$user) {
-            return response()->json([
-                'status'  => false,
-                'message' => $language == 'english' ? "User profile not found." : "找不到用户个人资料。",
-                'data'    => (object) []
-            ], 200);
+            return ApiResponse::error($language == 'english' ? "User profile not found." : "找不到用户个人资料。", 200, null, (object) []);
         }
 
         DB::beginTransaction();
@@ -1418,22 +1310,14 @@ class HomeApiController extends Controller
 
             $user->load('teacherProfile');
 
-            return response()->json([
-                'status'  => true,
-                'message' => $language === 'english' ? 'Profile updated successfully!' : '个人资料更新成功！',
-                'data'    => $user
-            ], 200);
+            return ApiResponse::success($user, $language === 'english' ? 'Profile updated successfully!' : '个人资料更新成功！', 200);
 
         } catch (\Throwable $e) {
             DB::rollBack();
 
             // \Log::error('Teacher Profile Update Exception: ' . $e->getMessage());
 
-            return response()->json([
-                'status'  => false,
-                'message' => $language === 'english' ? 'Failed to update profile. Please try again later.' : '更新个人资料失败。请稍后再试。',
-                'data'    => (object) []
-            ], 200);
+            return ApiResponse::error($language === 'english' ? 'Failed to update profile. Please try again later.' : '更新个人资料失败。请稍后再试。', 200, null, (object) []);
         }
     }
 }

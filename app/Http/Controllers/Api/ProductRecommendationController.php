@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductRecommendationResource;
 use App\Models\ProductRecommendation;
@@ -17,17 +18,20 @@ class ProductRecommendationController extends Controller
     
         $data = ProductRecommendationResource::collection($product);
     
-        return response()->json([
-            'status'  => true,
-            'message' => "Get Product data successfully done",
-            'data'    => $data,
-            'meta'    => [
+        return ApiResponse::success(
+            $data,
+            "Get Product data successfully done",
+            200,
+            [],
+            // meta is payload the app pages on, not a v1 alias, so it must
+            // survive into v2.
+            ['meta' => [
                 'current_page' => $product->currentPage(),
                 'last_page'    => $product->lastPage(),
                 'per_page'     => $product->perPage(),
                 'total'        => $product->total(),
-            ]
-        ]);
+            ]]
+        );
     }
     
 }

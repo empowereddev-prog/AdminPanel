@@ -2,12 +2,17 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Contracts\Validation\Validator;
-use Illuminate\Http\Exceptions\HttpResponseException;
+use App\Http\Requests\Api\ApiFormRequest;
 
-class UpdateTeacherProfileRequest extends FormRequest
+class UpdateTeacherProfileRequest extends ApiFormRequest
 {
+    /**
+     * This endpoint has always answered a validation failure with HTTP 200, so
+     * the shipped app is built around it. Kept as-is; v2 clients get the 422
+     * from the shared handler path once this endpoint is migrated in Phase 2.
+     */
+    protected int $failureStatus = 200;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -58,17 +63,5 @@ class UpdateTeacherProfileRequest extends FormRequest
             'qualification' => $qualifications,
             'language'      => $this->language ?? 'english'
         ]);
-    }
-
-    /**
-     * Override default redirect to provide API-compliant error messaging formats
-     */
-    protected function failedValidation(Validator $validator)
-    {
-        throw new HttpResponseException(response()->json([
-            'status'  => false,
-            'message' => $validator->errors()->first(),
-            'data'    => (object) []
-        ], 200));
     }
 }

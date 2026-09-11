@@ -20,6 +20,9 @@ class DeepLinkResolveController extends Controller
             'id' => 'required|integer|min:1',
         ]);
         if ($validator->fails()) {
+            // Deliberately NOT on the ApiResponse envelope: `status` here is a
+            // string ('not_found'), not a boolean. ApiResponse forces a boolean,
+            // so migrating this would retype the key the app branches on. @envelope-exempt
             return response()->json([
                 'status' => 'not_found',
                 'type' => null,
@@ -62,6 +65,8 @@ class DeepLinkResolveController extends Controller
             $body['banner'] = $resolved['banner'];
         }
 
+        // Deliberately NOT on the ApiResponse envelope, as above: $body['status']
+        // is a string from DeepLinkService, not a boolean. @envelope-exempt
         return response()->json($body, $resolved['http_status']);
     }
 }

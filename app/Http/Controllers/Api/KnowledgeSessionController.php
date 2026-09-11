@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\ArticleSuggestion;
 use Illuminate\Http\Request;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\DB;
 
 class KnowledgeSessionController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesApiUser;
+
     public function KnowledgeSession(Request $request)
     {
         // Determine the language (default: English)
@@ -36,7 +39,12 @@ class KnowledgeSessionController extends Controller
         ], $messages);
 
         // Get child data
-        $child = User::findOrFail($request->user_id);
+        // exists:users,id proves the row exists, not that the caller owns it.
+        $child = $this->resolveTargetUser($request, 'user_id');
+
+        if (!$child) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
 
         // Calculate child's age
         $childAge = \Carbon\Carbon::parse($child->dob)->age;
@@ -71,11 +79,7 @@ class KnowledgeSessionController extends Controller
             return $session;
         });
 
-        return response()->json([
-            'status'  => true,
-            'message' => $language === 'chinese' ? '找到匹配的知识课程！' : 'Matching Knowledge Sessions Found!',
-            'data'    => $filteredSessions->values(),
-        ], 200);
+        return ApiResponse::success($filteredSessions->values(), $language === 'chinese' ? '找到匹配的知识课程！' : 'Matching Knowledge Sessions Found!', 200);
     }
 
     // public function KnowledgeSessionDetails(Request $request)
@@ -160,6 +164,8 @@ class KnowledgeSessionController extends Controller
                 'forbidden_role' => $language == 'chinese' ? '此内容不适用于您的帐户。' : 'This content is not available for your account.',
                 'subscription_required' => $language == 'chinese' ? '需要有效订阅。' : 'An active subscription is required.',
             ];
+            // Not migrated: data => null, plus deeplink_status/canonical_url
+            // which the app reads at the top level. @envelope-exempt
             return response()->json([
                 'status' => false,
                 'deeplink_status' => $deepLink['status'],
@@ -212,12 +218,9 @@ class KnowledgeSessionController extends Controller
             $session_details->articles = $articlesData->unique('article_id')->values();
             $session_details->canonical_url = $deepLink['canonical_url'];
 
-            return response()->json([
-                'status' => true,
-                'message' => $language == 'chinese' ? '会话详细信息获取成功！' : 'Session details fetched successfully!',
-                'data' => $session_details
-            ], 200);
+            return ApiResponse::success($session_details, $language == 'chinese' ? '会话详细信息获取成功！' : 'Session details fetched successfully!', 200);
         } else {
+            // Not migrated: data => null, plus a top-level deeplink_status. @envelope-exempt
             return response()->json([
                 'status' => false,
                 'deeplink_status' => 'not_found',
@@ -244,7 +247,12 @@ class KnowledgeSessionController extends Controller
         ], $messages);
 
         // Get child data
-        $child = User::findOrFail($request->user_id);
+        // exists:users,id proves the row exists, not that the caller owns it.
+        $child = $this->resolveTargetUser($request, 'user_id');
+
+        if (!$child) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
 
         // Calculate child's age
         $childAge = \Carbon\Carbon::parse($child->dob)->age;
@@ -322,12 +330,13 @@ class KnowledgeSessionController extends Controller
         $childId =  auth()->user()->id;
 
         $topEmotions = $this->getTopEmotions($childId, 3, 'english');
-        return response()->json([
-            'status' => true,
-            'message' => 'Featured data fetched successfully!',
-            'data' => $mergedData,
-            'top_mood_emotion' => $topEmotions
-        ], 200);
+        return ApiResponse::success(
+            $mergedData,
+            'Featured data fetched successfully!',
+            200,
+            [],
+            ['top_mood_emotion' => $topEmotions]
+        );
     }
     public function featuredSession(Request $request)
 {
@@ -345,7 +354,13 @@ class KnowledgeSessionController extends Controller
     // =======================
     // CHILD + AGE
     // =======================
-    $child = User::findOrFail($request->user_id);
+    // exists:users,id proves the row exists, not that the caller owns it.
+    $child = $this->resolveTargetUser($request, 'user_id');
+
+    if (!$child) {
+        return $this->unauthorisedTargetResponse($request->language ?? 'english');
+    }
+
     $childAge = \Carbon\Carbon::parse($child->dob)->age;
 
     $parent = User::find($child->parent_id);
@@ -495,12 +510,13 @@ class KnowledgeSessionController extends Controller
     $childId = auth()->user()->id;
     $topEmotions = $this->getTopEmotions($childId, 3, 'english');
 
-    return response()->json([
-        'status' => true,
-        'message' => 'Featured data fetched successfully!',
-        'data' => $mergedData,
-        'top_mood_emotion' => $topEmotions
-    ], 200);
+    return ApiResponse::success(
+        $mergedData,
+        'Featured data fetched successfully!',
+        200,
+        [],
+        ['top_mood_emotion' => $topEmotions]
+    );
 }
 
 
@@ -572,7 +588,12 @@ class KnowledgeSessionController extends Controller
         ], $messages);
 
         // Get child data
-        $child = User::findOrFail($request->user_id);
+        // exists:users,id proves the row exists, not that the caller owns it.
+        $child = $this->resolveTargetUser($request, 'user_id');
+
+        if (!$child) {
+            return $this->unauthorisedTargetResponse($request->language ?? 'english');
+        }
 
         // Calculate child's age
         //  $childAge = \Carbon\Carbon::parse($child->dob)->age;
@@ -607,11 +628,7 @@ class KnowledgeSessionController extends Controller
             return $session;
         });
 
-        return response()->json([
-            'status'  => true,
-            'message' => $language === 'chinese' ? '找到匹配的知识课程！' : 'Matching Knowledge Sessions Found!',
-            'data'    => $filteredSessions->values(),
-        ], 200);
+        return ApiResponse::success($filteredSessions->values(), $language === 'chinese' ? '找到匹配的知识课程！' : 'Matching Knowledge Sessions Found!', 200);
     }
     // public function featuredSessionforParent(Request $request)
     // {
@@ -1408,11 +1425,12 @@ class KnowledgeSessionController extends Controller
             ->orderBy(DB::raw('CAST(priority AS UNSIGNED)'), 'asc')
             ->get();
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Featured data fetched successfully!',
-            'category' => $videoCategory,
-            'data' => $mergedData,
-        ], 200);
+        return ApiResponse::success(
+            $mergedData,
+            'Featured data fetched successfully!',
+            200,
+            [],
+            ['category' => $videoCategory]
+        );
     }
 }

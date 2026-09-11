@@ -33,6 +33,9 @@ class User extends Authenticatable implements AuditableContract
     protected $hidden = [
         'password',
         'remember_token',
+        'otp',
+        'mobile_otp',
+        'password_reset_code',
     ];
 
     /**
@@ -43,6 +46,9 @@ class User extends Authenticatable implements AuditableContract
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        // decimal(10,2) otherwise serialises as the string "25.50" while the
+        // sibling battery_points emits a number.
+        'loyalty_points' => 'float',
         'popup_1_updated_at' => 'datetime',
         'popup_2_updated_at' => 'datetime',
     ];

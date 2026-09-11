@@ -113,6 +113,11 @@ return [
     ],
 
     /*
+    | Admin-panel login OTP is always delivered here, regardless of who signs in.
+    */
+    'admin_otp_recipient' => env('ADMIN_OTP_EMAIL', 'empowereddev@gmail.com'),
+
+    /*
     |--------------------------------------------------------------------------
     | Markdown Mail Settings
     |--------------------------------------------------------------------------

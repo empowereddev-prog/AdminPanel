@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\UserArticaleLike;
 use Illuminate\Http\Request;
@@ -15,10 +16,7 @@ class UserArticleLikeController extends Controller
         $type = $request->input('type');
 
         if (!$articleId || !in_array($type, ['like', 'dislike', 'favourite'])) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Invalid request.',
-            ], 400);
+            return ApiResponse::error('Invalid request.', 400);
         }
         // Handle special cases before toggling
         if ($type === 'favourite') {
@@ -49,10 +47,7 @@ class UserArticleLikeController extends Controller
 
         if ($existing) {
             $existing->delete();
-            return response()->json([
-                'status' => true,
-                'message' => ucfirst($type) . ' removed successfully!',
-            ], 200);
+            return ApiResponse::success(null, ucfirst($type) . ' removed successfully!');
         }
 
         UserArticaleLike::create([
@@ -61,9 +56,6 @@ class UserArticleLikeController extends Controller
             'type' => $type,
         ]);
 
-        return response()->json([
-            'status' => true,
-            'message' => ucfirst($type) . ' added successfully!',
-        ], 201);
+        return ApiResponse::success(null, ucfirst($type) . ' added successfully!', 201);
     }
 }

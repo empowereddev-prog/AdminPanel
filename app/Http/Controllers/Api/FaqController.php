@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\ApiResponse;
 use App\Http\Controllers\Controller;
 use App\Models\Faq;
 use App\Models\StaticContent;
@@ -35,20 +36,9 @@ class FaqController extends Controller
                 $data = Faq::where(['type' => 'child', 'status' => 'active'])->orderBy('id', 'ASC')->get();
             }
 
-            return response()->json([
-                'status' => true,
-                'message' => 'FAQ data fetched successfully.',
-                // 'schoolFaq' => $schoolFaq,
-                // 'parentFaq' => $parentFaq,
-                // 'childFaq' => $childFaq,
-                'data' => $data,
-            ], 200);
+            return ApiResponse::success($data, 'FAQ data fetched successfully.');
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Something went wrong: ' . $e->getMessage(),
-                'data' => [],
-            ], 200);
+            return ApiResponse::error('Something went wrong: ' . $e->getMessage(), 200, null, []);
         }
     }
 
@@ -59,17 +49,9 @@ class FaqController extends Controller
 
 
             $data = StaticContent::where(['slug' => 'help-support-child'])->get();
-            return response()->json([
-                'status' => true,
-                'message' => 'Support data fetched successfully.',
-                'data' => $data,
-            ], 200);
+            return ApiResponse::success($data, 'Support data fetched successfully.', 200);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Something went wrong: ' . $e->getMessage(),
-                'data' => [],
-            ], 200);
+            return ApiResponse::error('Something went wrong: ' . $e->getMessage(), 200, null, []);
         }
     }
 }
