@@ -23,7 +23,7 @@ return [
         explode(',', (string) env('DEEPLINK_ANDROID_SHA256', ''))
     ))),
 
-    'ios_store_url' => env('DEEPLINK_IOS_STORE_URL', 'https://apps.apple.com/app/id6742772237'),
+    'ios_store_url' => env('DEEPLINK_IOS_STORE_URL', 'https://apps.apple.com/app/empowered-health/id6742772237'),
 
     'ios_app_id' => env('DEEPLINK_IOS_APP_ID', '6742772237'),
 
