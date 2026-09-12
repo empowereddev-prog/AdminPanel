@@ -18,10 +18,6 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ $item['title'] }}">
     <meta name="twitter:description" content="{{ $item['teaser'] }}">
-    @if(!empty($iosAppId))
-        <meta name="apple-itunes-app" content="app-id={{ $iosAppId }}, app-argument={{ $item['canonical_url'] }}">
-    @endif
-    <link rel="manifest" href="{{ url('/manifest.webmanifest') }}">
     <link rel="icon" type="image/png" href="{{ $appIcon }}">
     <link rel="shortcut icon" type="image/png" href="{{ $appIcon }}">
     <link rel="apple-touch-icon" href="{{ $appIcon }}">
@@ -70,6 +66,7 @@
         }
         .smart-banner.is-android { background: #fff; border-bottom-color: #e0e0e0; }
         .smart-banner.is-android .sb-get { background: #01875f; border-radius: 4px; text-transform: uppercase; font-size: 12px; }
+        .cta.is-hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -104,8 +101,8 @@
             @endif
             <div class="cta-row">
                 <a class="cta primary" id="open-app" href="{{ $schemeUrl }}">Open in app</a>
-                <a class="cta secondary" href="{{ $iosStore }}" rel="noopener">App Store</a>
-                <a class="cta secondary" href="{{ $androidStore }}" rel="noopener">Google Play</a>
+                <a class="cta secondary" id="cta-ios-store" href="{{ $iosStore }}" rel="noopener">App Store</a>
+                <a class="cta secondary" id="cta-android-store" href="{{ $androidStore }}" rel="noopener">Google Play</a>
             </div>
             <p class="note">If the app is not installed, use App Store or Google Play, then open this link again. Sign in with the matching account (parent, staff, or child).</p>
         </div>
@@ -118,13 +115,21 @@
             var getBtn = document.getElementById('smart-banner-get');
             var sub = document.getElementById('smart-banner-sub');
             var closeBtn = document.getElementById('smart-banner-close');
+            var iosCta = document.getElementById('cta-ios-store');
+            var androidCta = document.getElementById('cta-android-store');
             var scheme = @json($schemeUrl);
             var intent = @json($androidIntent);
             var iosStore = @json($iosStore);
             var androidStore = @json($androidStore);
             var ua = navigator.userAgent || '';
             var isAndroid = /Android/i.test(ua);
-            var isIOS = /iPhone|iPad|iPod/i.test(ua);
+            var isIPadOs = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+            var isIOS = /iPhone|iPad|iPod/i.test(ua) || isIPadOs;
+            var isStandalone = (window.navigator.standalone === true)
+                || window.matchMedia('(display-mode: standalone)').matches
+                || window.matchMedia('(display-mode: fullscreen)').matches
+                || window.matchMedia('(display-mode: minimal-ui)').matches;
+            var isAndroidWebView = isAndroid && /; wv\)/i.test(ua);
             var dismissed = false;
             try { dismissed = sessionStorage.getItem('eh-smart-banner') === '1'; } catch (e) {}
 
@@ -155,7 +160,12 @@
                 });
             }
 
-            var showCustom = !dismissed && (isAndroid || isIOS);
+            if (isIOS && androidCta) androidCta.classList.add('is-hidden');
+            if (isAndroid && iosCta) iosCta.classList.add('is-hidden');
+
+            // One banner only: native Safari / Chrome install banners are not
+            // emitted. Skip standalone and Android WebView, which already sit inside an app.
+            var showCustom = !dismissed && !isStandalone && (isAndroid || isIOS) && !isAndroidWebView;
             if (banner && showCustom) {
                 banner.removeAttribute('hidden');
                 banner.classList.add('is-visible');

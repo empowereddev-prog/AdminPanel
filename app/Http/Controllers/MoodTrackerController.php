@@ -612,46 +612,63 @@ public function getAllMood(Request $request)
                 $todayChildRecord->delete();
             }
 
-            return ChildMood::create([
+            $created = ChildMood::create([
                 'child_id' => $child_id,
                 'mood_id' => $mood_id,
                 'mood_name' => $mood_name,
                 'points' => $points,
                 'date' => Carbon::now()->format('Y-m-d')
             ]);
+
+            User::where('id', $child_id)->update(['is_mood_updated' => 'yes']);
+
+            return $created;
         });
 
         if ($data) {
-            User::where('id', $child_id)->update(['is_mood_updated' => 'yes']);
+            $payload = $data->toArray();
+            $payload['referred_video'] = [];
 
-            $negativeMoodIds = Mood::where('type', 'negative')->pluck('id');
+            try {
+                $negativeMoodIds = Mood::where('type', 'negative')->pluck('id');
+                $requiredDates = collect(range(1, 5))->map(function ($i) {
+                    return Carbon::now()->subDays($i)->toDateString();
+                });
+                $fromDate = Carbon::now()->subDays(5)->startOfDay()->format('Y-m-d');
 
-            // Define the last 5 days (excluding today if needed)
-            $requiredDates = collect(range(1, 5))->map(function ($i) {
-                return Carbon::now()->subDays($i)->toDateString();
-            });
-            // dd($requiredDates);
-            // Fetch child moods for the last 5 days
-            $fromDate = Carbon::now()->subDays(5)->startOfDay()->format('Y-m-d');
+                $childMoodEntries = ChildMood::where('child_id', $child_id)
+                    ->whereIn('mood_id', $negativeMoodIds)
+                    ->where('date', '>=', $fromDate)
+                    ->get();
 
-            $childMoodEntries = ChildMood::where('child_id', $child_id)
-                ->whereIn('mood_id', $negativeMoodIds)
-                ->where('date', '>=', $fromDate)
-                ->get();
-            // dd($childMoodEntries);
-            $datesWithNegativeMood = $childMoodEntries
-                ->pluck('date')
-                ->map(fn($date) => Carbon::parse($date)->toDateString())
-                ->unique();
-            // dd($datesWithNegativeMood);
-            // dd($requiredDates->diff($datesWithNegativeMood));
-            if ($requiredDates->diff($datesWithNegativeMood)->isEmpty()) {
-                $data['negative_mood'] = 'yes';
+                $datesWithNegativeMood = $childMoodEntries
+                    ->pluck('date')
+                    ->map(fn ($date) => $this->moodDateToString($date))
+                    ->filter()
+                    ->unique();
+
+                if ($requiredDates->diff($datesWithNegativeMood)->isEmpty()) {
+                    $payload['negative_mood'] = 'yes';
+                }
+
+                $payload['referred_video'] = $this->decodeReferredVideo(
+                    Mood::where('id', $mood_id)->value('referred_video')
+                );
+            } catch (\Throwable $e) {
+                \Log::error('storeChildMood extras failed after save', [
+                    'child_id' => $child_id,
+                    'mood_id' => $mood_id,
+                    'error' => $e->getMessage(),
+                ]);
             }
-            $referred_video = Mood::where('id', $mood_id)->value('referred_video');
-            $data->referred_video = json_decode($referred_video, true);
 
-            return ApiResponse::success($data, $request->language == 'english' ? 'Data stored successfully!' : '数据存储成功！', 200);
+            $language = $request->language ?? 'english';
+
+            return ApiResponse::success(
+                $payload,
+                $language === 'english' ? 'Data stored successfully!' : '数据存储成功！',
+                200
+            );
         } else {
             // Not migrated: the contract is data => null, which ApiResponse renders
             // as {} - a type change for the shipped app. Convert with a client release.
@@ -1491,47 +1508,53 @@ $moodRing = collect($groupedByColor)
         ];
 
         ChildMood::create($data);
-        $mood_battery_value = BatterySetting::where('option_key', 'mood_battery_percentage')->first();
-        $points = $mood_battery_value ? $mood_battery_value->option_value : 10;
-        battery_credit_once_per_day($user, $points, 'mood', [
-            'mood_id' => $request->mood_id,
-            'mood_name' => $request->mood_name
-        ], $date);
 
-        // Get notification content from template
-        $content = getNotificationContent('mood_update', [
-            'mood_name' => $request->mood_name,
-            'points'    => $request->point
-        ]);
+        try {
+            $mood_battery_value = BatterySetting::where('option_key', 'mood_battery_percentage')->first();
+            $points = (int) ($mood_battery_value ? $mood_battery_value->option_value : 10);
+            battery_credit_once_per_day($user, $points, 'mood', [
+                'mood_id' => $request->mood_id,
+                'mood_name' => $request->mood_name
+            ], $date);
 
-        $notification_type = "mood_update";
-        $extra_data = [
-            "mood_id"   => $request->mood_id,
-            "mood_name" => $request->mood_name,
-            "points"    => $request->point,
-            "type"      => "mood_update"
-        ];
-        $user_type = "user";
-        // Only send notification if user has notifications enabled
-        $checkUser = User::where('id', $user->id)
-            ->first();
+            $content = getNotificationContent('mood_update', [
+                'mood_name' => $request->mood_name,
+                'points'    => $request->point
+            ]);
 
-        if ($checkUser) {
-            // Get device token for this user
-            $device = DeviceToken::where('user_id', $checkUser->id)
-                ->whereNotNull('token')
+            $notification_type = "mood_update";
+            $extra_data = [
+                "mood_id"   => $request->mood_id,
+                "mood_name" => $request->mood_name,
+                "points"    => $request->point,
+                "type"      => "mood_update"
+            ];
+            $user_type = "user";
+            $checkUser = User::where('id', $user->id)
                 ->first();
 
-            if ($device) {
-                sendNotificationSender(
-                    $device->user_id,
-                    $content['title'],   // title
-                    $content['body'],    // body = title + description
-                    $notification_type,
-                    $extra_data,
-                    $user_type
-                );
+            if ($checkUser) {
+                $device = DeviceToken::where('user_id', $checkUser->id)
+                    ->whereNotNull('token')
+                    ->first();
+
+                if ($device) {
+                    sendNotificationSender(
+                        $device->user_id,
+                        $content['title'],
+                        $content['body'],
+                        $notification_type,
+                        $extra_data,
+                        $user_type
+                    );
+                }
             }
+        } catch (\Throwable $e) {
+            \Log::error('storeChildActivity extras failed after save', [
+                'child_id' => $user->id,
+                'mood_id' => $request->mood_id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         return ApiResponse::success(null, 'Child Mood stored successfully!');
@@ -2049,6 +2072,31 @@ $moodRing = collect($groupedByColor)
                 null,
                 $language === 'english' ? ucfirst($type) . ' added successfully!' : $msg
             );
+        }
+    }
+
+    private function decodeReferredVideo(mixed $value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (!is_string($value) || trim($value) === '') {
+            return [];
+        }
+        $decoded = json_decode($value, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function moodDateToString(mixed $date): ?string
+    {
+        if ($date === null || $date === '') {
+            return null;
+        }
+        try {
+            return Carbon::parse($date)->toDateString();
+        } catch (\Throwable $e) {
+            return null;
         }
     }
 }
