@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Content unavailable | Empowered Health</title>
     <meta name="robots" content="noindex">
+    <link rel="icon" type="image/png" href="{{ asset('assets/images/new.png') }}">
+    <link rel="shortcut icon" type="image/png" href="{{ asset('assets/images/new.png') }}">
+    <link rel="apple-touch-icon" href="{{ asset('assets/images/new.png') }}">
     <style>
         body { font-family: Karla, Roboto, sans-serif; margin: 0; background: #f4f6fb; color: #1b1b1b; }
         .wrap { max-width: 480px; margin: 80px auto; padding: 24px; background: #fff; border-radius: 12px; text-align: center; }

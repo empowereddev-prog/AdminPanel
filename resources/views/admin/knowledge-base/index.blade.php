@@ -48,9 +48,7 @@
                                 <th scope="col">Title Color</th>
                                 <th scope="col">User Type</th>
                                 <th scope="col">Status</th>
-                                @if (!empty($pre) && $pre->is_modify == 'yes')
-                                    <th scope="col">Action(s)</th>
-                                @endif
+                                <th scope="col">Action(s)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -146,14 +144,13 @@
                         name: 'status',
                         searchable: false,
                         orderable: false
+                    },
+                    {
+                        data: 'action',
+                        name: 'action',
+                        orderable: false,
+                        searchable: false
                     }
-                    @if (!empty($pre) && $pre->is_modify == 'yes')
-                        , {
-                            data: 'action',
-                            name: 'action',
-                            orderable: false
-                        }
-                    @endif
                 ]
             });
 
@@ -161,6 +158,43 @@
                 dataTable.ajax.reload(null, false);
             });
 
+            function copyShareUrl(url, onDone) {
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(url).then(onDone).catch(function() {
+                        fallbackCopy(url, onDone);
+                    });
+                    return;
+                }
+                fallbackCopy(url, onDone);
+            }
+
+            function fallbackCopy(url, onDone) {
+                var input = document.createElement('textarea');
+                input.value = url;
+                input.setAttribute('readonly', '');
+                input.style.position = 'fixed';
+                input.style.left = '-9999px';
+                document.body.appendChild(input);
+                input.select();
+                try {
+                    document.execCommand('copy');
+                    onDone();
+                } catch (e) {
+                    window.prompt('Copy this share link', url);
+                }
+                document.body.removeChild(input);
+            }
+
+            $('body').on('click', '.copy-article-link', function(e) {
+                e.preventDefault();
+                var url = $(this).data('url');
+                if (!url) return;
+                copyShareUrl(url, function() {
+                    if (window.toastr) {
+                        toastr.success('Share link copied');
+                    }
+                });
+            });
         });
 
 
