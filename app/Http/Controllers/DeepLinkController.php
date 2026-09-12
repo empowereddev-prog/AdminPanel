@@ -58,7 +58,7 @@ class DeepLinkController extends Controller
             'short_name' => 'Empowered',
             'start_url' => '/',
             'display' => 'browser',
-            'prefer_related_applications' => true,
+            'prefer_related_applications' => false,
             'related_applications' => [
                 [
                     'platform' => 'play',
@@ -120,7 +120,7 @@ class DeepLinkController extends Controller
                 'schemeUrl' => $scheme,
                 'androidIntent' => $androidIntent,
             ], $http)
-            ->header('Cache-Control', 'public, max-age=300');
+            ->header('Cache-Control', 'no-store');
     }
 
     protected function associationResponse(array $payload): Response
