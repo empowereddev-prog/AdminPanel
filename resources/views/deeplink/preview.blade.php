@@ -80,7 +80,7 @@
             <strong>Empowered Health</strong>
             <span id="smart-banner-sub">Get the app — free</span>
         </div>
-        <a class="sb-get" id="smart-banner-get" href="{{ $iosStoreApp ?? $iosStore }}">VIEW</a>
+        <a class="sb-get" id="smart-banner-get" href="{{ $iosStore }}">VIEW</a>
     </div>
     <article class="page">
         <div class="hero">
@@ -104,8 +104,8 @@
             @endif
             <div class="cta-row">
                 <a class="cta primary" id="open-app" href="{{ $schemeUrl }}">Open in app</a>
-                <a class="cta secondary" href="{{ $iosStore }}">App Store</a>
-                <a class="cta secondary" href="{{ $androidStore }}">Google Play</a>
+                <a class="cta secondary" href="{{ $iosStore }}" rel="noopener">App Store</a>
+                <a class="cta secondary" href="{{ $androidStore }}" rel="noopener">Google Play</a>
             </div>
             <p class="note">If the app is not installed, use App Store or Google Play, then open this link again. Sign in with the matching account (parent, staff, or child).</p>
         </div>
@@ -121,13 +121,10 @@
             var scheme = @json($schemeUrl);
             var intent = @json($androidIntent);
             var iosStore = @json($iosStore);
-            var iosStoreApp = @json($iosStoreApp ?? $iosStore);
             var androidStore = @json($androidStore);
-            var iosAppId = @json($iosAppId ?? '');
             var ua = navigator.userAgent || '';
             var isAndroid = /Android/i.test(ua);
             var isIOS = /iPhone|iPad|iPod/i.test(ua);
-            var isIOSSafari = isIOS && /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/i.test(ua);
             var dismissed = false;
             try { dismissed = sessionStorage.getItem('eh-smart-banner') === '1'; } catch (e) {}
 
@@ -142,7 +139,7 @@
                 setTimeout(function () {
                     document.removeEventListener('visibilitychange', onHide);
                     if (!hidden && document.visibilityState !== 'hidden' && Date.now() - started < 2500) {
-                        window.location.href = iosStoreApp || iosStore;
+                        window.location.href = iosStore;
                     }
                 }, 1200);
             }
@@ -173,11 +170,7 @@
                     if (sub) sub.textContent = 'Free · App Store';
                     if (getBtn) {
                         getBtn.textContent = 'VIEW';
-                        getBtn.setAttribute('href', iosStoreApp || iosStore);
-                        getBtn.addEventListener('click', function (e) {
-                            e.preventDefault();
-                            openIosAppThenStore();
-                        });
+                        getBtn.setAttribute('href', iosStore);
                     }
                 }
             }

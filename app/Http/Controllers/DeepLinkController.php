@@ -150,13 +150,18 @@ class DeepLinkController extends Controller
 
     protected function iosStoreUrl(): string
     {
-        $url = trim((string) config('deeplink.ios_store_url'));
         $id = $this->iosAppId();
-        if ($id !== '' && ($url === '' || $url === 'https://apps.apple.com' || !preg_match('/id' . preg_quote($id, '/') . '/', $url))) {
-            return 'https://apps.apple.com/app/id' . $id;
+        $configured = trim((string) config('deeplink.ios_store_url'));
+
+        if ($id === '') {
+            return $configured !== '' ? $configured : 'https://apps.apple.com';
         }
 
-        return $url !== '' ? $url : 'https://apps.apple.com';
+        if ($configured !== '' && preg_match('#^https://apps\.apple\.com/.+id' . preg_quote($id, '#') . '#i', $configured)) {
+            return $configured;
+        }
+
+        return 'https://apps.apple.com/app/empowered-health/id' . $id;
     }
 
     protected function iosStoreAppUrl(string $httpsUrl): string
