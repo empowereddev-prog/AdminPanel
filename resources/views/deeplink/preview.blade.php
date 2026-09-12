@@ -22,6 +22,8 @@
         <meta name="apple-itunes-app" content="app-id={{ $iosAppId }}, app-argument={{ $item['canonical_url'] }}">
     @endif
     <link rel="manifest" href="{{ url('/manifest.webmanifest') }}">
+    <link rel="icon" type="image/png" href="{{ $appIcon }}">
+    <link rel="shortcut icon" type="image/png" href="{{ $appIcon }}">
     <link rel="apple-touch-icon" href="{{ $appIcon }}">
     <link href="https://fonts.googleapis.com/css?family=Karla:400,700|Roboto:400,500" rel="stylesheet">
     <style>
@@ -86,7 +88,10 @@
                 <img src="{{ $item['banner'] }}" alt="">
             @endif
         </div>
-        <p class="brand">Empowered Health · {{ ucfirst($item['type'] ?? 'article') }}</p>
+        @php
+            $previewKind = ($item['type'] ?? 'article') === 'podcast' ? 'Video webinar' : 'Article';
+        @endphp
+        <p class="brand">Empowered Health · {{ $previewKind }}</p>
         <div class="body">
             <h1>{{ $item['title'] }}</h1>
             <p class="meta">
@@ -104,7 +109,7 @@
             </div>
             <p class="note">If the app is not installed, use App Store or Google Play, then open this link again. Sign in with the matching account (parent, staff, or child).</p>
         </div>
-        <div class="footer">Preview only — the full article opens in the Empowered Health app.</div>
+        <div class="footer">Preview only — the full {{ strtolower($previewKind) }} opens in the Empowered Health app.</div>
     </article>
     <script>
         (function () {

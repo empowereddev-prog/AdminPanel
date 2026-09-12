@@ -26,14 +26,26 @@
         var input = document.getElementById('deeplink-canonical-{{ $deeplinkType }}-{{ (int) $shareId }}');
         if (!btn || !input) return;
         btn.addEventListener('click', function () {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(input.value);
-            } else {
-                input.select();
-                document.execCommand('copy');
+            var url = input.value;
+            function markCopied() {
+                btn.textContent = 'Copied';
+                setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
             }
-            btn.textContent = 'Copied';
-            setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(url).then(markCopied).catch(function () {
+                    input.select();
+                    document.execCommand('copy');
+                    markCopied();
+                });
+                return;
+            }
+            input.select();
+            try {
+                document.execCommand('copy');
+            } catch (e) {
+                window.prompt('Copy this share link', url);
+            }
+            markCopied();
         });
     })();
 </script>

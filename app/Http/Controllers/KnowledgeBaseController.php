@@ -131,7 +131,7 @@ class KnowledgeBaseController extends Controller
                                     </span>
                                 </a>
 
-
+                            ' . $this->webinarShareLink($row) . '
 
                             <a href="' . url("knowledge-base/" . $row->id . "/edit") . '"
                             title="Edit"
@@ -238,6 +238,11 @@ class KnowledgeBaseController extends Controller
             } else {
                 return DataTables::of($ageGroup)
                     ->addIndexColumn()
+                    ->addColumn('action', function ($row) {
+                        return '<div class="d-flex align-items-center gap-2" style="white-space: nowrap;">'
+                            . $this->webinarShareLink($row)
+                            . '</div>';
+                    })
                     ->editColumn('title', function ($row) {
                         $plainTexttitle = strip_tags($row->title);
                         $truncatedtitle = substr($plainTexttitle, 0, 25);
@@ -306,7 +311,7 @@ class KnowledgeBaseController extends Controller
                     ->editColumn('status', function ($row) {
                         return "<span class='sts $row->status'>" . ucfirst($row->status) . "</span>";
                     })
-                    ->rawColumns(['category', 'like_count', 'color', 'title_color', 'title', 'description', 'age_range',  'status', 'total_likes', 'total_dislikes', 'total_favourite'])
+                    ->rawColumns(['action', 'category', 'like_count', 'color', 'title_color', 'title', 'description', 'age_range',  'status', 'total_likes', 'total_dislikes', 'total_favourite'])
                     ->make(true);
             }
         }
@@ -731,5 +736,17 @@ class KnowledgeBaseController extends Controller
             ->pluck('user');
 
         return response()->json(['users' => $users]);
+    }
+
+    private function webinarShareLink(VideoContent $row): string
+    {
+        $shareUrl = e(\App\Services\DeepLinkService::canonicalUrl('podcast', (int) $row->id));
+        $title = ($row->status ?? '') === 'active'
+            ? 'Copy share link'
+            : 'Copy share link (unpublished until Active)';
+
+        return '<a href="javascript:void(0);" class="copy-article-link" data-url="' . $shareUrl
+            . '" title="' . e($title) . '" style="font-size:18px; padding:4px 6px;">'
+            . '<i class="mdi mdi-share-variant"></i></a>';
     }
 }
