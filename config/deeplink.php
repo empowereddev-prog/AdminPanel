@@ -33,6 +33,8 @@ return [
 
     'scheme' => env('DEEPLINK_SCHEME', 'empowered'),
 
+    'web_fallback_url' => rtrim(env('DEEPLINK_WEB_FALLBACK_URL', 'https://empoweredhealth.asia'), '/'),
+
     'types' => ['article', 'podcast'],
 
 ];
