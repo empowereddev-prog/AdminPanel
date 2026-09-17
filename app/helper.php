@@ -458,6 +458,20 @@ function ___otp_code()
 
 function ___sms_sender($message, $recipients, $language = 'english')
 {
+    // Without this guard a blank or missing Twilio credential makes the client
+    // constructor raise a TypeError - an Error, not an Exception, so the catch
+    // below never saw it and the throw escaped into the caller. That turned a
+    // configuration gap into a 500 on registration rather than an SMS that
+    // quietly did not go out.
+    if (empty(config('services.twilio.sid')) || empty(config('services.twilio.token'))) {
+        Log::warning('SMS skipped: Twilio is not configured');
+
+        return response()->json([
+            'success' => false,
+            'error' => 'SMS transport is not configured.',
+        ], 500);
+    }
+
     try {
         $client = new Client(
             config('services.twilio.sid'),
@@ -478,7 +492,11 @@ function ___sms_sender($message, $recipients, $language = 'english')
                 ? 'OTP sent successfully!'
                 : 'OTP 发送成功',
         ], 200);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
+        // Throwable, not Exception: the Twilio SDK raises TypeError and
+        // ConfigurationException for malformed credentials, and neither is an
+        // Exception. A failed SMS must never take the surrounding request down.
+        Log::error('SMS send failed', ['error' => $e->getMessage()]);
 
         return response()->json([
             'success' => false,

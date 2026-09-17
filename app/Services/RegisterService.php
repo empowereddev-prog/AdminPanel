@@ -8,6 +8,9 @@ use App\Models\RideBooking;
 use App\Models\School;
 use App\Models\Subscription;
 use App\Models\Transaction;
+use App\Models\SchoolParentInvite;
+use App\Services\School\SchoolRosterService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Crypt;
@@ -36,6 +39,22 @@ class RegisterService
                     'message' => $language == 'english'
                         ? 'The school code you entered is not valid. Please check and try again.'
                         : '您输入的学校代码无效，请检查后再试。',
+                    'user' => null,
+                ];
+            }
+
+            // Knowing the code is no longer enough: the address has to be one
+            // the school named. Returns allowed immediately - and without
+            // touching the database - when the school has not opted in, so
+            // every existing school keeps behaving exactly as it does today.
+            $roster = (new SchoolRosterService())->checkJoin($school, $data['email'], $language);
+
+            if (!$roster['allowed']) {
+                (new SchoolRosterService())->recordOffRosterAttempt($school, $data['email'], $roster['reason']);
+
+                return [
+                    'status' => false,
+                    'message' => $roster['message'],
                     'user' => null,
                 ];
             }
@@ -69,17 +88,48 @@ class RegisterService
                     'message' => $language == 'english' ? 'The phone number or email is already registered.' : '该电话号码或电子邮件已经注册。',
                     'user' => null,
                 ];
-            } else {
+            }
+
+            // The lookup above matches on email OR phone_no, while the roster
+            // check keys on email alone. Without this guard a genuine roster
+            // member could submit their own rostered address together with
+            // somebody else's phone number, pass the roster check, and have the
+            // update below silently overwrite that victim's unverified account -
+            // password and school_id included. Reusing the existing
+            // "already registered" copy keeps the v1 string contract and avoids
+            // adding an account-enumeration oracle.
+            //
+            // Scoped to $school so ordinary non-school registration is untouched.
+            if ($school
+                && SchoolParentInvite::normaliseEmail($existingUser->email)
+                    !== SchoolParentInvite::normaliseEmail($data['email'])) {
+                return [
+                    'status' => false,
+                    'message' => $language == 'english' ? 'The phone number or email is already registered.' : '该电话号码或电子邮件已经注册。',
+                    'user' => null,
+                ];
+            }
+        }
+
+        // One transaction around the account, its subscription and the roster
+        // claim. This method had none, which is what let the claim and the user
+        // row drift apart under concurrency - the claim takes a row lock, and
+        // that lock is only meaningful inside a transaction.
+        $user = DB::transaction(function () use ($existingUser, $user_data, $school) {
+            if ($existingUser) {
                 // Update existing unverified user
                 $existingUser->update($user_data);
                 $user = $existingUser;
+            } else {
+                $user = User::create($user_data);
             }
-        } else {
 
-            // ✅ Create subscription if registered via school code
-            $user = User::create($user_data);
-
-            if ($school) {
+            // Subscription issuance stays exactly where it was: the NEW-user
+            // branch only. Hoisting the transaction around both branches would
+            // otherwise have started granting a subscription to a resumed
+            // unverified account that never had one - a real change in who gets
+            // a free entitlement, and not part of this work.
+            if ($school && !$existingUser) {
 
                 $subscriptionType = $school->subscription_type; // monthly / quarterly / yearly
                 $startDate = Carbon::now();
@@ -120,8 +170,22 @@ class RegisterService
                     ]);
                 }
             }
-        }
 
+            // Bind the roster entry to this account - inside the same
+            // transaction, under the invite row lock - so a leaked rostered
+            // address cannot be claimed by a second person. A no-op while the
+            // school has not opted in. It has to run on BOTH branches above:
+            // the existing-user branch never reaches the subscription block.
+            if ($school) {
+                (new SchoolRosterService())->claim($school, $user);
+            }
+
+            return $user;
+        });
+
+        // Mail and SMS stay outside the transaction, matching the convention
+        // ChildController::addChild documents - a slow or failing SMTP call
+        // must not roll back an account that was created successfully.
         $encryptedEmail = Crypt::encryptString($user->email);
 
         // Send email verification link

@@ -11,6 +11,8 @@ use App\Models\Child;
 use App\Models\DeviceToken;
 use App\Models\Role;
 use App\Models\School;
+use App\Services\School\SchoolRosterService;
+use App\Support\ApiVersion;
 use App\Models\Setting;
 use App\Models\TempUser;
 use App\Models\User;
@@ -1086,9 +1088,29 @@ class HomeApiController extends Controller
                     ? 'The school code you entered is not valid. Please check and try again.'
                     : '您输入的学校代码无效，请检查后再试。', 200);
         }
-        $updateData = [
-            'name' => $request->name,
-        ];
+        $validator = Validator::make($request->all(), [
+            // No min length: this endpoint never validated name before, and a
+            // two-character name is ordinary in Chinese. The rules here only
+            // reject what the column cannot store or what is not a string.
+            'name' => 'sometimes|string|max:191',
+            'school_code' => 'sometimes|string|max:50',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::error($validator->errors()->first(), 422);
+        }
+
+        $updateData = [];
+
+        // Only write name when one was actually sent. This used to be
+        // unconditional, so any call that omitted the field wiped the parent's
+        // name to null.
+        if ($request->filled('name')) {
+            $updateData['name'] = $request->name;
+        }
+
+        $school = null;
+
         if ($request->filled('school_code')) {
             $school = School::where('school_code', $request->school_code)
                 ->where('status', 'active')
@@ -1098,9 +1120,38 @@ class HomeApiController extends Controller
                         ? 'Invalid school code. Please check and try again.'
                         : '学校代码无效，请检查后再试。', 422);
             }
+
+            // A parent already attached to a school cannot hop to another one
+            // by typing its code. This is the second door into a school, and it
+            // had no check of any kind.
+            if (!empty($user->school_id) && (int) $user->school_id !== (int) $school->id) {
+                return ApiResponse::error($language === 'english'
+                        ? 'Your account is already linked to a school. Please contact support to change it.'
+                        : '您的账户已关联学校。如需变更，请联系客服。',
+                    ApiVersion::isV2($request) ? 409 : 422);
+            }
+
+            $roster = (new SchoolRosterService())->checkJoin($school, $user->email, $language);
+
+            if (!$roster['allowed']) {
+                (new SchoolRosterService())->recordOffRosterAttempt($school, $user->email, $roster['reason']);
+
+                return ApiResponse::error($roster['message'], ApiVersion::isV2($request) ? 403 : 422);
+            }
+
             $updateData['school_id'] = $school->id;
         }
-        $user->update($updateData);
+
+        DB::transaction(function () use ($user, $updateData, $school) {
+            if ($updateData !== []) {
+                $user->update($updateData);
+            }
+
+            if ($school) {
+                (new SchoolRosterService())->claim($school, $user);
+            }
+        });
+
         return ApiResponse::success(null, $language === 'english'
                 ? 'Profile updated successfully!'
                 : '个人资料更新成功！', 200);

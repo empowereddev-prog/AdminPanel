@@ -86,7 +86,13 @@
 
                                     <div class="col-md-5">
                                         <div class="form-group">
-                                            <label for="student_excel">Import Student Data (Excel) (Optional)</label>
+                                            {{-- This import creates PARENT accounts (user_role_id 3), one per row.
+                                                 Children are created later by the parents themselves in the app. --}}
+                                            <label for="student_excel">Import Parent List (Excel) (Optional)</label>
+                                            <div class="text-muted small mb-2">
+                                                Creates one parent account per row and emails each parent their
+                                                sign-in details. Children are added by parents in the app.
+                                            </div>
 
                                             <div class="input-group">
                                                 <!-- Text field to show the uploaded file name -->
@@ -125,13 +131,47 @@
 
                                     <div class="col-md-5">
                                         <div class="form-group">
-                                            <label for="exampleFormControlName">Max Limit</label>
+                                            <label for="exampleFormControlName">Parent Limit (Optional)</label>
                                             <input type="text" class="form-control" name="max_limit"
                                                 id="exampleFormControlName" placeholder="Enter max limit"
                                                 value="{{ old('max_limit') }}" maxlength="100">
+                                            <small class="text-muted">Leave blank for unlimited. Caps parent accounts only; teachers and children are not counted.</small>
                                             @if ($errors->has('max_limit'))
                                                 <div class="text-danger small mt-1">
                                                     {{ $errors->first('max_limit') }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-5">
+                                        <div class="form-group">
+                                            <label for="child_seat_limit">Child Places</label>
+                                            <input type="number" min="1" class="form-control" name="child_seat_limit"
+                                                id="child_seat_limit" placeholder="e.g. 200"
+                                                value="{{ old('child_seat_limit') }}">
+                                            <small class="text-muted">Leave blank for unlimited. Counts children created by this school's parents.</small>
+                                            @if ($errors->has('child_seat_limit'))
+                                                <div class="text-danger small mt-1">
+                                                    {{ $errors->first('child_seat_limit') }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-5">
+                                        <div class="form-group">
+                                            <label for="per_parent_child_limit">Children Per Parent</label>
+                                            {{-- Pre-filled with 3 for NEW schools only. The column itself is
+                                                 null-defaulted on purpose: a database default would cap every
+                                                 existing school the moment the migration ran. --}}
+                                            <input type="number" min="1" max="50" class="form-control" name="per_parent_child_limit"
+                                                id="per_parent_child_limit" placeholder="e.g. 3"
+                                                value="{{ old('per_parent_child_limit', 3) }}">
+                                            <small class="text-muted">Leave blank for unlimited within the school's total.</small>
+                                            @if ($errors->has('per_parent_child_limit'))
+                                                <div class="text-danger small mt-1">
+                                                    {{ $errors->first('per_parent_child_limit') }}
                                                 </div>
                                             @endif
                                         </div>

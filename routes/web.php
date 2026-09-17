@@ -237,6 +237,17 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
         [SchoolController::class, 'exportSchoolUsers']
     )->name('school.export.users');
     Route::delete('delete-school-user/{id}', [SchoolController::class, 'destroySchoolUser'])->name('students.delete');
+
+    // Parent roster. No new admin menu id - these live on the existing School
+    // Management screen (menu 3) and authorise against it inside the controller.
+    Route::get('school/{id}/roster', [SchoolController::class, 'roster'])->name('school.roster.data');
+    Route::post('school/{id}/import/parents', [SchoolController::class, 'importParents'])->name('school.import.parents');
+    Route::post('school/{id}/import/staff', [SchoolController::class, 'importStaff'])->name('school.import.staff');
+    Route::get('school/{id}/teachers', [SchoolController::class, 'teachers'])->name('school.teachers.data');
+    Route::get('school/{id}/children', [SchoolController::class, 'children'])->name('school.children.data');
+    Route::post('school/roster/{invite}/revoke', [SchoolController::class, 'revokeInvite'])->name('school.roster.revoke');
+    Route::post('school/roster/{invite}/resend', [SchoolController::class, 'resendInvite'])->name('school.roster.resend');
+    Route::post('school/{id}/toggle-flag/{flag}', [SchoolController::class, 'toggleSchoolFlag'])->name('school.flag.toggle');
     Route::get('settings', [GeneralSettingsController::class, 'editSystemSetting'])->name('settings.edit');
     Route::PUT('settings/update', [GeneralSettingsController::class, 'updateSystemSetting'])->name('settings.update');
     Route::get('/download-sample-excel', [SchoolController::class, 'downloadSampleExcel'])->name('download.sample.excel');

@@ -163,7 +163,7 @@
                 if (result.isConfirmed) {
                     $.ajax({
                         type: "delete",
-                        url: '{{ url('delete-school') }}' + "/" + id,
+                        url: '/delete-school/' + id,
                         headers: {
                             'X-CSRF-TOKEN': csrfToken // Include the CSRF token in the request headers
                         },

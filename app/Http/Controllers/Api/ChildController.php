@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ApiHitLog;
 use App\Support\ApiResponse;
+use App\Support\ApiVersion;
+use App\Services\School\SchoolSeatService;
 use Illuminate\Support\Facades\DB;
 use App\Models\Child;
 use App\Models\User;
@@ -87,7 +89,20 @@ class ChildController extends Controller
         // getProfile derives the battery percentage from the ledger, so losing
         // the event while users.battery_points is set to 100 silently diverges
         // the two. The push notification stays outside the transaction.
-        $child = DB::transaction(function () use ($request, $birthDate, $data) {
+        $child = DB::transaction(function () use ($request, $birthDate, $data, $user, $language) {
+            // The seat check sits INSIDE this transaction, and takes a row lock
+            // on the school, so two concurrent add-child calls cannot both read
+            // "one place left" and both create a child. A consumer parent has
+            // no school_id and skips the whole thing.
+            $seat = (new SchoolSeatService())->checkChildSeat($user, $language ?? 'english');
+
+            if (!$seat['allowed']) {
+                // Returned rather than thrown: an exception here would surface
+                // as a 500, while every other refusal this endpoint makes is a
+                // 201 envelope with status:false, which the shipped app reads.
+                return $seat;
+            }
+
             $child = User::create([
                 'name' => $request->name,
                 'username' => $request->username,
@@ -113,6 +128,18 @@ class ChildController extends Controller
 
             return $child;
         });
+
+        if (is_array($child)) {
+            // Seat refusal. The closure returned before reaching User::create,
+            // so the transaction commits empty - no child row, no battery event.
+            return ApiResponse::error(
+                $child['message'],
+                ApiVersion::isV2($request) ? 409 : 201,
+                null,
+                (object) [],
+                ['child' => []]
+            );
+        }
 
         /** 🔔 Send notification of 100% battery */
         $content = getNotificationContent('child_add', [
@@ -631,6 +658,23 @@ class ChildController extends Controller
             $user->school_code = null;
         }
 
+        // Additive only: a new `seats` key, and only for a parent attached to a
+        // school. It lets the app disable "Add child" before the call fails
+        // rather than after. Null limits mean unlimited, which is what every
+        // school looks like until an admin sets a cap. Reuses $school above, so
+        // this costs one count query and no extra school lookup.
+        $user->seats = null;
+        if ($school && (int) $user->user_role_id === 3) {
+            $summary = (new SchoolSeatService())->summaryForSchool($school);
+            $user->seats = [
+                'child_seat_limit' => $summary['child_seat_limit'],
+                'child_seats_used' => $summary['child_seats_used'],
+                'child_seats_remaining' => $summary['child_seats_remaining'],
+                'per_parent_child_limit' => $summary['per_parent_child_limit'],
+                'my_children' => $user->child()->count(),
+            ];
+        }
+
         return ApiResponse::success(
             $user,
             $language === 'english'
@@ -656,7 +700,20 @@ class ChildController extends Controller
         if ($child) {
             $language = $child->language ?? $language;
 
+            $parentSchoolId = $child->parent?->school_id;
+
             $child->delete();
+
+            // A soft delete frees the seat automatically, because the seat count
+            // filters on deleted_at. Logged so that a school cycling children to
+            // stay under its cap is visible rather than invisible.
+            if ($parentSchoolId) {
+                \Log::info('School child seat released', [
+                    'school_id' => $parentSchoolId,
+                    'parent_id' => $child->parent_id,
+                    'child_id' => $child->id,
+                ]);
+            }
 
             return ApiResponse::success(
                 null,

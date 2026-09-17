@@ -28,6 +28,19 @@ class Kernel extends ConsoleKernel
         // $schedule->command('subscriptions:expire')->daily();
 
         $schedule->command('audit:prune')->dailyAt('00:00');
+
+        // Drains the queue. The school import dispatches SendStudentSignupMail
+        // rather than mailing inline - sending N credential emails inside one
+        // HTTP request times out a large import - and this deployment runs no
+        // worker process. Without this the jobs would sit in the table unsent,
+        // which is the same outcome as the missing template, reached a
+        // different way. --stop-when-empty exits as soon as the queue drains;
+        // --max-time keeps a run from colliding with the next minute's.
+        //
+        // If a supervisor-managed `queue:work` is introduced later, remove this.
+        $schedule->command('queue:work --stop-when-empty --max-time=55 --tries=3')
+            ->everyMinute()
+            ->withoutOverlapping();
     }
 
     /**

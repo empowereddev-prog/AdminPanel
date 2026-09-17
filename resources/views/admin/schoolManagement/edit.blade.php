@@ -77,12 +77,46 @@
 
                                <div class="col-md-6 col-sm-12">
                                         <div class="form-group">
-                                            <label for="limit">Max Limit</label>
+                                            <label for="limit">Parent Limit (Optional)</label>
                                             <input type="text" class="form-control" name="max_limit"
                                                 id="exampleFormControlName" placeholder="Enter max limit" value="{{$data->max_limit ? $data->max_limit : ''}}" >
+                                            <small class="text-muted">Leave blank for unlimited. Caps parent accounts only; teachers and children are not counted.</small>
                                             @if ($errors->has('max_limit'))
                                                 <div class="text-danger small mt-1">
                                                     {{ $errors->first('max_limit') }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-sm-12">
+                                        <div class="form-group">
+                                            <label for="child_seat_limit">Child Places</label>
+                                            <input type="number" min="1" class="form-control" name="child_seat_limit"
+                                                id="child_seat_limit" placeholder="Leave blank for unlimited"
+                                                value="{{ $data->child_seat_limit }}">
+                                            <small class="text-muted">
+                                                Currently used: {{ $childSeatsUsed ?? 0 }}. Lowering this below the
+                                                current figure keeps existing children and only blocks new ones.
+                                            </small>
+                                            @if ($errors->has('child_seat_limit'))
+                                                <div class="text-danger small mt-1">
+                                                    {{ $errors->first('child_seat_limit') }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-sm-12">
+                                        <div class="form-group">
+                                            <label for="per_parent_child_limit">Children Per Parent</label>
+                                            <input type="number" min="1" max="50" class="form-control" name="per_parent_child_limit"
+                                                id="per_parent_child_limit" placeholder="Leave blank for unlimited"
+                                                value="{{ $data->per_parent_child_limit }}">
+                                            <small class="text-muted">Leave blank for unlimited within the school's total.</small>
+                                            @if ($errors->has('per_parent_child_limit'))
+                                                <div class="text-danger small mt-1">
+                                                    {{ $errors->first('per_parent_child_limit') }}
                                                 </div>
                                             @endif
                                         </div>
@@ -93,7 +127,11 @@
                                 <div class="col-md-8">
                                     <div class="form-group">
                                         @php $filePath = 'uploads/' . $data->id . '_sample_students.xlsx'; @endphp
-                                        <label for="student_excel">Upload School User Excel(Optional)</label>
+                                        {{-- Creates PARENT accounts, not children. --}}
+                                        <label for="student_excel">Upload Parent List Excel (Optional)</label>
+                                        <div class="text-muted small mb-2">
+                                            One parent account per row; each is emailed their sign-in details.
+                                        </div>
                                         <div class="input-group">
                                             <!-- <input type="text" class="form-control" id="uploaded_file_name" value="{{ Storage::exists($filePath) ? $data->id . '_sample_students.xlsx' : '' }}" readonly> -->
                                              <input type="text"
@@ -117,7 +155,10 @@
                                 <div class="col-md-8">
                                     <div class="form-group">
                                         @php $staffPath = 'uploads/' . $data->id . '_sample_staff.xlsx'; @endphp
-                                        <label for="staff_excel">Upload Staff Details Excel(Optional)</label>
+                                        <label for="staff_excel">Upload Staff (Teacher) Excel (Optional)</label>
+                                        <div class="text-muted small mb-2">
+                                            Creates teacher accounts. These do not consume parent or child places.
+                                        </div>
                                         <div class="input-group">
                                             <!-- <input type="text" class="form-control" id="uploaded_staff_file_name" value="{{ Storage::exists($staffPath) ? $data->id . '_sample_staff.xlsx' : '' }}" readonly> -->
                                             <input type="text"
