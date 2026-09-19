@@ -123,7 +123,7 @@ class DeepLinkService
             'status' => self::STATUS_OK,
             'type' => $type,
             'id' => $id,
-            'title' => $includeTeaser ? ($model->title ?: 'Empowered Health') : null,
+            'title' => $includeTeaser ? ($model->title ?: 'EmpowerED Health') : null,
             'teaser' => $includeTeaser ? $this->teaser($model->description ?? '') : null,
             'banner' => $includeTeaser ? $this->bannerUrl($model) : null,
             'user_type' => $audience,

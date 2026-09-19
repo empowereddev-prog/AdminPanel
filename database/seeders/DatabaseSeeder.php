@@ -33,6 +33,7 @@ class DatabaseSeeder extends Seeder
                 StaticContentSeeder::class,
                 AdminOtpEmailTemplateSeeder::class,
                 SchoolEmailTemplateSeeder::class,
+                AccountEmailTemplateSeeder::class,
             ]);
 
     }

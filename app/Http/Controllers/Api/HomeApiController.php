@@ -917,9 +917,13 @@ class HomeApiController extends Controller
             foreach ($children as $child) {
                 $child->delete();
             }
+            // Every token the delete_account template declares has to be here.
+            // ___mail_sender resolves an unsupplied token to '', so a gap does
+            // not fail loudly - it silently drops the value out of the copy.
             $emailData = [
                 'name' => $user->name,
                 'email' => $user->email,
+                'year' => (string) date('Y'),
             ];
             ___mail_sender($user->email, 'delete_account', $emailData, $language);
             DeviceToken::where('user_id', $user->id)->delete();
