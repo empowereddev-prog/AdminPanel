@@ -258,10 +258,11 @@ class PreDeployFixesTest extends TestCase
         $this->assertDatabaseMissing('schools', ['school_code' => $code]);
     }
 
-    /** A6 - a real purchase stays on the report even once the buyer joins a school. */
-    public function test_a_paid_purchase_by_a_school_parent_is_still_listed(): void
+    /** A6 - the school is the payer of record, so its parents get no line of their own. */
+    public function test_a_school_parents_purchase_is_not_listed_separately(): void
     {
-        $school = School::factory()->create(['name' => 'Paid Parent School ' . uniqid()]);
+        $school = School::factory()->create(['name' => 'Paid Parent School ' . uniqid(), 'price' => 120.00]);
+        (new SchoolContractService())->recordOnCreate($school);
         $parent = User::factory()->parent()->inSchool($school)->create(['name' => 'Paying Parent ' . uniqid()]);
 
         Subscription::create([
@@ -282,7 +283,16 @@ class PreDeployFixesTest extends TestCase
             ->get(route('payment.history_index'), ['X-Requested-With' => 'XMLHttpRequest'])
             ->json('data') ?? []);
 
-        $this->assertContains($parent->name, $rows->pluck('user_name')->all(), 'A paid IAP row must survive the school filter.');
+        $this->assertNotContains(
+            $parent->name,
+            $rows->pluck('user_name')->all(),
+            'A parent who belongs to a school must not appear as a payment line.'
+        );
+        $this->assertContains(
+            $school->name,
+            $rows->pluck('user_name')->all(),
+            'The school contract row is the payment line for that revenue.'
+        );
     }
 
     /** A7 - a lapsed personal plan must not block the school's entitlement. */

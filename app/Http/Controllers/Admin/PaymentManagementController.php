@@ -6,11 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\PermissionUser;
 use App\Models\SchoolSubscription;
 use App\Models\Subscription;
+use App\Services\Payment\PaymentHistoryQuery;
 use Auth;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Yajra\Datatables\Datatables;
 
 class PaymentManagementController extends Controller
@@ -89,44 +89,9 @@ class PaymentManagementController extends Controller
         return $pdf->stream('Invoice_Payment_History_' . $data->subscription_type_id . '_' . now()->format('d-m-Y') . '.pdf');
     }
 
-    /**
-     * Consumer IAP (parent has no school_id) union school contracts.
-     * School-parent entitlement grants are excluded.
-     */
     private function paymentHistoryQuery()
     {
-        // Exclude the zero-price school entitlement grants, not school users.
-        // Filtering on users.school_id also hid genuine App Store purchases by
-        // any parent who later joined a school, so real revenue vanished from
-        // the report. grantParentEntitlement() always writes price '0' and a
-        // real IAP purchase never does, so the price is the discriminator.
-        // The column is varchar, hence the explicit cast.
-        $iap = DB::table('subscriptions')
-            ->leftJoin('users', 'subscriptions.user_id', '=', 'users.id')
-            ->whereRaw('CAST(subscriptions.price AS DECIMAL(10,2)) > 0')
-            ->select([
-                DB::raw("CONCAT('iap-', subscriptions.id) as payment_key"),
-                'users.name as payer_name',
-                'subscriptions.subscription_type',
-                'subscriptions.price',
-                'subscriptions.start_date',
-                'subscriptions.status',
-                'subscriptions.created_at',
-            ]);
-
-        $schools = DB::table('school_subscriptions')
-            ->join('schools', 'school_subscriptions.school_id', '=', 'schools.id')
-            ->select([
-                DB::raw("CONCAT('sch-', school_subscriptions.id) as payment_key"),
-                'schools.name as payer_name',
-                'school_subscriptions.subscription_type',
-                'school_subscriptions.price',
-                'school_subscriptions.start_date',
-                'school_subscriptions.status',
-                'school_subscriptions.created_at',
-            ]);
-
-        return DB::query()->fromSub($iap->unionAll($schools), 'payment_rows');
+        return (new PaymentHistoryQuery())->build();
     }
 
     private function applyFilters($query, $request)
@@ -198,9 +163,11 @@ class PaymentManagementController extends Controller
             return null;
         }
 
-        // Mirrors the list query above: a school entitlement grant is not a
-        // payment. Keyed on price so a visible row never 404s when opened.
-        if ((float) $row->price <= 0) {
+        // Mirrors the list query above, so a row that is hidden from the list
+        // cannot be reached by hand-crafting the key in the view/download URL.
+        if ((float) $row->price <= 0
+            || $row->source === 'school_grant'
+            || ($row->user && $row->user->school_id)) {
             return null;
         }
 

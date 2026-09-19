@@ -238,8 +238,35 @@ The `jobs` table already exists (`2025_05_06_150335_create_jobs_table`).
 | `uploadFileMatchesExisting()` compares an ETag via one `HeadObject` | It streamed the whole existing S3 object back through PHP to hash it; a large re-upload outran `max_execution_time` |
 | `SchoolController::store()` deletes the school on every abort | A wrong spreadsheet header left an orphan row, so the admin could never re-create that school — name and code were "already taken" |
 | `withoutOverlapping(2)` | One killed `queue:work` silenced all mail for 24 hours |
-| Payment History filters on price, not `users.school_id` | Genuine App Store purchases by parents who later joined a school vanished from the revenue report |
+| Payment History filters on price, not `users.school_id` | Genuine App Store purchases by parents who later joined a school vanished from the revenue report — **superseded**, see below |
 | Entitlement check scoped to a live subscription | A parent with a lapsed personal plan got no entitlement when their school imported them |
+
+---
+
+## 5a. Payment History now excludes every school parent (supersedes the row above)
+
+The price-only rule above could not hide the parents onboarded before the
+`SchoolController` import loops were commented out: that code stamped the real
+retail price (13.49 / 33.81 / 101.63) on each imported parent, so those rows
+passed `price > 0` and kept appearing as parent purchases.
+
+`subscriptions.source` (`iap` | `school_grant`) now records the origin instead
+of inferring it. Migration `2026_09_19_100000_add_source_to_subscriptions_table`
+adds the column and backfills legacy rows where the user has a `school_id` and
+the subscription carries no `transaction_id`/`receipt` — a verified App Store
+purchase always has both, a grant never does.
+
+Payment History excludes any parent with a `school_id`, plus anything marked
+`school_grant`. The school's `school_subscriptions` row is the single payment
+line for that revenue. **Known trade-off:** a parent who bought in-app and later
+joined a school no longer shows a separate line — this is deliberate, and
+`source` keeps the distinction in data if the rule is ever narrowed.
+
+Check the backfill before trusting the report:
+
+```bash
+php artisan tinker --execute="echo App\\Models\\Subscription::selectRaw('source, count(*) c')->groupBy('source')->get();"
+```
 
 ---
 

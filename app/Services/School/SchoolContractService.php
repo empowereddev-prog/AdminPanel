@@ -105,6 +105,9 @@ class SchoolContractService
             'end_date' => $end->toDateString(),
             'currency' => 'SGD',
             'status' => 'Successful',
+            // The durable marker. Price stays 0 as well so a raw query written
+            // against the old assumption still behaves.
+            'source' => 'school_grant',
             'price' => '0',
         ]);
     }
