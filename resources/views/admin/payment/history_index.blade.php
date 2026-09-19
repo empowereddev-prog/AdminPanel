@@ -144,7 +144,6 @@
                         searchable: false,
                         orderable: false
                     },
-                      { data: 'id', name: 'id', visible: false }
                 ],
                 // order: [[7, 'desc']],
                 // columnDefs: [{
@@ -224,7 +223,6 @@
                         searchable: false,
                         orderable: false
                     },
-                      { data: 'id', name: 'id', visible: false }
                 ],
                 // order: [[8, 'desc']],
                 // columnDefs: [{

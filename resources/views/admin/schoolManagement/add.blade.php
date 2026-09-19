@@ -224,7 +224,6 @@
         </div>
     </div>
     <script src="https://cdn.ckeditor.com/ckeditor5/23.0.0/classic/ckeditor.js"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js" type="text/javascript"></script>
 
     <script>
         document.getElementById("student_excel").addEventListener("change", function() {

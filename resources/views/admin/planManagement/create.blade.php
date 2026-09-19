@@ -65,13 +65,21 @@
                             <div class="col-sm-2">
                                 <label for="exampleFormControlFile1">Phone</label>
                                 <select name="code" id="code" class="form-control select2 w-45">
-                                    @foreach ($countrycode as $code)
+                                    @forelse ($countrycode as $code)
                                         <option value="{{ $code->country_code }}"
                                             {{ old('code', request('code', '+65')) == $code->country_code ? 'selected' : '' }}>
                                             {{ $code->country }} ({{ $code->country_code }})
                                         </option>
-                                    @endforeach
+                                    @empty
+                                        {{-- An unseeded countries table would otherwise render an empty,
+                                            required select that looks perfectly usable and can never be
+                                            satisfied. Say so instead. --}}
+                                        <option value="">No country codes - run: php artisan db:seed --class=CountrySeeder</option>
+                                    @endforelse
                                 </select>
+                                @if ($errors->has('code'))
+                                    <div class="text-danger small mt-1"><strong>{{ $errors->first('code') }}</strong></div>
+                                @endif
                             </div>
                             <div class="col-sm-4">
                                 <input type="text" id="phone_no" class="form-control" name="phone_no"
@@ -107,7 +115,6 @@
     </div>
     </div>
     <script src="https://cdn.ckeditor.com/ckeditor5/23.0.0/classic/ckeditor.js"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js" type="text/javascript"></script>
 
     <script type="text/javascript">
         $(document).ready(function() {

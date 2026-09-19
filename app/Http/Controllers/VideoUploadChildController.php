@@ -583,6 +583,7 @@ class VideoUploadChildController extends Controller
 
         $content = getNotificationContent('video_content', [
             'title' => $video_content_details->title,
+            'video_link' => getImagePathUrl($video_content_details->video_link, 'assets/video'),
         ]);
 
         $notification_type = 'video_content';

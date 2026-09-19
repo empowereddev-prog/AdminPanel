@@ -15,7 +15,8 @@ Three commits ahead of `origin/sprint1_dev`:
 |---|---|
 | `ef18346` | School parent roster, child seat caps, school payment history, Twilio/mail hardening |
 | `cab87f1` | Direct-to-S3 video upload — large podcasts no longer pass through nginx/PHP, fixing HTTP 413 |
-| `8eef994` | Seven pre-deploy blocker fixes (see §5) |
+| `5b9be9c` | Seven pre-deploy blocker fixes (see §5) |
+| _(this commit)_ | Pre-existing wiring defects found in review: Payment History DataTables column, unregistered reference seeders, four always-500 routes removed, jQuery downgrades, a global validation summary |
 
 Every new enforcement rule is behind a **per-school flag that defaults to off**, so the deploy
 itself changes no school's behaviour. Enabling is a separate, per-school step — §7.
@@ -172,6 +173,29 @@ templates itself, and re-running the seeder overwrites them, discarding any admi
 
 `school:backfill-contracts` is idempotent; the migration already backfills, this just proves it.
 
+### 3.1 Reference data
+
+```bash
+php artisan db:seed --force
+```
+
+`CountrySeeder`, `NotificationTemplateSeeder` and `AdminMenuSeeder` were never registered, so on any
+environment where they have not been run by hand:
+
+- an empty `countries` leaves every country `<select>` with **no options**, so Add User and Sub Admin
+  add/edit fail validation on `code` and bounce;
+- an empty `notification_templates` makes `getNotificationContent()` return empty strings, so **every
+  push and in-app notification ships with a blank title and body**.
+
+Both truncating seeders now return early when their table already has rows, so this is safe to run
+against a populated database. Confirm afterwards:
+
+```bash
+php artisan tinker --execute="echo App\Models\Country::count().' / '.DB::table('notification_templates')->count();"
+```
+
+Expect a non-zero pair (246 / 7 on a clean seed).
+
 ---
 
 ## 4. Queue — required, or no parent ever gets a password
@@ -244,7 +268,13 @@ Then, in the admin UI and the app:
 5. **Upload fallback** — a ≤64 MB video still saves exactly as before.
 6. **Payment History (§5)** — a parent with a real paid subscription who also belongs to a school
    appears in the list, and that row opens and downloads. A zero-price school grant does not appear.
-7. **Deep links still serve**:
+7. **Reference data (§3.1)** — Admin → Users → Add creates a user. Submitting with no country
+   selected now shows a visible error instead of bouncing silently.
+8. **Notifications** — after publishing a podcast, the notification has a real title and body, and
+   no literal `{video_link}` braces.
+9. **Payment History** — loads with no DataTables warning dialog as both a modify and a view-only
+   admin; View and Download work on an IAP row and a school row.
+10. **Deep links still serve**:
    ```bash
    curl -sI https://admin.empoweredhealth.asia/.well-known/apple-app-site-association
    # 200, Content-Type: application/json, no Location: /login

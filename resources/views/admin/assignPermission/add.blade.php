@@ -122,12 +122,20 @@
                                         <div class="input-group">
                                             <div class="input-group-prepend" style="width: 40%;">
                                                 <select name="code" id="code" class="form-control select2 w-100">
-                                                    @foreach ($countrycode as $code)
+                                                    @forelse ($countrycode as $code)
                                                         <option value="{{ $code->country_code }}"
                                                             {{ old('code', request('code', '+65')) == $code->country_code ? 'selected' : '' }}>
                                                             {{ $code->country }} ({{ $code->country_code }})</option>
-                                                    @endforeach
+                                                    @empty
+                                                        {{-- An unseeded countries table would otherwise render an empty,
+                                                            required select that looks perfectly usable and can never be
+                                                            satisfied. Say so instead. --}}
+                                                        <option value="">No country codes - run: php artisan db:seed --class=CountrySeeder</option>
+                                                    @endforelse
                                                 </select>
+                                                @if ($errors->has('code'))
+                                                    <div class="text-danger small mt-1"><strong>{{ $errors->first('code') }}</strong></div>
+                                                @endif
                                             </div>
                                             <input type="text" id="phone_no" name="phone_no" class="form-control"
                                                 placeholder="Enter Your Number" value="{{ old('phone_no') }}">

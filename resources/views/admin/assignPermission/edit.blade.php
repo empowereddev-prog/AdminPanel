@@ -82,13 +82,21 @@
                                             <div class="input-group">
                                                 <div class="input-group-prepend" style="width: 40%;">
                                                     <select name="code" class="form-control select2">
-                                                        @foreach ($countrycode as $code)
+                                                        @forelse ($countrycode as $code)
                                                             <option value="{{ $code->country_code }}"
                                                                 {{ old('code', $user->country_code) == $code->country_code ? 'selected' : '' }}>
                                                                 {{ $code->country }} ({{ $code->country_code }})
                                                             </option>
-                                                        @endforeach
+                                                        @empty
+                                                            {{-- An unseeded countries table would otherwise render an empty,
+                                                                required select that looks perfectly usable and can never be
+                                                                satisfied. Say so instead. --}}
+                                                            <option value="">No country codes - run: php artisan db:seed --class=CountrySeeder</option>
+                                                        @endforelse
                                                     </select>
+                                                    @if ($errors->has('code'))
+                                                        <div class="text-danger small mt-1"><strong>{{ $errors->first('code') }}</strong></div>
+                                                    @endif
                                                 </div>
                                                 <input type="text" name="phone_no" class="form-control"
                                                     value="{{ old('phone_no', $user->phone_no) }}">

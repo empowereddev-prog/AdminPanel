@@ -9,7 +9,6 @@ use App\Http\Controllers\Admin\ContactUsController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EmailTemplateController;
 use App\Http\Controllers\Admin\FaqController;
-use App\Http\Controllers\Admin\FeaturesController;
 use App\Http\Controllers\Admin\GeneralSettingsController;
 use App\Http\Controllers\Admin\KnowleadgeSessionController;
 use App\Http\Controllers\Admin\LoginController;
@@ -112,7 +111,8 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::post('update-profile', [DashboardController::class, 'updateProfile'])->name('update.profile');
     Route::get('dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
     Route::get('dashboard/data', [DashboardController::class, 'getData'])->name('admin.active_plan');
-    Route::get('ordered-plan-details/{id}', [DashboardController::class, 'getActivePlanDetails'])->name('admin.active_plan_details');
+    // Unregistered: getActivePlanDetails() renders admin.planPurchased.detail,
+    // which does not exist, and nothing links to it.
     Route::resource('banners', BannerImageController::class);
     Route::post('banner/toggle-status/{id}', [BannerImageController::class, 'toggleStatus'])->name('admin.banner.status');
     Route::resource('testimonial', TestmonialController::class);
@@ -120,9 +120,11 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::post('update-password', [DashboardController::class, 'updatePassword'])->name('update-password');
     Route::resource('static-content', StaticContentController::class);
     Route::resource('faq', FaqController::class);
-    // FeaturesController implements only these; the other resource verbs 500 on arrival.
-    Route::resource('features', FeaturesController::class)->only(['index', 'edit', 'update']);
-    Route::post('feature/toggle-status/{key}', [FeaturesController::class, 'toggleStatus'])->name('admin.feature.status');
+    // Feature flag screens are not registered: admin.feature.index and
+    // admin.feature.edit do not exist, so every one of these 500s on arrival,
+    // and update() redirects to `admin/features`, which was never a route.
+    // Nothing links to them. FeaturesController is left in place - restore the
+    // routes together with the views.
     Route::resource('email-template', EmailTemplateController::class);
     Route::controller(NotificationTemplateController::class)->group(function () {
         Route::get('notification-template', 'index')->name('notification-template.index');
@@ -295,9 +297,9 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::resource('contact-us', ContactUsController::class);
     Route::post('contact-us/{id}', [ContactUsController::class, 'destroy']);
 
-    // System Log
-    Route::get('system-log', [App\Http\Controllers\Admin\SystemLogController::class, 'index'])->name('system-log.index');
-    Route::get('system-log/data', [App\Http\Controllers\Admin\SystemLogController::class, 'getUsers'])->name('systemlog.data');
+    // System Log is unregistered: admin.systemLog.index does not exist, so the
+    // page 500s and its DataTables feed has no consumer. SystemLogController is
+    // left in place - restore both routes together with the view.
     Route::post('ckeditor-upload', [StaticContentController::class, 'upload'])->name('ckeditor.upload');
 
     Route::get('/build-upload', [GeneralSettingsController::class, 'uploadbuild']);

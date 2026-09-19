@@ -924,6 +924,11 @@ function getNotificationContent($variable_name, $data = [])
         $subject     = str_replace('{' . $key . '}', $value, $subject);
         $description = str_replace('{' . $key . '}', $value, $description);
     }
+    // Any token the caller did not supply would otherwise reach the user as a
+    // literal "{video_link}". Drop leftovers rather than show braces.
+    $subject = trim(preg_replace('/\s*\{[a-z_]+\}/i', '', $subject));
+    $description = trim(preg_replace('/\s*\{[a-z_]+\}/i', '', $description));
+
     return [
         'title' => $subject,
         'body'  =>  $description,

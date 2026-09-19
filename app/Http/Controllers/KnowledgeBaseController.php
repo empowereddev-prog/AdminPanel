@@ -423,6 +423,10 @@ class KnowledgeBaseController extends Controller
 
         $content = getNotificationContent('video_content', [
             'title'      => $video_content_details->title,
+            // The template declares {video_link}; without it the push body
+            // shipped the literal token. getImagePathUrl resolves to S3, where
+            // the file actually is.
+            'video_link' => getImagePathUrl($video_content_details->video_link, 'assets/video'),
         ]);
 
         $notification_type = 'video_content';
