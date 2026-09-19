@@ -1,0 +1,47 @@
+[Unit]
+# Without this unit nothing on the box drains the `jobs` table. Dispatching is
+# not sending: SendStudentSignupMail, SendAdminNotification, the podcast/video
+# FCM fan-out and every CustomNotification only run inside a worker, so with no
+# worker a parent import "succeeds" and no parent ever receives a password.
+Description=Laravel queue worker (credential email, push, FCM fan-out)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+Group=www-data
+
+# APP_PATH and PHP_BIN come from here, shared with ec2-release.sh and
+# ec2-autosync.service. Install it first:
+#   sudo cp scripts/deploy/ec2-deploy.env /etc/ec2-deploy.env
+EnvironmentFile=/etc/ec2-deploy.env
+
+# Run through bash on purpose. systemd does not expand variables in the FIRST
+# token of ExecStart - the executable must be a literal path - so
+# `ExecStart=${PHP_BIN} ...` would fail to start. bash gets a literal path and
+# expands both variables itself, which also removes the need for
+# WorkingDirectory (systemd never expands variables there either, so it would
+# have to be hardcoded and could drift from APP_PATH).
+#
+# --timeout must stay BELOW queue.connections.database.retry_after (90s in
+# config/queue.php). If a job outlives retry_after it is handed to a second
+# worker while the first is still running it, and credential emails go out
+# twice. The dispatch sites chunk their recipients to keep every job short.
+ExecStart=/usr/bin/bash -c 'cd "$APP_PATH" && exec "$PHP_BIN" artisan queue:work --tries=3 --timeout=60 --sleep=3 --max-jobs=1000 --max-time=3600'
+
+# Always come back: a crash, an OOM kill, a reboot, or the clean exit that
+# `php artisan queue:restart` triggers on every deploy. The max-jobs/max-time
+# ceilings above make the process recycle itself periodically, which is what
+# keeps a long-lived PHP worker from accumulating leaked memory.
+Restart=always
+RestartSec=5
+
+# SIGTERM lets the current job finish rather than killing it mid-send.
+KillSignal=SIGTERM
+TimeoutStopSec=90
+
+StandardOutput=append:/var/log/laravel-queue-worker.log
+StandardError=append:/var/log/laravel-queue-worker.log
+
+[Install]
+WantedBy=multi-user.target

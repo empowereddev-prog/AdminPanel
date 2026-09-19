@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class SendAdminNotification implements ShouldQueue
 {
@@ -148,5 +149,19 @@ class SendAdminNotification implements ShouldQueue
             // Example log. Replace with email, push, or other logic
             \Log::info("Notification sent to User ID {$user->id}: {$this->title} - {$this->message}");
         }
+    }
+
+    /**
+     * failed_jobs is written by the framework and read by nothing, so without
+     * this an exhausted job is indistinguishable from a delivered one.
+     */
+    public function failed(\Throwable $e): void
+    {
+        Log::error('Admin notification failed after all retries', [
+            'user_id' => $this->user_id,
+            'title' => $this->title,
+            'type' => $this->type,
+            'error' => $e->getMessage(),
+        ]);
     }
 }

@@ -1,5 +1,5 @@
 [Unit]
-Description=Sync Laravel app from origin/sprint1_dev
+Description=Sync Laravel app from origin and deploy when the branch moves
 After=network-online.target
 Wants=network-online.target
 
@@ -7,13 +7,17 @@ Wants=network-online.target
 Type=oneshot
 User=ubuntu
 Group=www-data
-WorkingDirectory=/var/www/AdminPanel
-Environment=APP_PATH=/var/www/AdminPanel
-Environment=GIT_BRANCH=sprint1_dev
-Environment=PHP_BIN=/usr/bin/php
-Environment=PHP_FPM_SERVICE=apache2
-Environment=BACKUP_DIR=/var/www/backups/AdminPanel
-ExecStart=/usr/bin/bash /var/www/AdminPanel/scripts/deploy/ec2-release.sh autosync
+
+# APP_PATH, GIT_BRANCH, PHP_BIN, PHP_FPM_SERVICE, BACKUP_DIR and BACKUP_KEEP
+# all come from here, so this unit and ec2-release.sh cannot disagree about
+# where the app lives. Install it first:
+#   sudo cp scripts/deploy/ec2-deploy.env /etc/ec2-deploy.env
+EnvironmentFile=/etc/ec2-deploy.env
+
+# Via bash for the same reason as the worker: systemd will not expand a
+# variable in the first token of ExecStart, and never expands WorkingDirectory.
+# The script cds to APP_PATH itself.
+ExecStart=/usr/bin/bash -c 'exec "$APP_PATH/scripts/deploy/ec2-release.sh" autosync'
 
 [Install]
 WantedBy=multi-user.target

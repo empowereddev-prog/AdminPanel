@@ -130,7 +130,7 @@
                                                         {{-- An unseeded countries table would otherwise render an empty,
                                                             required select that looks perfectly usable and can never be
                                                             satisfied. Say so instead. --}}
-                                                        <option value="">No country codes - run: php artisan db:seed --class=CountrySeeder</option>
+                                                        <option value="">No country codes available - please contact your administrator</option>
                                                     @endforelse
                                                 </select>
                                                 @if ($errors->has('code'))
