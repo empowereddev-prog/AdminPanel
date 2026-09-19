@@ -95,12 +95,15 @@ class PaymentManagementController extends Controller
      */
     private function paymentHistoryQuery()
     {
+        // Exclude the zero-price school entitlement grants, not school users.
+        // Filtering on users.school_id also hid genuine App Store purchases by
+        // any parent who later joined a school, so real revenue vanished from
+        // the report. grantParentEntitlement() always writes price '0' and a
+        // real IAP purchase never does, so the price is the discriminator.
+        // The column is varchar, hence the explicit cast.
         $iap = DB::table('subscriptions')
             ->leftJoin('users', 'subscriptions.user_id', '=', 'users.id')
-            ->where(function ($q) {
-                $q->whereNull('users.school_id')
-                    ->orWhereNull('users.id');
-            })
+            ->whereRaw('CAST(subscriptions.price AS DECIMAL(10,2)) > 0')
             ->select([
                 DB::raw("CONCAT('iap-', subscriptions.id) as payment_key"),
                 'users.name as payer_name',
@@ -195,7 +198,9 @@ class PaymentManagementController extends Controller
             return null;
         }
 
-        if ($row->user && $row->user->school_id) {
+        // Mirrors the list query above: a school entitlement grant is not a
+        // payment. Keyed on price so a visible row never 404s when opened.
+        if ((float) $row->price <= 0) {
             return null;
         }
 

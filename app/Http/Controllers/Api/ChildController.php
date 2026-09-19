@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ApiHitLog;
 use App\Support\ApiResponse;
 use App\Support\ApiVersion;
+use App\Services\School\SchoolNotifier;
 use App\Services\School\SchoolSeatService;
 use Illuminate\Support\Facades\DB;
 use App\Models\Child;
@@ -138,6 +139,18 @@ class ChildController extends Controller
                 null,
                 (object) [],
                 ['child' => []]
+            );
+        }
+
+        // The child landed, so the school is one place closer to its cap.
+        // Outside the transaction because this may send mail; the notifier
+        // throttles each threshold to once per school per day, so a school
+        // sitting on the boundary is not mailed on every add.
+        if ($user->school_id && $user->school && $user->school->child_seat_limit !== null) {
+            app(SchoolNotifier::class)->seatThreshold(
+                $user->school,
+                (new SchoolSeatService())->childCountForSchool((int) $user->school->id),
+                (int) $user->school->child_seat_limit
             );
         }
 

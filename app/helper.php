@@ -1180,6 +1180,11 @@ function adoptUploadedObject(?string $key, string $folder, $dbFileName = null): 
 /**
  * Same bytes as the existing S3 object: skip put. Fail open (return false)
  * on checksum errors so a glitch still replaces rather than blocking save.
+ *
+ * The comparison is against the object's ETag, read with one HeadObject call.
+ * It used to stream the whole remote object back through PHP to sha256 it,
+ * which meant re-saving a 60 MB video downloaded 60 MB just to avoid one
+ * upload - and on a large file that alone outran max_execution_time.
  */
 function uploadFileMatchesExisting($file, string $oldPath): bool
 {
@@ -1194,6 +1199,22 @@ function uploadFileMatchesExisting($file, string $oldPath): bool
             return false;
         }
 
+        $remoteEtag = s3ObjectEtag($oldPath);
+
+        if ($remoteEtag !== null) {
+            // A multipart upload's ETag is "<hash>-<partcount>", not an MD5 of
+            // the content, so there is nothing to compare against. Fail open.
+            if (str_contains($remoteEtag, '-')) {
+                return false;
+            }
+
+            $localMd5 = md5_file($localPath);
+
+            return $localMd5 !== false && hash_equals($localMd5, $remoteEtag);
+        }
+
+        // No S3 client on this disk (Storage::fake, or a local-driver override):
+        // fall back to hashing the stream so behaviour is unchanged off S3.
         $localHash = hash_file('sha256', $localPath);
         $remoteHash = s3StreamSha256($oldPath);
 
@@ -1207,6 +1228,34 @@ function uploadFileMatchesExisting($file, string $oldPath): bool
 
         return false;
     }
+}
+
+/**
+ * The object's ETag, lowercased and unquoted, or null when this disk has no
+ * S3 client behind it (the faked disk in tests) so the caller can fall back.
+ */
+function s3ObjectEtag(string $path): ?string
+{
+    $disk = Storage::disk('s3');
+
+    if (!method_exists($disk, 'getClient')) {
+        return null;
+    }
+
+    try {
+        $head = $disk->getClient()->headObject([
+            'Bucket' => (string) config('filesystems.disks.s3.bucket'),
+            'Key' => $path,
+        ]);
+    } catch (\Throwable $e) {
+        Log::error('S3 headObject failed: ' . $e->getMessage());
+
+        return null;
+    }
+
+    $etag = trim((string) ($head['ETag'] ?? ''), '"');
+
+    return $etag === '' ? null : strtolower($etag);
 }
 
 function s3StreamSha256(string $path): ?string

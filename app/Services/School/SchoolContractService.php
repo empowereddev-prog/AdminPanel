@@ -79,8 +79,13 @@ class SchoolContractService
         $type = $school->subscription_type ?: 'monthly';
         [$start, $end] = $this->termDates($type);
 
+        // Only a *live* entitlement should suppress the grant. Matching any
+        // historical row meant a parent whose own plan lapsed months ago got
+        // nothing when their school imported them - a seat the school paid for
+        // and the parent never received.
         $exists = Subscription::where('user_id', $user->id)
             ->where('user_type', 'parent')
+            ->where('end_date', '>=', now()->toDateString())
             ->exists();
 
         if ($exists) {

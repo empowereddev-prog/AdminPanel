@@ -436,6 +436,11 @@ class SchoolController extends Controller
             $header = array_slice($header, 0, 4);
 
             if ($header !== $expectedHeader) {
+                // The school row exists from here up, so every abort has to
+                // take it with it - otherwise the admin fixes the file and
+                // cannot resubmit: the name and code are now "already taken".
+                School::where('id', $school_data->id)->delete();
+
                 return back()->with('error', 'Invalid file format. Please use the provided sample.')->withInput();
             }
 
@@ -470,6 +475,8 @@ class SchoolController extends Controller
                         ->exists();
 
                     if ($existingUser) {
+                        School::where('id', $school_data->id)->delete();
+
                         return back()->with('error', 'Duplicate found: ' . $row[1] . ' with phone ' . $row[3] . ' already exists in this school.')->withInput();
                     }
 
@@ -497,12 +504,6 @@ class SchoolController extends Controller
                 return back()->with('error', 'The excel file data is invalid.')->withInput();
             }
 
-            // Only now is the school certain to survive this request: the branch
-            // above deletes it again when the spreadsheet yields nothing usable,
-            // and mailing "your account is live" for a row that is about to be
-            // removed would be worse than sending nothing.
-            $onboardingMail = app(SchoolNotifier::class)->schoolOnboarded($school);
-
             // Teachers carry school_id too, so an unscoped count made a staff
             // import eat the parent places the school paid for. update() has
             // always scoped this correctly; store() had not.
@@ -516,6 +517,8 @@ class SchoolController extends Controller
                 $remainingLimit = (int) $request->max_limit - $existingStudents;
 
                 if ($remainingLimit <= 0) {
+                    School::where('id', $school_data->id)->delete();
+
                     return back()->with('error', 'You have already reached the max limit of ' . $request->max_limit . ' parent accounts.')->withInput();
                 }
 
@@ -525,6 +528,13 @@ class SchoolController extends Controller
                 $skippedRows += max(0, count($validData) - $remainingLimit);
                 $validData = array_slice($validData, 0, $remainingLimit);
             }
+
+            // Only now is the school certain to survive this request: every
+            // branch above deletes it again on abort, and mailing "your account
+            // is live" for a row that is about to be removed would be worse
+            // than sending nothing. This sits below the parent-limit gate for
+            // exactly that reason.
+            $onboardingMail = app(SchoolNotifier::class)->schoolOnboarded($school);
 
             $insertedCount = 0;
             // Collected and mailed in one queued batch after the loop. Sending

@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Models\DeviceToken;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -18,6 +17,18 @@ class NotifyVideoContentAudience implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /** A transient Firebase or SMTP blip should retry, not silently drop the batch. */
+    public $tries = 3;
+
+    /** Recipients are handled in batches so a whole-audience send stays bounded. */
+    private const CHUNK = 500;
+
+    /** @return array<int,int> seconds between retries */
+    public function backoff(): array
+    {
+        return [30, 120];
+    }
+
     public function __construct(
         public array $userIds,
         public string $title,
@@ -30,9 +41,26 @@ class NotifyVideoContentAudience implements ShouldQueue
     ) {
     }
 
+    /**
+     * Unique recipients, not device rows.
+     *
+     * sendNotificationSender() takes a user_id and resolves that user's device
+     * itself, so looping DeviceToken rows gave a three-device parent three
+     * in-app rows and three pushes to the same handset, while a parent with no
+     * token row got nothing at all - not even the in-app entry, which needs no
+     * device. Public so the dedupe can be asserted without a Firebase client.
+     *
+     * @return array<int,int>
+     */
+    public function recipients(): array
+    {
+        return array_values(array_unique(array_map('intval', array_filter($this->userIds))));
+    }
+
     public function handle(): void
     {
-        $ids = array_values(array_filter($this->userIds));
+        $ids = $this->recipients();
+
         if ($ids === []) {
             return;
         }
@@ -43,19 +71,17 @@ class NotifyVideoContentAudience implements ShouldQueue
             return;
         }
 
-        $tokens = DeviceToken::whereIn('user_id', $ids)
-            ->whereNotNull('token')
-            ->get();
-
-        foreach ($tokens as $row) {
-            sendNotificationSender(
-                $row->user_id,
-                $this->title,
-                $this->body,
-                $this->notificationType,
-                $this->userData,
-                $this->audienceType
-            );
+        foreach (array_chunk($ids, self::CHUNK) as $batch) {
+            foreach ($batch as $userId) {
+                sendNotificationSender(
+                    $userId,
+                    $this->title,
+                    $this->body,
+                    $this->notificationType,
+                    $this->userData,
+                    $this->audienceType
+                );
+            }
         }
     }
 }

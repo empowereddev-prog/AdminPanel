@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
  * Large podcasts used to be POSTed through nginx/PHP and died on
  * client_max_body_size with a 413 ("Payload too large") before Laravel ever
  * booted. The browser now PUTs the bytes straight to S3 with the URLs signed
- * here and only sends us the resulting object key. See docs/DIRECT_S3_UPLOAD.md.
+ * here and only sends us the resulting object key. See docs/DEPLOYMENT.md.
  */
 class VideoUploadSignController extends Controller
 {

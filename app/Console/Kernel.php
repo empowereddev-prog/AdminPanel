@@ -40,7 +40,10 @@ class Kernel extends ConsoleKernel
         // If a supervisor-managed `queue:work` is introduced later, remove this.
         $schedule->command('queue:work --stop-when-empty --max-time=55 --tries=3')
             ->everyMinute()
-            ->withoutOverlapping();
+            // An explicit expiry matters: the default is 24 hours, so a run
+            // killed by a deploy or reboot would hold the mutex and silently
+            // stop every queued mail for a day.
+            ->withoutOverlapping(2);
     }
 
     /**

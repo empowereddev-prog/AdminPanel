@@ -301,7 +301,7 @@ server {
 
     add_header X-Frame-Options "SAMEORIGIN";
     # Videos no longer travel through nginx: the browser PUTs them straight to
-    # S3 (docs/DIRECT_S3_UPLOAD.md), so this only has to cover thumbnails and
+    # S3 (docs/DEPLOYMENT.md), so this only has to cover thumbnails and
     # form fields. Raising it is not how you allow bigger videos.
     client_max_body_size 64M;
 
@@ -343,11 +343,15 @@ post_max_size = 64M
 max_execution_time = 300
 ```
 
-Admin video uploads also need the S3 bucket CORS rule (`ExposeHeaders: ETag`) and the `assets/video/tmp/` lifecycle rule from [`docs/DIRECT_S3_UPLOAD.md`](docs/DIRECT_S3_UPLOAD.md). Without them uploads silently fall back to posting through PHP and large files fail with 413 again.
+Admin video uploads also need the S3 bucket CORS rule (`ExposeHeaders: ETag`) and the `assets/video/tmp/` lifecycle rule from [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §1. Without them uploads silently fall back to posting through PHP and large files fail with 413 again.
 
-FCM after a podcast save is queued (`NotifyVideoContentAudience`). On the admin host use a real queue (`QUEUE_CONNECTION=database` or `redis`, not `sync`) and keep `php artisan queue:work` (or supervisor) running. Details: [`docs/PODCAST_UPLOAD_TIMEOUT.md`](docs/PODCAST_UPLOAD_TIMEOUT.md).
+FCM after a podcast save is queued (`NotifyVideoContentAudience`). On the admin host use a real queue (`QUEUE_CONNECTION=database` or `redis`, not `sync`) and keep `php artisan queue:work` (or supervisor) running. Details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §4.
 
-### 5. Later deploys (two options)
+### 5. Later deploys
+
+> The full release runbook — pre-flight, migrations, queue, smoke tests, rollback — is
+> [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). What follows is the short form.
+
 
 **A — Manual (always works)**
 
