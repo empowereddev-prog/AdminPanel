@@ -144,6 +144,43 @@ class SchoolRosterService
     }
 
     /**
+     * Reverse of revoke. If the parent account is still at this school, the
+     * invite is claimed again; otherwise it goes back to invited so they can
+     * register with the school code.
+     *
+     * @return array{status:bool,message:string}
+     */
+    public function restore(SchoolParentInvite $invite): array
+    {
+        if ($invite->status !== 'revoked') {
+            return ['status' => false, 'message' => 'That entry is not revoked.'];
+        }
+
+        $user = User::where('school_id', $invite->school_id)
+            ->where('user_role_id', 3)
+            ->whereRaw('LOWER(email) = ?', [$invite->email])
+            ->first();
+
+        if ($user) {
+            $invite->update([
+                'status' => 'claimed',
+                'claimed_user_id' => $user->id,
+                'claimed_at' => now(),
+            ]);
+
+            return ['status' => true, 'message' => 'Roster access restored. This parent can use the school code again.'];
+        }
+
+        $invite->update([
+            'status' => 'invited',
+            'claimed_user_id' => null,
+            'claimed_at' => null,
+        ]);
+
+        return ['status' => true, 'message' => 'Roster entry restored. They can register with the school code again.'];
+    }
+
+    /**
      * Records the rejected attempts and tells the school its code is
      * circulating - throttled to one notice per school per hour, because
      * QUEUE_CONNECTION means this send is inline on the register request.

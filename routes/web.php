@@ -30,6 +30,7 @@ use App\Http\Controllers\Admin\TestmonialController;
 use App\Http\Controllers\Admin\UsersController;
 use App\Http\Controllers\Admin\VideoMoreController;
 use App\Http\Controllers\Admin\VideoRequestController;
+use App\Http\Controllers\Admin\VideoUploadSignController;
 use App\Http\Controllers\AdminNotificationController;
 use App\Http\Controllers\AgeGroupController;
 use App\Http\Controllers\CategoryController;
@@ -173,6 +174,15 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::get('categories', [CategoryController::class, 'categories'])->name('category.categories');
     Route::post('categories/update-priority', [CategoryController::class, 'updatePriority'])->name('categories.updatePriority');
 
+    // Presigned direct-to-S3 video uploads. Large podcasts never touch
+    // nginx/PHP, so client_max_body_size can no longer 413 them.
+    Route::controller(VideoUploadSignController::class)->prefix('uploads/video')->name('uploads.video.')->group(function () {
+        Route::post('create', 'create')->name('create');
+        Route::post('part', 'part')->name('part');
+        Route::post('complete', 'complete')->name('complete');
+        Route::post('abort', 'abort')->name('abort');
+    });
+
     //category crud apis
     Route::get('knowledge-base', [KnowledgeBaseController::class, 'index'])->name('knowledge-base.index');
     Route::get('knowledge-base/data', [KnowledgeBaseController::class, 'getknowledge'])->name('knowledge-base.data');
@@ -232,10 +242,6 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::put('update-school/{id}', [SchoolController::class, 'update'])->name('school.update');
     Route::delete('delete-school/{id}', [SchoolController::class, 'destroy'])->name('school.delete');
     Route::get('view-school-details/{id}', [SchoolController::class, 'show'])->name('school.show');
-    Route::get(
-        'school/{school}/export-users',
-        [SchoolController::class, 'exportSchoolUsers']
-    )->name('school.export.users');
     Route::delete('delete-school-user/{id}', [SchoolController::class, 'destroySchoolUser'])->name('students.delete');
 
     // Parent roster. No new admin menu id - these live on the existing School
@@ -246,7 +252,9 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::get('school/{id}/teachers', [SchoolController::class, 'teachers'])->name('school.teachers.data');
     Route::get('school/{id}/children', [SchoolController::class, 'children'])->name('school.children.data');
     Route::post('school/roster/{invite}/revoke', [SchoolController::class, 'revokeInvite'])->name('school.roster.revoke');
+    Route::post('school/roster/{invite}/restore', [SchoolController::class, 'restoreInvite'])->name('school.roster.restore');
     Route::post('school/roster/{invite}/resend', [SchoolController::class, 'resendInvite'])->name('school.roster.resend');
+    Route::post('school/{id}/parents/{userId}/status', [SchoolController::class, 'toggleParentStatus'])->name('school.parents.status');
     Route::post('school/{id}/toggle-flag/{flag}', [SchoolController::class, 'toggleSchoolFlag'])->name('school.flag.toggle');
     Route::get('settings', [GeneralSettingsController::class, 'editSystemSetting'])->name('settings.edit');
     Route::PUT('settings/update', [GeneralSettingsController::class, 'updateSystemSetting'])->name('settings.update');

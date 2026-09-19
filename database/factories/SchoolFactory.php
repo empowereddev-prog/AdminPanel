@@ -26,6 +26,7 @@ class SchoolFactory extends Factory
             'status' => 'active',
             'max_limit' => 100,
             'subscription_type' => 'monthly',
+            'price' => 13.49,
             // Every control defaults to its migration default, i.e. to today's
             // behaviour. Tests opt in explicitly through the states below.
             'child_seat_limit' => null,

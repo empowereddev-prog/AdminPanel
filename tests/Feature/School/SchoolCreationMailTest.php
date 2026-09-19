@@ -97,6 +97,7 @@ class SchoolCreationMailTest extends TestCase
             'school_code' => strtoupper(substr(uniqid(), -8)),
             'email' => 'office' . uniqid() . '@school.test',
             'subscription_type' => 'monthly',
+            'price' => '42.50',
             'child_seat_limit' => 50,
             'per_parent_child_limit' => 3,
         ], $overrides);
@@ -125,6 +126,28 @@ class SchoolCreationMailTest extends TestCase
         $this->assertStringContainsString($school->school_code, $onboarding['body'], 'The school code must be in the email.');
         $this->assertStringContainsString('Monthly', $onboarding['body']);
         $this->assertStringNotContainsString('{', $onboarding['body'], 'Unsubstituted token left in the body.');
+
+        $this->assertSame('42.50', number_format((float) $school->price, 2, '.', ''));
+        $this->assertDatabaseHas('school_subscriptions', [
+            'school_id' => $school->id,
+            'price' => 42.50,
+            'status' => 'successful',
+        ]);
+    }
+
+    public function test_creating_a_school_without_a_price_is_allowed(): void
+    {
+        $response = $this->createSchool(['price' => null, 'email' => 'office@noprice.test']);
+
+        $response->assertRedirect('school');
+        $school = School::where('email', 'office@noprice.test')->first();
+        $this->assertNotNull($school);
+        $this->assertNull($school->price);
+        $this->assertDatabaseHas('school_subscriptions', [
+            'school_id' => $school->id,
+            'price' => 0,
+            'status' => 'successful',
+        ]);
     }
 
     public function test_an_unlimited_parent_limit_is_shown_as_unlimited(): void

@@ -186,7 +186,7 @@
                                                 </option>
                                                 <option value="quarterly"
                                                     {{ old('subscription_type') == 'quarterly' ? 'selected' : '' }}>
-                                                    Quaterly</option>
+                                                    Quarterly</option>
                                                 <option value="yearly"
                                                     {{ old('subscription_type') == 'yearly' ? 'selected' : '' }}>Yearly
                                                 </option>
@@ -194,6 +194,20 @@
                                             @error('subscription_type')
                                                 <div class="text-danger small mt-1">{{ $message }}</div>
                                             @enderror
+                                        </div>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <div class="form-group">
+                                            <label for="price">Subscription price (SGD)</label>
+                                            <input type="number" step="0.01" min="0" max="999999.99" class="form-control"
+                                                name="price" id="price" placeholder="Optional"
+                                                value="{{ old('price') }}">
+                                            <small class="text-muted">Optional. If set, this amount is shown on Payment History for this school.</small>
+                                            @if ($errors->has('price'))
+                                                <div class="text-danger small mt-1">
+                                                    {{ $errors->first('price') }}
+                                                </div>
+                                            @endif
                                         </div>
                                     </div>
                                 </div>

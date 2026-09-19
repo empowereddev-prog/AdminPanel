@@ -126,7 +126,7 @@
                     <td>{{ $data->subscription_type_id ?? 'N/A' }}</td>
                 </tr>
                 <tr>
-                    <td><strong>Customer Name</strong></td>
+                    <td><strong>Payer</strong></td>
                     <td>{{ $data->user->name ?? 'N/A' }}</td>
                 </tr>
                 <tr>

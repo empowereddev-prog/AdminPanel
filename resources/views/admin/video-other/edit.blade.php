@@ -170,6 +170,24 @@
 <script src="https://cdn.ckeditor.com/ckeditor5/23.0.0/classic/ckeditor.js"></script>
 
 @push('scripts')
+    {{-- Large videos go straight to S3 so nginx/PHP never see them (no 413).
+         Falls back to the original in-form upload if anything fails. --}}
+    <script src="{{ asset('assets/js/direct-video-upload.js') }}"></script>
+    <script>
+        window.directVideoUploadRoutes = {
+            create:   "{{ route('uploads.video.create') }}",
+            part:     "{{ route('uploads.video.part') }}",
+            complete: "{{ route('uploads.video.complete') }}",
+            abort:    "{{ route('uploads.video.abort') }}"
+        };
+        // Bound before the form's own handler below, so it runs first.
+        $(function () {
+            if (window.initDirectVideoUpload) {
+                window.initDirectVideoUpload('#knowledgeForm');
+            }
+        });
+    </script>
+
 <script>
 $(document).ready(function () {
 
@@ -266,7 +284,7 @@ $(document).ready(function () {
             success: function (res) {
                 hideProgress();
                 $btn.prop('disabled', false).text('Update');
-                if (typeof res === 'object' && res.success) {
+                if (typeof res === 'object' && (res.ok || res.success)) {
                     showToast(res.message || 'Updated successfully!', 'success');
                     setTimeout(() => { window.location.href = res.redirect || "{{ route('video-other.index') }}"; }, 1500);
                 } else {
@@ -280,7 +298,7 @@ $(document).ready(function () {
                 console.error('Status:', xhr.status);
 
                 let msg = 'An unknown error occurred.';
-                if      (xhr.status === 0)   msg = 'Connection lost or upload timed out.';
+                if      (xhr.status === 0)   msg = 'Connection lost before the server responded. The file may be too large, or the server closed the request while processing.';
                 else if (xhr.status === 413)  msg = 'File too large. Server rejected the upload.';
                 else if (xhr.status === 419)  msg = 'Session expired (419). Please refresh page.';
                 else if (xhr.status === 422) {

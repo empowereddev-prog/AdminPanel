@@ -186,10 +186,22 @@
                                         <select class="form-control select2" id="session_type" name="subscription_type">
                                             <option value="">Select Subscription Type</option>
                                         <option value="monthly" {{ $data->subscription_type == 'monthly' ? 'selected' : '' }}>Monthly</option>
-                                            <option value="quarterly" {{ $data->subscription_type == 'quarterly' ? 'selected' : '' }}>Quaterly</option>
+                                            <option value="quarterly" {{ $data->subscription_type == 'quarterly' ? 'selected' : '' }}>Quarterly</option>
                                             <option value="yearly" {{ $data->subscription_type == 'yearly' ? 'selected' : '' }}>Yearly</option>
                                         </select>
                                         @error('subscription_type')
+                                            <div class="text-danger small mt-1">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="price">Subscription price (SGD)</label>
+                                        <input type="number" step="0.01" min="0" max="999999.99" class="form-control"
+                                            name="price" id="price" placeholder="Optional"
+                                            value="{{ old('price', $data->price) }}">
+                                        <small class="text-muted">Optional. Changing a filled-in price records a new Payment History row and keeps the previous amount.</small>
+                                        @error('price')
                                             <div class="text-danger small mt-1">{{ $message }}</div>
                                         @enderror
                                     </div>

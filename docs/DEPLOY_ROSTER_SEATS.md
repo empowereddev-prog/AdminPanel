@@ -56,6 +56,30 @@ Two templates that have **never delivered** start delivering with this release (
 production mailer works and `MAIL_FROM_ADDRESS` is a domain you control — this is the first time the app will send mail
 to real parents in bulk.
 
+### 1.2a Local mail (why a test send can look like "nothing happened")
+
+Mail **is** attached: school create sends `school_onboarded` in the request; parent import **queues**
+`SendStudentSignupMail`. Locally it still often never arrives because:
+
+1. `2026_09_16_*` migrations have not run, so `email_templates` rows are missing and `___mail_sender` logs
+   `Mail skipped: missing template`.
+2. `QUEUE_CONNECTION=database` (or redis) and you never run `php artisan queue:work` or `schedule:run` — parent
+   credential jobs sit in `jobs`.
+3. `MAIL_MAILER=log` writes to `storage/logs/laravel.log` instead of an inbox.
+4. Admin **Settings** mail fields used to write `.env` while send used boot-time `config()`. Send now overlays
+   non-empty Settings values at send time (skipped during PHPUnit).
+
+**Local checklist**
+
+```bash
+php artisan migrate
+php artisan tinker --execute="echo App\\Models\\EmailTemplate::whereIn('variable_name',['school_onboarded','signup_school_user'])->count();"
+```
+
+Expect `2`. Then either `MAIL_MAILER=log` and watch the log, or real SMTP in Settings / `.env`. For parent import use
+`QUEUE_CONNECTION=sync` locally, or `php artisan queue:work`. Create a school **without** an Excel file first (that
+path is synchronous). The admin success flash now says whether onboarding mail was sent, skipped, or failed.
+
 ### 1.3 Take the snapshot
 
 The normal deploy takes one. Note the filename from the log; §6 needs it.
@@ -127,6 +151,7 @@ Three migrations ship:
 | `2026_09_16_090000_align_schools_table_and_add_seat_controls` | Adds the seat/roster columns; **backfills `schools.max_limit`, `subscription_type`, `email`**, which the code has always written but no migration ever created; indexes `users.parent_id` and `users.school_id`; seeds the seven email templates |
 | `2026_09_16_090100_create_school_parent_invites_table` | The roster table |
 | `2026_09_16_090200_add_currency_to_subscriptions_table` | Adds `subscriptions.currency`, written by three code paths and created by no migration |
+| `2026_09_17_100000_add_school_subscriptions_and_price` | Per-school `price` and `school_subscriptions` (Payment History lists the school, not each imported parent). Backfills one contract per existing school at stored price or `0.00` |
 
 > **Check whether `2026_09_11_090000_align_schema_and_admin_otp_template` is still pending in production.** It was
 > pending on the dev machine. If it has not run there either, it will run as part of this deploy — it is a large
@@ -136,7 +161,8 @@ Three migrations ship:
 ### After migrating
 
 ```bash
-php artisan migrate:status | tail -5
+php artisan migrate:status | tail -8
+php artisan school:backfill-contracts
 php artisan schedule:list | grep queue
 ```
 

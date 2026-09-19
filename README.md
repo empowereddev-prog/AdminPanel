@@ -300,6 +300,9 @@ server {
     index index.php;
 
     add_header X-Frame-Options "SAMEORIGIN";
+    # Videos no longer travel through nginx: the browser PUTs them straight to
+    # S3 (docs/DIRECT_S3_UPLOAD.md), so this only has to cover thumbnails and
+    # form fields. Raising it is not how you allow bigger videos.
     client_max_body_size 64M;
 
     location / {
@@ -313,6 +316,10 @@ server {
     location ~ \.php$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        # Default fastcgi_read_timeout is 60s. Podcast upload + S3 + ffmpeg
+        # often exceeds that after the browser already shows 100% progress.
+        fastcgi_read_timeout 300s;
+        fastcgi_send_timeout 300s;
     }
 
     location ~ /\.(?!well-known).* {
@@ -327,6 +334,18 @@ sudo nginx -t && sudo systemctl reload nginx
 sudo apt-get install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d admin.empoweredhealth.asia
 ```
+
+PHP (php.ini / pool) must match the 64M nginx cap and the 300s FastCGI timeout, or the worker dies with browser `xhr.status === 0`:
+
+```ini
+upload_max_filesize = 64M
+post_max_size = 64M
+max_execution_time = 300
+```
+
+Admin video uploads also need the S3 bucket CORS rule (`ExposeHeaders: ETag`) and the `assets/video/tmp/` lifecycle rule from [`docs/DIRECT_S3_UPLOAD.md`](docs/DIRECT_S3_UPLOAD.md). Without them uploads silently fall back to posting through PHP and large files fail with 413 again.
+
+FCM after a podcast save is queued (`NotifyVideoContentAudience`). On the admin host use a real queue (`QUEUE_CONNECTION=database` or `redis`, not `sync`) and keep `php artisan queue:work` (or supervisor) running. Details: [`docs/PODCAST_UPLOAD_TIMEOUT.md`](docs/PODCAST_UPLOAD_TIMEOUT.md).
 
 ### 5. Later deploys (two options)
 

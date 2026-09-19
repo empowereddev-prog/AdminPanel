@@ -220,7 +220,7 @@ class SchoolViewImportTest extends TestCase
             ->assertStatus(403);
     }
 
-    /** The user list is parents only; teachers belong to the Teacher Roster. */
+    /** Parents and the roster share one card; teachers stay on Teacher Roster. */
     public function test_the_school_user_list_shows_parents_and_not_teachers(): void
     {
         $school = School::factory()->create();
@@ -232,12 +232,18 @@ class SchoolViewImportTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // The parent list renders server-side; the teacher table is loaded over
-        // ajax, so a teacher name must not be in the delivered HTML.
-        $this->assertStringContainsString($parent->email, $html);
-        $this->assertStringNotContainsString($teacher->email, $html);
-        $this->assertStringContainsString('Parent Accounts', $html);
+        $this->assertStringContainsString('>Parents<', $html);
+        $this->assertStringNotContainsString('Parent Accounts', $html);
         $this->assertStringContainsString('Teacher Roster', $html);
+
+        $data = $this->actingAs($this->admin(), 'admin')
+            ->getJson(route('school.roster.data', $school->id, false))
+            ->assertOk()
+            ->json('data');
+
+        $emails = collect($data)->pluck('email')->all();
+        $this->assertTrue(collect($emails)->contains(fn ($email) => str_contains(html_entity_decode($email), $parent->email)));
+        $this->assertFalse(collect($emails)->contains(fn ($email) => str_contains((string) $email, $teacher->email)));
     }
 
     public function test_the_child_list_shows_children_of_this_schools_parents(): void
@@ -286,17 +292,22 @@ class SchoolViewImportTest extends TestCase
             ->assertStatus(403);
     }
 
-    /** Export had no permission check at all - any admin could pull any school's parents. */
-    public function test_export_requires_school_management_permission(): void
+    /** Date-range parent export was unused and is gone from the school view. */
+    public function test_parent_date_export_is_not_on_the_school_view(): void
     {
         $school = School::factory()->create();
-        User::factory()->parent()->inSchool($school)->create();
 
-        $nobody = User::factory()->create(['user_role_id' => 2, 'user_type' => 'admin', 'status' => 'active']);
+        $html = $this->actingAs($this->admin(), 'admin')
+            ->get('/view-school-details/' . $school->id)
+            ->assertOk()
+            ->getContent();
 
-        $this->actingAs($nobody, 'admin')
-            ->get(route('school.export.users', $school->id) . '?role_type=parent')
-            ->assertRedirect('dashboard');
+        $this->assertStringNotContainsString('Export Parents', $html);
+        $this->assertStringNotContainsString('name="start_date"', $html);
+
+        $this->actingAs($this->admin(), 'admin')
+            ->get('/school/' . $school->id . '/export-users?role_type=parent')
+            ->assertNotFound();
     }
 
     /** The page had no flash region, so every redirect-with-message was invisible. */

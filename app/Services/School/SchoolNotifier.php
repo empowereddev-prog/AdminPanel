@@ -2,6 +2,7 @@
 
 namespace App\Services\School;
 
+use App\Models\EmailTemplate;
 use App\Models\School;
 use App\Models\SchoolParentInvite;
 use Illuminate\Support\Facades\Cache;
@@ -120,14 +121,23 @@ class SchoolNotifier
      * store() has always collected schools.email and then never used it, so a
      * newly onboarded school received nothing at all - no code, no plan, no
      * record of what it had been given.
+     *
+     * @return array{sent:bool,reason:string}
      */
-    public function schoolOnboarded(School $school): void
+    public function schoolOnboarded(School $school): array
     {
         if (empty($school->email)) {
-            return;
+            return ['sent' => false, 'reason' => 'no_email'];
         }
 
-        ___mail_sender($school->email, 'school_onboarded', [
+        $hasTemplate = EmailTemplate::where('variable_name', 'school_onboarded')->exists()
+            || view()->exists('emails.school_onboarded');
+
+        if (!$hasTemplate) {
+            return ['sent' => false, 'reason' => 'no_template'];
+        }
+
+        $sent = ___mail_sender($school->email, 'school_onboarded', [
             'school_name' => (string) $school->name,
             'school_code' => (string) $school->school_code,
             'subscription_type' => ucfirst((string) ($school->subscription_type ?: 'Not set')),
@@ -135,6 +145,8 @@ class SchoolNotifier
             'child_seat_limit' => $school->child_seat_limit !== null ? (string) $school->child_seat_limit : 'Unlimited',
             'year' => (string) date('Y'),
         ], 'english');
+
+        return ['sent' => (bool) $sent, 'reason' => $sent ? 'sent' : 'failed'];
     }
 
     /**

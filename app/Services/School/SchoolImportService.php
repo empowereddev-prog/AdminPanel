@@ -5,7 +5,6 @@ namespace App\Services\School;
 use App\Jobs\SendStudentSignupMail;
 use App\Models\School;
 use App\Models\SchoolParentInvite;
-use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
@@ -103,7 +102,7 @@ class SchoolImportService
                 'password' => Hash::make($password),
             ]);
 
-            $this->subscription($school, $user);
+            $this->grantParentEntitlement($school, $user);
             $this->rosterRow($school, $parent['email'], $parent['name'], $parent['country_code'], $parent['phone_number'], $user->id);
 
             $toMail[] = [
@@ -256,36 +255,9 @@ class SchoolImportService
         );
     }
 
-    private function subscription(School $school, User $user): void
+    private function grantParentEntitlement(School $school, User $user): void
     {
-        $type = $school->subscription_type ?: 'monthly';
-        $start = now();
-
-        $end = match ($type) {
-            'quarterly' => $start->copy()->addMonths(3),
-            'yearly' => $start->copy()->addYear(),
-            default => $start->copy()->addMonth(),
-        };
-
-        Subscription::create([
-            'user_id' => $user->id,
-            'subscription_type_id' => match ($type) {
-                'quarterly' => 'com.empowered.quarterly',
-                'yearly' => 'com.empowered.yearly',
-                default => 'com.empowered.monthly',
-            },
-            'user_type' => 'parent',
-            'subscription_type' => $type,
-            'start_date' => $start->toDateString(),
-            'end_date' => $end->toDateString(),
-            'currency' => 'SGD',
-            'status' => 'Successful',
-            'price' => match ($type) {
-                'quarterly' => '33.81',
-                'yearly' => '101.63',
-                default => '13.49',
-            },
-        ]);
+        (new SchoolContractService())->grantParentEntitlement($school, $user);
     }
 
     private function fail(string $message): array

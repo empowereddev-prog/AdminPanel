@@ -149,4 +149,67 @@ class SchoolRosterAdminTest extends TestCase
 
         $this->assertCount(2, $data, 'The feed must be scoped to this school.');
     }
+
+    public function test_a_parent_without_a_roster_row_still_appears_in_the_merged_list(): void
+    {
+        $school = School::factory()->create();
+        $parent = User::factory()->parent()->inSchool($school)->create(['email' => 'orphan' . uniqid() . '@example.test']);
+        SchoolParentInvite::factory()->for($school)->create();
+
+        $data = $this->actingAs($this->admin(), 'admin')
+            ->getJson(route('school.roster.data', $school->id))
+            ->assertOk()
+            ->json('data');
+
+        $this->assertCount(2, $data);
+        $this->assertTrue(
+            collect($data)->contains(fn ($row) => str_contains(html_entity_decode((string) $row['email']), $parent->email))
+        );
+    }
+
+    public function test_a_revoked_roster_entry_can_be_restored(): void
+    {
+        $school = School::factory()->create();
+        $parent = User::factory()->parent()->inSchool($school)->create();
+        $invite = SchoolParentInvite::factory()->for($school)->forEmail($parent->email)->revoked()->create();
+
+        $this->actingAs($this->admin(), 'admin')
+            ->postJson(route('school.roster.restore', $invite->id))
+            ->assertOk()
+            ->assertJson(['status' => true]);
+
+        $invite->refresh();
+        $this->assertSame('claimed', $invite->status);
+        $this->assertSame($parent->id, (int) $invite->claimed_user_id);
+        $this->assertNotNull($parent->fresh());
+    }
+
+    public function test_an_inactive_parent_can_be_enabled(): void
+    {
+        $school = School::factory()->create();
+        $parent = User::factory()->parent()->inSchool($school)->create(['status' => 'inactive']);
+        $child = User::factory()->child($parent)->create(['status' => 'inactive']);
+
+        $this->actingAs($this->admin(), 'admin')
+            ->postJson(route('school.parents.status', [$school->id, $parent->id]), ['status' => 'active'])
+            ->assertOk()
+            ->assertJson(['status' => true, 'value' => 'active']);
+
+        $this->assertSame('active', $parent->fresh()->status);
+        $this->assertSame('active', $child->fresh()->status);
+    }
+
+    public function test_disabling_a_parent_also_disables_their_children(): void
+    {
+        $school = School::factory()->create();
+        $parent = User::factory()->parent()->inSchool($school)->create(['status' => 'active']);
+        $child = User::factory()->child($parent)->create(['status' => 'active']);
+
+        $this->actingAs($this->admin(), 'admin')
+            ->postJson(route('school.parents.status', [$school->id, $parent->id]), ['status' => 'inactive'])
+            ->assertOk();
+
+        $this->assertSame('inactive', $parent->fresh()->status);
+        $this->assertSame('inactive', $child->fresh()->status);
+    }
 }

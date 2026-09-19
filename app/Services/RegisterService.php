@@ -6,9 +6,9 @@ use App\Models\User;
 use App\Models\TempUser;
 use App\Models\RideBooking;
 use App\Models\School;
-use App\Models\Subscription;
 use App\Models\Transaction;
 use App\Models\SchoolParentInvite;
+use App\Services\School\SchoolContractService;
 use App\Services\School\SchoolRosterService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -130,45 +130,7 @@ class RegisterService
             // unverified account that never had one - a real change in who gets
             // a free entitlement, and not part of this work.
             if ($school && !$existingUser) {
-
-                $subscriptionType = $school->subscription_type; // monthly / quarterly / yearly
-                $startDate = Carbon::now();
-
-                $endDate = match ($subscriptionType) {
-                    'monthly'   => $startDate->copy()->addMonth(),
-                    'quarterly' => $startDate->copy()->addMonths(3),
-                    'yearly'    => $startDate->copy()->addYear(),
-                    default     => $startDate->copy()->addMonth(),
-                };
-
-                // 🔒 Prevent duplicate subscription
-                $existingSubscription = Subscription::where('user_id', $user->id)
-                    ->where('user_type', 'parent')
-                    ->exists();
-
-                if (!$existingSubscription) {
-                    Subscription::create([
-                        'user_id' => $user->id,
-                        'subscription_type_id' =>
-                        $subscriptionType === 'monthly'
-                            ? 'com.empowered.monthly'
-                            : ($subscriptionType === 'quarterly'
-                                ? 'com.empowered.quarterly'
-                                : 'com.empowered.yearly'),
-                        'user_type' => 'parent',
-                        'subscription_type' => $subscriptionType,
-                        'start_date' => $startDate->format('Y-m-d'),
-                        'end_date' => $endDate->format('Y-m-d'),
-                        'currency' => 'SGD',
-                        'status' => 'Successful',
-                        'price' =>
-                        $subscriptionType === 'monthly'
-                            ? '13.49'
-                            : ($subscriptionType === 'quarterly'
-                                ? '33.81'
-                                : '101.63'),
-                    ]);
-                }
+                (new SchoolContractService())->grantParentEntitlement($school, $user);
             }
 
             // Bind the roster entry to this account - inside the same

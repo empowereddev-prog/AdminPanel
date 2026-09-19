@@ -20,9 +20,7 @@
             </div>
 
             {{-- This page had no flash region at all, so every back()->with(...)
-                 landed silently: the export redirecting with "No users found"
-                 looked like a button that did nothing, and the same was true of
-                 the import results. --}}
+                 landed silently (imports, deletes). --}}
             @if (session('success'))
                 <div class="alert alert-success">{{ session('success') }}</div>
             @endif
@@ -80,101 +78,22 @@
                     <span class="fw-semibold text-muted">📦 Subscription:</span>
                     <span class="ms-2">
                         {{ \Illuminate\Support\Str::of($school->subscription_type)->replace('_', '')->camel()->ucfirst() }}
+                        @if ($school->price !== null)
+                            — SGD {{ number_format((float) $school->price, 2) }}
+                        @endif
                     </span>
                 </div>
             </div>
 
             <div class="card shadow p-4">
-                <h3 class="fw-bold" style="margin:0 0 6px;">Parent Accounts</h3>
+                <h3 class="fw-bold" style="margin:0 0 6px;">Parents</h3>
                 <p class="text-muted" style="margin:0 0 16px;max-width:70ch;">
-                    Parents of this school. Teachers have their own list in the Teacher Roster below.
-                </p>
-
-                <div class="card shadow p-3 mb-4">
-                    <form method="GET" action="{{ route('school.export.users', $school->id) }}" class="row g-3">
-                        {{-- This list is parents only, so the export is too. The
-                             endpoint still accepts all/parent/teacher. --}}
-                        <input type="hidden" name="role_type" value="parent">
-
-                        <div class="col-md-4">
-                            <label>Start Date</label>
-                            <input type="date" name="start_date" id="start_date" class="form-control">
-                        </div>
-
-                        <div class="col-md-4">
-                            <label>End Date</label>
-                            <input type="date" name="end_date" id="end_date" class="form-control">
-                        </div>
-
-                        <div class="col-md-4 d-flex align-items-end">
-                            <button type="submit" class="btn btn-success w-100">
-                                <i class="mdi mdi-file-excel"></i> Export Parents
-                            </button>
-                        </div>
-                    </form>
-                </div>
-
-                @if ($school->parents->isEmpty())
-                    <p class="text-center">No parent accounts yet.</p>
-                @else
-                    <table class="table table-striped" id="schoolUsersTable">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>#</th>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @php $displayIndex = 1; @endphp
-                            @foreach ($school->parents as $student)
-                                <tr id="row-{{ $student->id }}" class="user-row">
-                                    <td class="row-index">{{ $displayIndex++ }}</td>
-                                    <td>{{ $student->name }}</td>
-                                    <td>{{ $student->email }}</td>
-                                    <td>
-                                        <div class="d-flex align-items-center" style="gap: 12px;">
-                                            <a
-                                                href="{{ route('school-user-child-detail', $student->id) }}"
-                                                title="View Details"
-                                                aria-label="View Details"
-                                                class="text-decoration-none d-flex align-items-center justify-content-center"
-                                            >
-                                                <i class="mdi mdi-eye" style="font-size: 20px; line-height: 1;"></i>
-                                            </a>
-
-                                            <button
-                                                type="button"
-                                                class="delete-student btn btn-link p-0 text-danger d-flex align-items-center justify-content-center"
-                                                data-id="{{ $student->id }}"
-                                            >
-                                                <i class="mdi mdi-trash-can" style="font-size: 20px; line-height: 1;"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                @endif
-            </div>
-
-            {{-- A third card rather than tabs: no admin view in this project uses
-                 nav-tabs, so tabs here would need new JS, new active-state handling
-                 and would look unlike every other screen. Stacked cards are the
-                 established idiom on this page. --}}
-            <div class="card shadow p-4 mt-4">
-                <h4 class="fw-bold text-primary" style="margin:0 0 6px;">
-                    <i class="mdi mdi-account-check"></i> Parent Roster
-                </h4>
-                <p class="text-muted" style="margin:0 0 20px;max-width:70ch;">
-                    The school's list of parent email addresses. Parents are added by uploading the school's parent
-                    list — there is no manual entry here.
+                    Parent accounts and the school's parent email list in one place. Teachers have their own list in the Teacher Roster below.
+                    Disable an account to block sign-in without deleting it; you can enable it again later.
                 </p>
 
                 {{-- Parents are added by spreadsheet only, so the upload lives
-                     next to the roster it populates. Same file and same rules as
+                     next to the list it populates. Same file and same rules as
                      the Edit screen - one service behind both. --}}
                 <div style="border:1px solid #e6edf5;border-radius:8px;padding:18px;background:#fafbfd;margin:0 0 24px;">
                     <form action="{{ route('school.import.parents', $school->id, false) }}" method="POST"
@@ -238,7 +157,8 @@
                                 <th>Name</th>
                                 <th>Email</th>
                                 <th>Phone</th>
-                                <th>Status</th>
+                                <th>Roster</th>
+                                <th>Account</th>
                                 <th>Children</th>
                                 <th>Action</th>
                             </tr>
@@ -352,7 +272,8 @@
                         { data: 'name', name: 'name' },
                         { data: 'email', name: 'email' },
                         { data: 'phone_no', name: 'phone_no', orderable: false },
-                        { data: 'status_badge', name: 'status' },
+                        { data: 'roster_badge', orderable: false, searchable: false },
+                        { data: 'account_badge', orderable: false, searchable: false },
                         { data: 'children', orderable: false, searchable: false },
                         { data: 'action', orderable: false, searchable: false }
                     ]
@@ -467,6 +388,99 @@
                     });
                 });
 
+                $('#rosterTable').on('click', '.roster-restore', function() {
+                    var id = $(this).data('id');
+
+                    swal({
+                        title: 'Enable roster access?',
+                        text: 'This parent will be able to use the school code again.',
+                        icon: 'info',
+                        buttons: ['Cancel', 'Enable']
+                    }).then(function(confirmed) {
+                        if (!confirmed) {
+                            return;
+                        }
+
+                        $.ajax({
+                            type: 'POST',
+                            url: '/school/roster/' + id + '/restore',
+                            headers: { 'X-CSRF-TOKEN': csrfToken },
+                            data: { _token: csrfToken },
+                            success: function(res) {
+                                rosterTable.ajax.reload(null, false);
+                                swal('', res.message, 'success');
+                            },
+                            error: function(xhr) {
+                                swal('', (xhr.responseJSON && xhr.responseJSON.message) || 'Could not restore that entry.', 'error');
+                            }
+                        });
+                    });
+                });
+
+                $('#rosterTable').on('click', '.parent-status', function() {
+                    var id = $(this).data('id');
+                    var next = $(this).data('next');
+                    var enabling = next === 'active';
+
+                    swal({
+                        title: enabling ? 'Enable this parent?' : 'Disable this parent?',
+                        text: enabling
+                            ? 'They and their children will be able to sign in again.'
+                            : 'They and their children will not be able to sign in until you enable them again. The account is not deleted.',
+                        icon: enabling ? 'info' : 'warning',
+                        buttons: ['Cancel', enabling ? 'Enable' : 'Disable'],
+                        dangerMode: !enabling
+                    }).then(function(confirmed) {
+                        if (!confirmed) {
+                            return;
+                        }
+
+                        $.ajax({
+                            type: 'POST',
+                            url: '/school/{{ $school->id }}/parents/' + id + '/status',
+                            headers: { 'X-CSRF-TOKEN': csrfToken },
+                            data: { _token: csrfToken, status: next },
+                            success: function(res) {
+                                rosterTable.ajax.reload(null, false);
+                                swal('', res.message, 'success');
+                            },
+                            error: function(xhr) {
+                                swal('', (xhr.responseJSON && xhr.responseJSON.message) || 'Could not update that account.', 'error');
+                            }
+                        });
+                    });
+                });
+
+                $('#rosterTable').on('click', '.parent-delete', function() {
+                    var id = $(this).data('id');
+
+                    swal({
+                        title: 'Remove this parent?',
+                        text: 'Their account and children will be removed from this school. This cannot be undone from here.',
+                        icon: 'warning',
+                        buttons: ['Cancel', 'Remove'],
+                        dangerMode: true
+                    }).then(function(confirmed) {
+                        if (!confirmed) {
+                            return;
+                        }
+
+                        $.ajax({
+                            type: 'POST',
+                            url: '/delete-school-user/' + id,
+                            headers: { 'X-CSRF-TOKEN': csrfToken },
+                            data: { _token: csrfToken, _method: 'DELETE' },
+                            success: function() {
+                                rosterTable.ajax.reload(null, false);
+                                swal('', 'Parent removed.', 'success');
+                            },
+                            error: function() {
+                                swal('', 'Could not remove that parent.', 'error');
+                            }
+                        });
+                    });
+                });
+
                 $('.school-flag').on('change', function() {
                     var $input = $(this);
                     var flag = $input.data('flag');
@@ -485,80 +499,6 @@
                             // turning enforcement on would lock parents out.
                             $input.prop('checked', !$input.prop('checked'));
                             swal('', (xhr.responseJSON && xhr.responseJSON.message) || 'Could not change that setting.', 'error');
-                        }
-                    });
-                });
-
-                // The list is parents only now, so there is nothing to filter -
-                // this just keeps the row numbers contiguous after a removal.
-                function renumberParentRows() {
-                    $('.user-row:visible').each(function(i) {
-                        $(this).find('.row-index').text(i + 1);
-                    });
-                }
-
-                // Prevent selecting an End Date before the Start Date
-                $('#start_date').on('change', function () {
-                    let startDate = $(this).val();
-
-                    $('#end_date').attr('min', startDate);
-
-                    if ($('#end_date').val() && $('#end_date').val() < startDate) {
-                        $('#end_date').val('');
-                    }
-                });
-
-                // Validate before export
-                $('form[action="{{ route('school.export.users', $school->id) }}"]').on('submit', function (e) {
-                    let startDate = $('#start_date').val();
-                    let endDate = $('#end_date').val();
-
-                    if (startDate && endDate && endDate < startDate) {
-                        e.preventDefault();
-
-                        Swal.fire({
-                            icon: 'warning',
-                            title: 'Invalid Date Range',
-                            text: 'End Date must be greater than or equal to Start Date.'
-                        });
-                    }
-                });
-
-                $(document).on("click", ".delete-student", function() {
-                    var studentId = $(this).data("id");
-
-                    Swal.fire({
-                        title: "Delete School User",
-                        text: "Are you sure you want to delete this user?",
-                        icon: "warning",
-                        showCancelButton: true,
-                        confirmButtonText: "Yes",
-                        cancelButtonText: "Cancel",
-                        confirmButtonColor: '#3085d6',
-                        cancelButtonColor: '#d33',
-                    }).then((result) => {
-                        if (result.isConfirmed) {
-                            $.ajax({
-                                url: '/delete-school-user/' + studentId,
-                                type: "POST",
-                                data: {
-                                    _token: "{{ csrf_token() }}",
-                                    _method: "DELETE"
-                                },
-                                success: function(response) {
-                                    Swal.fire({
-                                        icon: "success",
-                                        text: "School user deleted successfully.",
-                                        showConfirmButton: true
-                                    }).then(() => {
-                                        $("#row-" + studentId).remove();
-                                        renumberParentRows();
-                                    });
-                                },
-                                error: function() {
-                                    Swal.fire("Error", "Something went wrong!", "error");
-                                }
-                            });
                         }
                     });
                 });
