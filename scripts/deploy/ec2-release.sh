@@ -1,19 +1,34 @@
 #!/usr/bin/env bash
-# Backup / deploy / rollback the Laravel app on EC2.
-# Intended to run ON the server (GitHub Actions copies it, then SSH-executes it).
+# Backup / deploy / rollback the Laravel app on EC2. Runs ON the server.
 #
-# Required env: APP_PATH
+# Settings come from /etc/ec2-deploy.env (see scripts/deploy/ec2-deploy.env),
+# which the systemd units read too, so there is one definition of APP_PATH
+# rather than one per file. Anything already in the environment wins, so a
+# one-off run can still override without editing the file.
+#
+# Required (here or in the env file): APP_PATH
 # Optional: BACKUP_DIR, BACKUP_KEEP, GIT_SHA, GIT_BRANCH, RUN_MIGRATIONS,
-#           PHP_BIN, PHP_FPM_SERVICE, RELEASE_SRC (workspace checkout on a self-hosted runner)
+#           SKIP_BACKUP, PHP_BIN, PHP_FPM_SERVICE, DEPLOY_ENV_FILE
 
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 backup|deploy|deploy-sync|autosync|rollback|list [archive-name|latest]"
+  echo "Usage: $0 backup|deploy|autosync|rollback|list [archive-name|latest]"
   exit 1
 }
 
-APP_PATH="${APP_PATH:?Set APP_PATH to the live Laravel root, e.g. /var/www/ec-healthcare}"
+DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-/etc/ec2-deploy.env}"
+if [[ -f "$DEPLOY_ENV_FILE" ]]; then
+  # Read as defaults, not overrides: an explicit environment value wins.
+  while IFS='=' read -r key value; do
+    [[ "$key" =~ ^[A-Z_]+$ ]] || continue
+    [[ -n "${!key:-}" ]] && continue
+    printf -v "$key" '%s' "$value"
+    export "${key?}"
+  done < "$DEPLOY_ENV_FILE"
+fi
+
+APP_PATH="${APP_PATH:?Set APP_PATH here or in $DEPLOY_ENV_FILE, e.g. /var/www/AdminPanel}"
 BACKUP_DIR="${BACKUP_DIR:-$(dirname "$APP_PATH")/backups/$(basename "$APP_PATH")}"
 BACKUP_KEEP="${BACKUP_KEEP:-5}"
 GIT_SHA="${GIT_SHA:-}"
@@ -22,12 +37,45 @@ RUN_MIGRATIONS="${RUN_MIGRATIONS:-false}"
 SKIP_BACKUP="${SKIP_BACKUP:-false}"
 PHP_BIN="${PHP_BIN:-php}"
 PHP_FPM_SERVICE="${PHP_FPM_SERVICE:-}"
-RELEASE_SRC="${RELEASE_SRC:-}"
 
 command="${1:-}"
 archive_arg="${2:-latest}"
 
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
+
+# One writer at a time. The autosync timer fires every two minutes; systemd
+# will not start a second copy of its own unit, but it does nothing to stop an
+# operator running `deploy` or `rollback` by hand while a timed run is midway
+# through `git reset --hard`. Two of these at once leaves the tree in a state
+# neither of them intended.
+acquire_lock() {
+  if ! command -v flock >/dev/null 2>&1; then
+    # Ubuntu ships flock in util-linux, so this is really only reached on a dev
+    # machine. Warn rather than refuse: failing closed here would block a
+    # legitimate deploy for a missing convenience, and a false "already
+    # running" is a worse lie than an honest "unprotected".
+    log "WARNING: flock not available; running $command WITHOUT a deploy lock"
+    return 0
+  fi
+
+  local lock_file
+  for lock_file in /var/lock/ec2-release.lock /tmp/ec2-release.lock; do
+    if exec 9>"$lock_file" 2>/dev/null; then
+      break
+    fi
+    lock_file=""
+  done
+
+  if [[ -z "${lock_file:-}" ]]; then
+    log "WARNING: could not open a lock file; running $command WITHOUT a deploy lock"
+    return 0
+  fi
+
+  if ! flock -n 9; then
+    log "Another deploy is in progress (lock held on $lock_file); refusing to run $command"
+    exit 1
+  fi
+}
 
 current_sha() {
   if git -C "$APP_PATH" rev-parse --short HEAD >/dev/null 2>&1; then
@@ -37,18 +85,38 @@ current_sha() {
   fi
 }
 
+# `systemctl list-unit-files <pattern>` exits 0 even when the pattern matches
+# nothing, so the old `if systemctl list-unit-files ... >/dev/null` test was
+# always true: every box took the first branch, tried to reload php8.3-fpm, and
+# `|| true` swallowed the failure. On an apache2 box that meant the web server
+# was never reloaded after a deploy and stale opcache served the old code until
+# something else restarted it. Test the OUTPUT, not the exit status.
+unit_exists() {
+  systemctl list-unit-files --no-legend "$1" 2>/dev/null | grep -q .
+}
+
 reload_fpm() {
   if [[ -n "$PHP_FPM_SERVICE" ]]; then
-    sudo systemctl reload "$PHP_FPM_SERVICE" || true
+    if ! sudo systemctl reload "$PHP_FPM_SERVICE"; then
+      log "WARNING: reload of $PHP_FPM_SERVICE failed - the box may still be serving old code"
+    fi
     return
   fi
-  for svc in php8.3-fpm php8.2-fpm php-fpm apache2; do
-    if systemctl list-unit-files "$svc.service" >/dev/null 2>&1; then
-      sudo systemctl reload "$svc" || true
+
+  local svc
+  for svc in php8.3-fpm php8.2-fpm php8.1-fpm php-fpm apache2 nginx; do
+    if unit_exists "$svc.service"; then
+      log "Reloading $svc"
+      if ! sudo systemctl reload "$svc"; then
+        log "WARNING: reload of $svc failed - the box may still be serving old code"
+      fi
       return
     fi
   done
-  log "PHP-FPM / Apache service not found; skip reload"
+
+  # Not `|| true`: silence here looks like success and is how a deploy "passes"
+  # while serving the previous release.
+  log "WARNING: no PHP-FPM / Apache / nginx unit found; NOTHING was reloaded. Set PHP_FPM_SERVICE in $DEPLOY_ENV_FILE"
 }
 
 # The locked dependencies carry known security advisories (see docs/DEPLOYMENT.md).
@@ -58,6 +126,16 @@ composer_blocking_flag() {
   if composer install --help 2>/dev/null | grep -q -- '--no-security-blocking'; then
     echo "--no-security-blocking"
   fi
+}
+
+# Wrapper so the flag is passed as a real argument array rather than relying on
+# unquoted word-splitting of a command substitution at three call sites.
+composer_install() {
+  local -a flags=(--no-dev --no-interaction --prefer-dist --optimize-autoloader)
+  local blocking
+  blocking="$(composer_blocking_flag)"
+  [[ -n "$blocking" ]] && flags+=("$blocking")
+  composer install "${flags[@]}"
 }
 
 laravel_optimize() {
@@ -77,6 +155,11 @@ laravel_optimize() {
   # route:cache refuses that; the live app is fine without a route cache.
   "$PHP_BIN" artisan route:clear || true
   "$PHP_BIN" artisan view:cache
+  # Tell any running worker to finish its current job and exit. Without this a
+  # worker started before the rsync/reset keeps executing the OLD code it
+  # booted with, against the NEW files on disk. systemd's Restart=always in
+  # ec2-queue-worker.service brings it straight back on the new release.
+  "$PHP_BIN" artisan queue:restart || true
 }
 
 prune_backups() {
@@ -127,9 +210,11 @@ replaced_by_sha=${GIT_SHA:-}
 branch=${GIT_BRANCH:-}
 archive=${name}.tar.gz
 EOF
+  # Convenience pointers for a human reading the backup directory. Refreshed
+  # after pruning so they never dangle at an archive that has been removed.
+  prune_backups
   ln -sfn "${name}.tar.gz" "$BACKUP_DIR/latest.tar.gz"
   ln -sfn "${name}.txt" "$BACKUP_DIR/latest.txt"
-  prune_backups
   log "Backup complete: ${name}.tar.gz"
 }
 
@@ -197,7 +282,7 @@ finish_deploy() {
   cd "$APP_PATH"
   if [[ -f composer.json ]]; then
     log "composer install"
-    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader $(composer_blocking_flag)
+    composer_install
   fi
 
   if [[ "$RUN_MIGRATIONS" == "true" ]]; then
@@ -208,38 +293,6 @@ finish_deploy() {
   laravel_optimize
   reload_fpm
   log "Deploy finished (sha=$(current_sha))"
-}
-
-do_deploy_sync() {
-  RELEASE_SRC="${RELEASE_SRC:?Set RELEASE_SRC to the GitHub Actions workspace}"
-  if [[ ! -f "$RELEASE_SRC/artisan" && ! -f "$RELEASE_SRC/composer.json" ]]; then
-    log "ERROR: RELEASE_SRC does not look like the Laravel repo: $RELEASE_SRC"
-    exit 1
-  fi
-
-  if [[ "$SKIP_BACKUP" == "true" ]]; then
-    log "SKIP_BACKUP=true; not snapshotting the live app"
-  else
-    do_backup
-  fi
-
-  mkdir -p "$APP_PATH"
-  log "Syncing $RELEASE_SRC -> $APP_PATH"
-  rsync -a --delete \
-    --exclude '.env' \
-    --exclude '.env.*' \
-    --exclude '.git/' \
-    --exclude 'storage/' \
-    --exclude 'vendor/' \
-    --exclude 'node_modules/' \
-    --exclude 'public/uploads/' \
-    --exclude 'public/assets/' \
-    --exclude 'public/storage/' \
-    --exclude 'public/phpdb/' \
-    --exclude 'bootstrap/cache/*.php' \
-    "$RELEASE_SRC"/ "$APP_PATH"/
-
-  finish_deploy
 }
 
 do_rollback() {
@@ -276,23 +329,55 @@ do_rollback() {
   rm -f "$env_copy"
 
   cd "$APP_PATH"
+
+  # Put git back where the files are.
+  #
+  # The snapshot excludes .git, and extracting it does not touch HEAD - so a
+  # rollback used to leave the working tree on the OLD release while git still
+  # said the NEW one. autosync then compared HEAD to origin, found them equal,
+  # and reported "nothing to deploy" forever: the box served rolled-back code
+  # that no command would ever correct, and `git status` showed it as clean and
+  # current. The sha that was live at backup time is recorded beside the
+  # archive precisely for this, and was never read until now.
+  local sha_file sha
+  sha_file="${archive%.tar.gz}.sha"
+  if [[ -f "$sha_file" ]]; then
+    sha="$(tr -d '[:space:]' < "$sha_file")"
+    if [[ -n "$sha" && "$sha" != "unknown" ]] && git rev-parse --verify "$sha^{commit}" >/dev/null 2>&1; then
+      log "Resetting git to the rolled-back sha $sha"
+      git reset --hard "$sha"
+    else
+      log "WARNING: sha '$sha' from $(basename "$sha_file") is not a commit here; git still points at $(current_sha) while the files are the rollback. Fix before re-enabling autosync."
+    fi
+  else
+    log "WARNING: no .sha beside $(basename "$archive"); git still points at $(current_sha) while the files are the rollback. Fix before re-enabling autosync."
+  fi
+
   if [[ -f composer.json && -d vendor ]]; then
     composer dump-autoload --optimize --no-dev --no-interaction || true
   elif [[ -f composer.json ]]; then
-    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader $(composer_blocking_flag)
+    composer_install
   fi
 
   laravel_optimize
   reload_fpm
   log "Rollback finished from $(basename "$archive")"
+  log "NOTE: rollback restores code, not the database. Roll migrations back yourself."
+
+  # Now that rollback puts git back in step with the files, autosync can once
+  # again see that origin is ahead - and it will happily redeploy the very
+  # release you just backed out of, within two minutes. Say so, loudly.
+  if systemctl is-active --quiet ec2-autosync.timer 2>/dev/null; then
+    log "WARNING: ec2-autosync.timer is ACTIVE and will redeploy origin/${GIT_BRANCH:-the tracked branch} over this rollback within ~2 minutes."
+    log "WARNING: run 'sudo systemctl stop ec2-autosync.timer' now, then revert the bad commit on the branch before starting it again."
+  fi
 }
 
 case "$command" in
-  backup) do_backup ;;
-  deploy) do_deploy ;;
-  deploy-sync) do_deploy_sync ;;
-  autosync) do_autosync ;;
-  rollback) do_rollback ;;
-  list) do_list ;;
+  backup)   acquire_lock; do_backup ;;
+  deploy)   acquire_lock; do_deploy ;;
+  autosync) acquire_lock; do_autosync ;;
+  rollback) acquire_lock; do_rollback ;;
+  list)     do_list ;;
   *) usage ;;
 esac

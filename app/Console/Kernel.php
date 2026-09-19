@@ -29,21 +29,16 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('audit:prune')->dailyAt('00:00');
 
-        // Drains the queue. The school import dispatches SendStudentSignupMail
-        // rather than mailing inline - sending N credential emails inside one
-        // HTTP request times out a large import - and this deployment runs no
-        // worker process. Without this the jobs would sit in the table unsent,
-        // which is the same outcome as the missing template, reached a
-        // different way. --stop-when-empty exits as soon as the queue drains;
-        // --max-time keeps a run from colliding with the next minute's.
+        // No queue:work here. The queue is drained by a persistent worker -
+        // scripts/deploy/ec2-queue-worker.service - rather than a once-a-minute
+        // scheduled run, because the scheduled version only fired if someone had
+        // installed the `schedule:run` cron by hand, and on at least one box
+        // nobody had: credential emails sat in the jobs table unsent for days.
         //
-        // If a supervisor-managed `queue:work` is introduced later, remove this.
-        $schedule->command('queue:work --stop-when-empty --max-time=55 --tries=3')
-            ->everyMinute()
-            // An explicit expiry matters: the default is 24 hours, so a run
-            // killed by a deploy or reboot would hold the mutex and silently
-            // stop every queued mail for a day.
-            ->withoutOverlapping(2);
+        // Running both would be worse than either: two workers can reserve the
+        // same job inside retry_after and send a parent their password twice.
+        // If the systemd unit is ever retired, restore a drain here - do not
+        // leave the queue with no consumer.
     }
 
     /**

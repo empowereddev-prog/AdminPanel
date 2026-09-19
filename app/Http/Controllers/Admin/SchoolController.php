@@ -21,6 +21,7 @@ use Carbon\Carbon;
 use Hash;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -593,7 +594,7 @@ class SchoolController extends Controller
             }
 
             if ($studentsToMail !== []) {
-                SendStudentSignupMail::dispatch($studentsToMail);
+                SendStudentSignupMail::dispatchInChunks($studentsToMail);
             }
 
             app(SchoolNotifier::class)->importSummary(
@@ -1072,7 +1073,7 @@ class SchoolController extends Controller
                 }
 
                 if ($studentsToMail !== []) {
-                    SendStudentSignupMail::dispatch($studentsToMail);
+                    SendStudentSignupMail::dispatchInChunks($studentsToMail);
                 }
 
                 app(SchoolNotifier::class)->importSummary(
@@ -1953,9 +1954,16 @@ class SchoolController extends Controller
                 ->count();
 
             if ($unrostered > 0) {
+                // The admin cannot run this; whoever reads the log can.
+                Log::warning('Roster enforcement blocked: parents missing from roster', [
+                    'school_id' => $school->id,
+                    'unrostered' => $unrostered,
+                    'remedy' => "php artisan school:backfill-roster --school={$school->id}",
+                ]);
+
                 return response()->json([
                     'status' => false,
-                    'message' => "Run  php artisan school:backfill-roster --school={$school->id}  first - {$unrostered} existing parent(s) are not on the roster and would be locked out.",
+                    'message' => "{$unrostered} existing parent(s) are not on the roster and would lose access if this is enabled. Please contact your administrator before turning it on.",
                 ], 422);
             }
         }
@@ -1977,11 +1985,19 @@ class SchoolController extends Controller
         return match ($result['reason'] ?? '') {
             'sent' => ' Onboarding email sent to the school contact.',
             'no_email' => ' Onboarding email skipped: no school contact email.',
-            'no_template' => ' Onboarding email was not sent (missing school_onboarded template). Run: php artisan db:seed --class=SchoolEmailTemplateSeeder',
+            'no_template' => ' Onboarding email could not be sent because an email template is missing. Please contact your administrator.',
             default => ' Onboarding email failed to send. Check mail settings and storage/logs/laravel.log.',
         };
     }
 
+    /**
+     * No queue state in here. It used to branch on config('queue.default') and
+     * tell the admin to run `php artisan queue:work` - advice nobody reading an
+     * admin screen can act on, and only there because nothing guaranteed the
+     * queue was drained. A persistent worker
+     * (scripts/deploy/ec2-queue-worker.service) is that guarantee now, so the
+     * message states an outcome instead of a command.
+     */
     private function credentialMailSuffix(int $queued): string
     {
         if ($queued < 1) {
@@ -1989,13 +2005,14 @@ class SchoolController extends Controller
         }
 
         if (!EmailTemplate::where('variable_name', 'signup_school_user')->exists()) {
-            return ' Parent emails were not sent (missing signup_school_user template). Run: php artisan db:seed --class=SchoolEmailTemplateSeeder';
+            Log::error('Credential emails skipped: signup_school_user template is missing', [
+                'recipients' => $queued,
+                'remedy' => 'php artisan db:seed --class=SchoolEmailTemplateSeeder',
+            ]);
+
+            return ' Credential emails could not be sent because an email template is missing. Please contact your administrator.';
         }
 
-        if (config('queue.default') === 'sync') {
-            return ' Credential emails were sent.';
-        }
-
-        return 'Credential emails were queued. If they do not arrive, run php artisan queue:work.';
+        return ' Credential emails are on their way to ' . $queued . ' parent(s).';
     }
 }

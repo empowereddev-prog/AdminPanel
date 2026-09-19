@@ -94,7 +94,14 @@ class SchoolRosterAdminTest extends TestCase
             ->postJson(route('school.flag.toggle', [$school->id, 'enforce_parent_roster']));
 
         $response->assertStatus(422)->assertJson(['status' => false]);
-        $this->assertStringContainsString('backfill-roster', $response->json('message'));
+
+        $message = $response->json('message');
+
+        // It used to answer with "Run php artisan school:backfill-roster ..." -
+        // a shell command shown to someone with no shell. The remedy moved to
+        // the log, where whoever can act on it will see it.
+        $this->assertStringContainsString('2 existing parent(s)', $message);
+        $this->assertDoesNotMatchRegularExpression('/artisan|backfill-roster/i', $message);
         $this->assertSame('no', $school->fresh()->enforce_parent_roster, 'The flag must not have flipped.');
     }
 

@@ -115,10 +115,10 @@ class SchoolImportService
         }
 
         // Queued, never inline: one blocking SMTP call per row times out a
-        // large import.
-        if ($toMail !== []) {
-            SendStudentSignupMail::dispatch($toMail);
-        }
+        // large import. Chunked rather than one job for the whole list, so no
+        // single job can outlive the worker's timeout and be re-reserved
+        // mid-send - that is what mails a parent their password twice.
+        SendStudentSignupMail::dispatchInChunks($toMail);
 
         $imported = count($toMail);
 

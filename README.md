@@ -126,9 +126,11 @@ tail -f storage/logs/laravel.log
 ```
 
 The school parent import **dispatches** `SendStudentSignupMail` rather than sending inline, because sending N
-credential emails inside one HTTP request times out a large import. With `QUEUE_CONNECTION=database` those jobs sit in
-the `jobs` table until something drains them. In production the scheduler does it (`app/Console/Kernel.php`); locally
-nothing does, so run a worker in a second terminal whenever you test an import:
+credential emails inside one HTTP request times out a large import. It dispatches one job per 20 recipients
+(`SendStudentSignupMail::CHUNK`) so no single job can outlive the worker's timeout and be re-reserved mid-send — that
+is what mails a parent their password twice. With `QUEUE_CONNECTION=database` those jobs sit in the `jobs` table until
+something drains them. In production a systemd unit does it (`scripts/deploy/ec2-queue-worker.service`, see
+docs/DEPLOYMENT.md §4); locally nothing does, so run a worker in a second terminal whenever you test an import:
 
 ```bash
 php artisan queue:work

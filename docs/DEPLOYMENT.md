@@ -1,45 +1,100 @@
 # Deployment
 
-The single runbook for releasing this app. Follow it top to bottom; the order matters in two
-places and both are called out.
+The runbook for releasing this app. Follow it top to bottom.
 
 Target: `admin.empoweredhealth.asia` (EC2). Branch: `sprint1_dev`.
 
----
-
-## 0. What is in this release
-
-Three commits ahead of `origin/sprint1_dev`:
-
-| Commit | Contents |
-|---|---|
-| `ef18346` | School parent roster, child seat caps, school payment history, Twilio/mail hardening |
-| `cab87f1` | Direct-to-S3 video upload — large podcasts no longer pass through nginx/PHP, fixing HTTP 413 |
-| `5b9be9c` | Seven pre-deploy blocker fixes (see §5) |
-| _(this commit)_ | Pre-existing wiring defects found in review: Payment History DataTables column, unregistered reference seeders, four always-500 routes removed, jQuery downgrades, a global validation summary |
-
-Every new enforcement rule is behind a **per-school flag that defaults to off**, so the deploy
-itself changes no school's behaviour. Enabling is a separate, per-school step — §7.
-
-> **Part B is still outstanding and none of it is code** — migrations, `QUEUE_CONNECTION=database`
-> + cron, the S3 CORS rule with `ExposeHeaders: ETag` (without it the upload silently falls back
-> and the 413 returns), the `assets/video/tmp/` lifecycle rule, and confirming SMTP before the
-> first bulk parent mail.
-
-That paragraph is the whole of §1 and §4. Nothing in it can be committed; all of it must be done
-by hand around the deploy.
+`scripts/deploy/ec2-release.sh` is the deploy. Everything below either sets it up, runs it, or
+checks it. Do not hand-roll the steps it already performs — it knows things this document used to
+get wrong, notably that `config:cache` breaks this app.
 
 ---
 
-## 1. Pre-flight — before you deploy
+## 1. One-time setup
 
-These change nothing on their own, so do them ahead of time.
+Do these once per environment. A fresh box is not deployable until all four are done.
 
-### 1.1 S3 bucket CORS — **the upload fix does nothing without this**
+### 1.1 Confirm the box and set `APP_PATH`
 
-`ExposeHeaders: ETag` is not optional. Multipart completion needs the per-part ETag; without it
-the browser uploader fails, silently falls back to posting the file through PHP, and large videos
-fail with **413 again** — exactly the bug `cab87f1` exists to fix.
+Two paths appear in this repo's history. Verify, don't assume:
+
+```bash
+ls -d /var/www/*
+systemctl list-unit-files | grep -E 'php.*fpm|apache2|nginx'
+```
+
+The shipped systemd units (`scripts/deploy/ec2-*.service`) assume **`/var/www/AdminPanel` with
+apache2**. If your box differs, edit the units before installing them. Whatever is real becomes
+`APP_PATH` everywhere below.
+
+`.env` is never in the repo and never rsynced — it must already exist at `$APP_PATH/.env`.
+
+Then install the shared settings file. `ec2-release.sh` and both systemd units read it, so this is
+the only place the paths are written down:
+
+```bash
+sudo cp "$APP_PATH/scripts/deploy/ec2-deploy.env" /etc/ec2-deploy.env
+sudo ${EDITOR:-nano} /etc/ec2-deploy.env      # APP_PATH, GIT_BRANCH, PHP_BIN, PHP_FPM_SERVICE
+```
+
+Set `PHP_FPM_SERVICE` explicitly. The fallback probe cannot reliably tell a missing unit from a
+present one, and a deploy that reloads nothing looks exactly like a deploy that worked.
+
+**Sudoers.** The deploy runs as `ubuntu` but reloads the web server as root, so it needs a
+password-less rule or every deploy silently skips the reload:
+
+```bash
+sudo tee /etc/sudoers.d/ec2-deploy >/dev/null <<'EOF'
+ubuntu ALL=(root) NOPASSWD: /usr/bin/systemctl reload apache2, /usr/bin/systemctl reload php8.3-fpm, /usr/bin/systemctl list-unit-files
+EOF
+sudo chmod 0440 /etc/sudoers.d/ec2-deploy
+sudo visudo -c
+```
+
+### 1.2 Queue worker — without this, no parent ever gets a password
+
+The parent import **dispatches** `SendStudentSignupMail` rather than mailing inline, because
+sending N credential emails inside one HTTP request times out a large import. Dispatching is not
+sending: with `QUEUE_CONNECTION=database` and nothing draining the queue, the jobs sit in the
+`jobs` table forever while the admin panel reports the import as a success. That is not
+hypothetical — two jobs sat unsent for three days because the `schedule:run` cron this document
+used to ask for was never installed.
+
+Credential mail cannot depend on a manual step somebody may skip, so the worker ships with the
+repo:
+
+```env
+QUEUE_CONNECTION=database
+```
+
+```bash
+sudo cp "$APP_PATH/scripts/deploy/ec2-queue-worker.service" /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ec2-queue-worker
+systemctl is-active ec2-queue-worker      # active
+```
+
+`Restart=always` covers crashes, OOM kills and reboots. `--max-jobs=1000 --max-time=3600` recycle
+the process so a long-lived PHP worker cannot accumulate leaked memory.
+
+Two constraints that are not arbitrary:
+
+- **`--timeout=60` must stay below `retry_after`** (90, in `config/queue.php`). A job that outlives
+  `retry_after` is handed to a second worker while the first is still running it, and parents get
+  their password twice. The dispatch sites also chunk recipients — `SendStudentSignupMail::CHUNK`,
+  20 per job — so no single job approaches either number.
+- **`app/Console/Kernel.php` must not also schedule `queue:work`.** Running both is worse than
+  either: two workers, same duplicate-send race. If the unit is ever retired, restore a drain in
+  the Kernel — do not leave the queue with no consumer.
+
+`ec2-release.sh` runs `php artisan queue:restart` on every deploy, so the worker picks up new code
+instead of running the version it booted with against freshly swapped files.
+
+### 1.3 S3 — CORS, IAM, lifecycle
+
+**CORS.** `ExposeHeaders: ETag` is not optional. Multipart completion needs the per-part ETag;
+without it the browser uploader fails, silently falls back to posting the file through PHP, and
+large videos fail with **413** — the exact bug direct-to-S3 upload exists to fix.
 
 On the bucket in `AWS_BUCKET` → Permissions → CORS:
 
@@ -55,140 +110,105 @@ On the bucket in `AWS_BUCKET` → Permissions → CORS:
 ]
 ```
 
-### 1.2 S3 IAM
+**IAM.** On top of `s3:PutObject` / `s3:GetObject` / `s3:DeleteObject`, the app's identity needs
+`s3:AbortMultipartUpload`, `s3:ListBucketMultipartUploads`, `s3:ListMultipartUploadParts`.
 
-The app's S3 identity (access key, or the EC2 instance role) needs, on top of the existing
-`s3:PutObject` / `s3:GetObject` / `s3:DeleteObject`:
+**Lifecycle.** Abandoned uploads otherwise accumulate as billable multipart parts forever. On
+prefix `assets/video/tmp/`: expire current versions after 1 day, and
+`AbortIncompleteMultipartUpload` after 1 day.
 
-- `s3:AbortMultipartUpload`
-- `s3:ListBucketMultipartUploads`
-- `s3:ListMultipartUploadParts`
+### 1.4 SMTP
 
-### 1.3 S3 lifecycle on the tmp prefix
+The app mails real parents in bulk on the import path. Before the first one:
 
-Abandoned uploads otherwise accumulate as billable multipart parts forever.
-
-- Prefix `assets/video/tmp/` → expire current versions after **1 day**
-- `AbortIncompleteMultipartUpload` after **1 day** (bucket-wide is fine)
-
-### 1.4 Confirm SMTP before the first bulk parent mail
-
-`school_onboarded` and `signup_school_user` have **never delivered** and start delivering with
-this release. This is the first time the app mails real parents in bulk.
-
-- Confirm the production mailer actually sends.
+- Confirm the production mailer actually sends — `MAIL_MAILER=log` renders to
+  `storage/logs/laravel.log` and delivers nothing.
 - Confirm `MAIL_FROM_ADDRESS` is a domain you control, or the batch lands in spam.
-- Admin **Settings** mail fields now overlay `config()` at send time, so a stale `.env` no longer
+- Admin **Settings** mail fields overlay `config()` at send time, so a stale `.env` no longer
   silently wins. Check both.
 
-### 1.5 Confirm which box you are on
+---
 
-The two historical descriptions of this host disagree, so verify rather than assume:
+## 2. Deploy
 
 ```bash
-systemctl list-unit-files | grep -E 'php.*fpm|apache2|nginx'
-ls -d /var/www/*
+export APP_PATH=/var/www/AdminPanel
+export GIT_BRANCH=sprint1_dev
+export PHP_BIN=/usr/bin/php
+export PHP_FPM_SERVICE=apache2
+
+"$APP_PATH/scripts/deploy/ec2-release.sh" deploy
 ```
 
-Older notes describe **Apache + mod_php at `/var/www/AdminPanel`**; the README describes
-**nginx + php8.3-fpm at `/var/www/ec-healthcare`**. Whichever is real, use its path as `APP_PATH`
-and its service in the reload step below.
+That snapshots the current app to `$BACKUP_DIR` (the escape hatch for §5), fetches, resets to the
+branch, runs `composer install --no-dev`, clears and rebuilds caches, restarts the queue worker,
+and reloads the web server.
+
+**Migrations are deliberately not in that command.** Run them yourself in §3, after you have seen
+the deploy succeed. `RUN_MIGRATIONS=true` exists on the script but leaves you less room to stop.
+
+> **Never run `php artisan config:cache` on this app.** It calls `env()` at runtime outside
+> `config/` — `AppServiceProvider`, `helper.php`, `Api/ChildController`. Caching config stops
+> `.env` being read at all, and every one of those silently becomes `null`. `laravel_optimize()`
+> in the script clears config rather than caching it, on purpose.
+
+**Automatic deploys.** `ec2-autosync.timer` polls the branch every two minutes and redeploys when
+it moves. Check with `systemctl list-timers | grep autosync`. Disable it while doing anything
+manual, or it will fight you.
 
 ---
 
-## 2. Deploy the code
-
-### 2.1 Manual — this is the path that works today
+## 3. Migrations and reference data
 
 ```bash
-cd /var/www/ec-healthcare          # your APP_PATH from §1.5
-sudo tar czf /var/www/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).tar.gz .
-git fetch origin
-git reset --hard origin/sprint1_dev
-composer install --no-dev --optimize-autoloader
-php artisan config:cache && php artisan route:cache && php artisan view:cache
-sudo systemctl reload php8.3-fpm   # or apache2
-```
-
-Take the snapshot first — it is the escape hatch in §8. Migrations are **not** in this block on
-purpose; they are §3.
-
-### 2.2 GitHub Actions — not available in this repo
-
-Earlier notes describe `ci.yml`, `deploy-ec2.yml` and `rollback-ec2.yml` on a self-hosted runner.
-**There is no `.github/` directory in this repository**, so none of that runs today. Treat the
-runner path as unbuilt: either use §2.1, or add the workflows first.
-
-If you do build it, the pieces those notes assumed:
-
-| Environment secret | Example | Required |
-|---|---|---|
-| `APP_PATH` | `/var/www/ec-healthcare` | yes |
-| `BACKUP_DIR` | `/var/www/backups/ec-healthcare` | no |
-| `BACKUP_KEEP` | `5` | no |
-| `PHP_BIN` | `/usr/bin/php8.3` | no |
-| `PHP_FPM_SERVICE` | `php8.3-fpm` | recommended |
-
-Actions variable `HEALTHCHECK_URL` (e.g. `https://admin.empoweredhealth.asia/login`) enables the
-smoke test and auto-rollback; leave unset to skip both.
-
-The runner user must be able to write `APP_PATH` while the web server user can still read it —
-**the most common cause of a green deploy that serves a 500**:
-
-```bash
-APP_PATH=/var/www/ec-healthcare
-RUNNER_USER=ubuntu
-
-sudo usermod -aG www-data "$RUNNER_USER"
-sudo chown -R "$RUNNER_USER":www-data "$APP_PATH"
-sudo find "$APP_PATH" -type d -exec chmod 2775 {} +   # setgid: new files stay www-data
-sudo find "$APP_PATH" -type f -exec chmod 0664 {} +
-sudo chmod -R 2775 "$APP_PATH/storage" "$APP_PATH/bootstrap/cache"
-
-sudo tee /etc/sudoers.d/gh-runner-deploy >/dev/null <<'EOF'
-ubuntu ALL=(root) NOPASSWD: /usr/bin/systemctl reload php8.3-fpm, /usr/bin/systemctl reload apache2, /usr/bin/systemctl list-unit-files
-EOF
-sudo chmod 0440 /etc/sudoers.d/gh-runner-deploy
-sudo visudo -c
-```
-
-`.env` is never rsynced and is not in the repo — it must already exist on the box.
-
----
-
-## 3. Migrations — after the code, before you announce it
-
-```bash
-php artisan migrate
+cd "$APP_PATH"
+php artisan migrate --force
 php artisan school:backfill-contracts
 ```
 
-Four migrations ship here: `2026_09_16_090000`, `090100`, `090200`, `2026_09_17_100000`.
-Without them Payment History joins a `school_subscriptions` table that does not exist,
-`SchoolController::store()` writes a `child_seat_limit` column that does not exist, and the mobile
-`getProfile` `seats` block fails.
-
-**Do not run `SchoolEmailTemplateSeeder` separately.** The alignment migration seeds all seven
-templates itself, and re-running the seeder overwrites them, discarding any admin edits.
-
+`migrate` is what makes Payment History, child seat caps and the mobile `getProfile` `seats` block
+work at all — without it they query tables and columns that do not exist.
 `school:backfill-contracts` is idempotent; the migration already backfills, this just proves it.
 
-### 3.1 Reference data
+### Seeders — name them, never run them all
+
+> **Do not run `php artisan db:seed --force` on production.** It includes `AdminUserSeeder`, which
+> `updateOrCreate`s `admin@empowered.local` with the hardcoded password `Admin@1234`, `status`
+> active and `user_role_id` 1 — a full-privilege account with a password that is in this
+> repository. Every run re-creates it and resets that password, so removing the account is not
+> enough; it comes back on the next deploy.
+>
+> Check whether it is already present, on every environment:
+>
+> ```bash
+> php artisan tinker --execute="echo App\Models\User::where('email','admin@empowered.local')->exists() ? 'PRESENT' : 'absent';"
+> ```
+
+Run only what the environment actually needs:
 
 ```bash
-php artisan db:seed --force
+php artisan db:seed --force --class=CountrySeeder
+php artisan db:seed --force --class=AdminMenuSeeder
+php artisan db:seed --force --class=NotificationTemplateSeeder
 ```
 
-`CountrySeeder`, `NotificationTemplateSeeder` and `AdminMenuSeeder` were never registered, so on any
-environment where they have not been run by hand:
+`CountrySeeder` and `AdminMenuSeeder` truncate, but both return early when their table already has
+rows, so they are safe against a populated database. They matter because an empty `countries`
+leaves every country `<select>` with no options — Add User and Sub Admin bounce on validation — and
+an empty `notification_templates` makes every push and in-app notification ship with a blank title
+and body.
 
-- an empty `countries` leaves every country `<select>` with **no options**, so Add User and Sub Admin
-  add/edit fail validation on `code` and bounce;
-- an empty `notification_templates` makes `getNotificationContent()` return empty strings, so **every
-  push and in-app notification ships with a blank title and body**.
+**These seeders overwrite, they do not merge.** `NotificationTemplateSeeder` and the three email
+template seeders (`AdminOtpEmailTemplateSeeder`, `SchoolEmailTemplateSeeder`,
+`AccountEmailTemplateSeeder`) `updateOrCreate` with no guard, so running one **discards any edits
+an admin made in the panel**. That is how you push a copy change; it is also how you lose one. Run
+them deliberately, not as a routine deploy step:
 
-Both truncating seeders now return early when their table already has rows, so this is safe to run
-against a populated database. Confirm afterwards:
+```bash
+php artisan db:seed --force --class=SchoolEmailTemplateSeeder
+```
+
+Confirm:
 
 ```bash
 php artisan tinker --execute="echo App\Models\Country::count().' / '.DB::table('notification_templates')->count();"
@@ -198,192 +218,118 @@ Expect a non-zero pair (246 / 7 on a clean seed).
 
 ---
 
-## 4. Queue — required, or no parent ever gets a password
-
-The parent import **dispatches** `SendStudentSignupMail` instead of mailing inline.
-
-- On `sync`, a dispatched job still runs inline: a 200-row import becomes 200 blocking SMTP calls
-  in one request and times out.
-- On `database` with nothing draining it, the jobs sit in the `jobs` table unsent, forever.
-
-```env
-QUEUE_CONNECTION=database
-```
-
-Then confirm something drains it:
+## 4. Verify
 
 ```bash
-crontab -l | grep schedule:run
+systemctl is-active ec2-queue-worker
+php artisan migrate:status | tail -5
+php artisan tinker --execute="echo 'templates='.App\Models\EmailTemplate::count().' jobs='.DB::table('jobs')->count().' failed='.DB::table('failed_jobs')->count();"
 ```
 
-Expect `* * * * * cd /var/www/ec-healthcare && php artisan schedule:run >> /dev/null 2>&1`.
+Expect the worker `active`, all migrations `Ran`, 10 templates, and `jobs=0 failed=0`.
 
-`app/Console/Kernel.php` schedules `queue:work --stop-when-empty --max-time=55 --tries=3` every
-minute with `withoutOverlapping(2)` — the explicit 2-minute expiry matters, because the default is
-24 hours and one killed run would otherwise stop all queued mail for a day.
+`failed_jobs` is written by the framework and **read by nothing**. `SendStudentSignupMail::failed()`
+and `SendAdminNotification::failed()` log an exhausted job so it leaves a trace in
+`storage/logs/laravel.log`, but no one is alerted. Check that count during any mail incident.
 
-**If cron is absent**, either add that line or run a supervisor-managed `php artisan queue:work`
-and delete the scheduled entry. Do not go live on the import path until one of the two is real.
+Then, in the admin UI:
 
-The `jobs` table already exists (`2025_05_06_150335_create_jobs_table`).
-
----
-
-## 5. What `8eef994` changed, and why each matters here
-
-| Fix | Consequence if it were missing |
-|---|---|
-| Notification job loops unique recipients, not `DeviceToken` rows | A three-device parent got three in-app rows and three pushes to one handset; a parent with no token row got nothing at all |
-| `seatThreshold()` wired into `addChild` | The 90% / 100% seat warning email existed but had no caller — schools learned they were full from a complaint |
-| `uploadFileMatchesExisting()` compares an ETag via one `HeadObject` | It streamed the whole existing S3 object back through PHP to hash it; a large re-upload outran `max_execution_time` |
-| `SchoolController::store()` deletes the school on every abort | A wrong spreadsheet header left an orphan row, so the admin could never re-create that school — name and code were "already taken" |
-| `withoutOverlapping(2)` | One killed `queue:work` silenced all mail for 24 hours |
-| Payment History filters on price, not `users.school_id` | Genuine App Store purchases by parents who later joined a school vanished from the revenue report — **superseded**, see below |
-| Entitlement check scoped to a live subscription | A parent with a lapsed personal plan got no entitlement when their school imported them |
-
----
-
-## 5a. Payment History now excludes every school parent (supersedes the row above)
-
-The price-only rule above could not hide the parents onboarded before the
-`SchoolController` import loops were commented out: that code stamped the real
-retail price (13.49 / 33.81 / 101.63) on each imported parent, so those rows
-passed `price > 0` and kept appearing as parent purchases.
-
-`subscriptions.source` (`iap` | `school_grant`) now records the origin instead
-of inferring it. Migration `2026_09_19_100000_add_source_to_subscriptions_table`
-adds the column and backfills legacy rows where the user has a `school_id` and
-the subscription carries no `transaction_id`/`receipt` — a verified App Store
-purchase always has both, a grant never does.
-
-Payment History excludes any parent with a `school_id`, plus anything marked
-`school_grant`. The school's `school_subscriptions` row is the single payment
-line for that revenue. **Known trade-off:** a parent who bought in-app and later
-joined a school no longer shows a separate line — this is deliberate, and
-`source` keeps the distinction in data if the rule is ever narrowed.
-
-Check the backfill before trusting the report:
-
-```bash
-php artisan tinker --execute="echo App\\Models\\Subscription::selectRaw('source, count(*) c')->groupBy('source')->get();"
-```
-
----
-
-## 6. Smoke tests
-
-Run these in order. Each maps to something above.
-
-```bash
-php artisan migrate:status | grep 2026_09_16          # three Ran
-php artisan tinker --execute="echo App\\Models\\EmailTemplate::count();"   # 9
-php artisan schedule:list | grep queue
-```
-
-Then, in the admin UI and the app:
-
-1. **Queue (§4)** — create a school with a 2-row parent spreadsheet.
-   `php artisan tinker --execute="echo DB::table('jobs')->count();"` returns to 0 within a minute,
-   and both parents receive credentials.
-2. **Orphan school (§5)** — add a school with a deliberately wrong spreadsheet header. You get the
+1. **Credential mail** — create a school with a 2-row parent spreadsheet. `jobs` returns to 0
+   within seconds and both parents receive credentials. Restart the worker mid-import
+   (`sudo systemctl restart ec2-queue-worker`) and confirm nothing is lost.
+2. **Large upload** — upload a ~1.5 GB mp4 on Parent Video Webinars → create. In the browser
+   network panel no request to `admin.empoweredhealth.asia` exceeds a few hundred KB (the bytes go
+   to the bucket host), there is no 413, and the saved row plays back. A ≤64 MB video still saves
+   via the in-form fallback.
+3. **Orphan school** — add a school with a deliberately wrong spreadsheet header. You get the
    error, *and* immediately re-submitting the same name and code succeeds.
-3. **Notifications (§5)** — publish a podcast to a parent with two registered devices. Exactly one
-   in-app notification appears.
-4. **Upload (§1.1)** — upload a ~1.5 GB mp4 on Parent Video Webinars → create. In the browser
-   network panel, no request to `admin.empoweredhealth.asia` is larger than a few hundred KB (the
-   bytes go to the bucket host), there is **no 413**, and the saved row plays back.
-5. **Upload fallback** — a ≤64 MB video still saves exactly as before.
-6. **Payment History (§5)** — a parent with a real paid subscription who also belongs to a school
-   appears in the list, and that row opens and downloads. A zero-price school grant does not appear.
-7. **Reference data (§3.1)** — Admin → Users → Add creates a user. Submitting with no country
-   selected now shows a visible error instead of bouncing silently.
-8. **Notifications** — after publishing a podcast, the notification has a real title and body, and
-   no literal `{video_link}` braces.
-9. **Payment History** — loads with no DataTables warning dialog as both a modify and a view-only
-   admin; View and Download work on an IAP row and a school row.
-10. **Deep links still serve**:
+4. **Notifications** — publish a podcast to a parent with two registered devices. Exactly one
+   in-app notification, with a real title and body and no literal `{video_link}` braces.
+5. **Payment History** — loads with no DataTables warning as both a modify and a view-only admin.
+   Schools appear with their contract price; parents belonging to a school do not appear at all.
+   View and Download work on the rows that are listed.
+6. **Deep links**:
    ```bash
    curl -sI https://admin.empoweredhealth.asia/.well-known/apple-app-site-association
    # 200, Content-Type: application/json, no Location: /login
    ```
 
-Leave nginx `client_max_body_size` at **64M** — videos bypass it now, and raising it is not how
-you allow bigger uploads. Keep the 300s `fastcgi_read_timeout` / `fastcgi_send_timeout`, because
-the in-form path is still the fallback.
+Leave nginx `client_max_body_size` at **64M** — videos bypass it now, and raising it is not how you
+allow bigger uploads. Keep the 300s `fastcgi_read_timeout` / `fastcgi_send_timeout`, because the
+in-form path is still the fallback.
 
 ---
 
-## 7. Per-school rollout (after the deploy is green)
+## 5. Rollback
 
-Nothing below is required to deploy. Every flag defaults to off.
+**Stop the autosync timer first.** Rollback puts git back in step with the restored files, which
+means autosync can see that origin is ahead — and it will redeploy the release you just backed out
+of, within two minutes. The script warns if the timer is running, but do it up front:
 
-1. **Backfill the roster first.**
-   ```bash
-   php artisan school:backfill-roster --dry-run
-   php artisan school:backfill-roster
-   ```
+```bash
+sudo systemctl stop ec2-autosync.timer
+"$APP_PATH/scripts/deploy/ec2-release.sh" list
+"$APP_PATH/scripts/deploy/ec2-release.sh" rollback latest    # or an archive name
+```
+
+The script preserves `.env` across the restore, resets git to the sha recorded beside the archive,
+rebuilds the autoloader, clears caches and reloads.
+
+Revert the bad commit on the branch before starting the timer again — otherwise the next tick
+undoes the rollback:
+
+```bash
+sudo systemctl start ec2-autosync.timer
+```
+
+**Rollback restores code, not the database.** If you ran §3, roll the schema back yourself first —
+RDS snapshots are the database rollback. Two migrations to be careful with:
+
+- `2026_09_16_090100.down()` **drops `school_parent_invites`**, losing the roster.
+  `school:backfill-roster` rebuilds it from existing parent accounts, but revoked entries are gone.
+- `2026_09_19_100000.down()` drops `subscriptions.source`, after which Payment History falls back
+  to the price heuristic and legacy school-onboarded parents reappear on the revenue report.
+
+---
+
+## 6. Per-school rollout
+
+Not required to deploy. Every flag defaults to off, so the deploy itself changes no school's
+behaviour.
+
+1. **Backfill the roster first** — `php artisan school:backfill-roster --dry-run`, then without it.
 2. **Set the caps** on the school's edit screen (`max_limit`, `child_seat_limit`,
    `per_parent_child_limit`). Blank means unlimited.
-3. **Turn on `Only roster emails may join`.** The toggle refuses, and names the exact backfill
-   command, if any of that school's parents are not yet on the roster — otherwise the flag locks
-   out the very people it is meant to admit.
+3. **Turn on `Only roster emails may join`.** The toggle refuses if any of that school's parents
+   are not yet on the roster — otherwise the flag locks out the very people it is meant to admit.
+   The refusal message tells the admin to contact you; the backfill command is in the log.
 
 Each step is reversible by clearing the column.
 
-> Known gap while rolling out: `max_limit` is enforced only on spreadsheet imports, not on parents
-> who self-join with the school code. For a school that is capped commercially, turn on
-> `enforce_parent_roster` — that is what actually gates self sign-up.
+> Known gap: `max_limit` is enforced only on spreadsheet imports, not on parents who self-join with
+> the school code. For a school capped commercially, `enforce_parent_roster` is what actually gates
+> self sign-up.
 
 ---
 
-## 8. Rollback
+## 7. Dependency locking
 
-**Code:**
-
-```bash
-cd /var/www/ec-healthcare
-sudo tar xzf /var/www/backups/pre-deploy-<timestamp>.tar.gz
-php artisan config:cache && php artisan route:cache && php artisan view:cache
-sudo systemctl reload php8.3-fpm
-```
-
-Rollback restores **code, not the database**. If you ran §3, roll the schema back yourself first —
-RDS snapshots are the DB rollback.
-
-Be careful with the roster migration specifically: `2026_09_16_090100.down()` **drops
-`school_parent_invites`**, losing the roster. Re-running `school:backfill-roster` rebuilds it from
-existing parent accounts, but any revoked entries are gone.
-
----
-
-## 9. Dependency locking (load-bearing, not housekeeping)
-
-`composer.lock` is committed and `.gitignore` no longer excludes it.
+`composer.lock` is committed, and this is load-bearing rather than housekeeping.
 
 Composer 2.9 refuses to **resolve** packages carrying security advisories, so with no lock file
-every CI run and every deploy attempted a full re-resolve and failed outright:
+every deploy attempted a full re-resolve and failed outright. `composer install` against a lock
+file performs no resolution, so the check never fires.
 
-```
-Root composer.json requires laravel/framework ^11.9, found laravel/framework[v11.9.0, ..., v11.56.1]
-but these were not loaded, because they are affected by security advisories
-```
+Composer 2.9 also **blocks installing** advisory-affected packages — a separate mechanism. Because
+the locked versions are affected, `ec2-release.sh` passes `--no-security-blocking`, probing
+`composer install --help` for the flag first: it does not exist on older Composer 2.x, where
+passing it is a hard error.
 
-`composer install` against a lock file performs no resolution, so it installs the pinned versions
-and that check never fires.
+`composer update` hits the same advisory wall. That is the tool working correctly — resolve the
+advisories rather than switching the check off.
 
-Composer 2.9 also **blocks installing** advisory-affected packages — a separate mechanism from
-resolution and from auditing. Because the locked versions are affected, install commands pass
-`--no-security-blocking`. Probe `composer install --help` for the flag before using it: it does
-not exist on older Composer 2.x, where passing it is a hard error.
-
-**Regenerating the lock.** `composer update` hits the same advisory wall. That is the tool working
-correctly — resolve the advisories rather than switching the check off. `policy.advisories.block:
-false` would silence it and quietly reintroduce the non-determinism this section prevents.
-
-### Outstanding advisories
-
-Committing the lock unblocked the pipeline; it did not make the dependencies safe. These are what
-production runs today:
+**Outstanding advisories.** Committing the lock unblocked the pipeline; it did not make the
+dependencies safe. This is what production runs:
 
 | Package | Locked | Status |
 |---|---|---|
@@ -391,15 +337,17 @@ production runs today:
 | `dompdf/dompdf` | v2.0.8 | 6 advisories; fixed in dompdf 3.x, via `barryvdh/laravel-dompdf` ^3.0 |
 | `illuminate/mail` | v11.45.1 | PKSA-zwc5-qtrz-zm1n, same v11 constraint |
 
-Plan the upgrade as its own piece of work — `laravel/cashier` and `yajra/laravel-datatables` both
-constrain the framework version and will need bumping in the same change.
+Plan the upgrade as its own work — `laravel/cashier` and `yajra/laravel-datatables` both constrain
+the framework version and need bumping in the same change.
 
 ---
 
-## 10. Known issues carried into this release
+## 8. Known issues carried into this release
 
 Not blockers, and none is made worse by deploying. Each deserves its own ticket.
 
+- **No alerting on queue failure.** `failed_jobs` is never read; an exhausted job logs and is
+  otherwise invisible. The admin sees "Credential emails are on their way" either way.
 - `sendNotificationSender()` builds a Firebase client **before** writing the in-app notification
   row, inside one try/catch — so a missing or rotated `storage/app/firebase/auth.json` silently
   costs users their in-app notifications, not just the push. It also builds one client per
@@ -413,3 +361,4 @@ Not blockers, and none is made worse by deploying. Each deserves its own ticket.
 - Push payloads build `asset('assets/video/…')` URLs for files that live on S3.
 - The direct-upload path skips the `mimes:` validation the in-form path applies.
 - `child_seat_allocation` is stored on the roster but never enforced.
+- The admin login page is the site root and is indexable; `public/robots.txt` allows everything.
