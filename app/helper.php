@@ -71,7 +71,7 @@ if (!function_exists('___mail_sender')) {
             ->first()
             ?: EmailTemplate::where('variable_name', $template_code)->first();
 
-        $subject = 'Empowered Health';
+        $subject = 'EmpowerED Health';
         $body = '';
         if (!empty($template)) {
             $variables = explode(',', (string) $template->variables);
@@ -109,15 +109,15 @@ if (!function_exists('___mail_sender')) {
             return false;
         }
 
-        if ($template_code === 'admin_otp' && ($subject === 'Empowered Health' || $subject === '')) {
-            $subject = 'Your Empowered Health admin verification code';
+        if ($template_code === 'admin_otp' && ($subject === 'EmpowerED Health' || $subject === '')) {
+            $subject = 'Your EmpowerED Health admin verification code';
         }
-        if ($template_code === 'forgot_password' && ($subject === 'Empowered Health' || $subject === '')) {
-            $subject = 'Reset your EmpowerEd admin password';
+        if ($template_code === 'forgot_password' && ($subject === 'EmpowerED Health' || $subject === '')) {
+            $subject = 'Reset your EmpowerED admin password';
         }
 
         $fromAddress = config('mail.from.address', 'hello@example.com');
-        $fromName = config('mail.from.name', 'EmpowerEd');
+        $fromName = config('mail.from.name', 'EmpowerED');
         $payload = array_merge($data, [
             'body' => $body,
             'otp' => $data['otp'] ?? $data['code'] ?? '',

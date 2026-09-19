@@ -61,11 +61,11 @@ class SchoolEmailTemplateSeeder extends Seeder
             // contact email was collected by store() and then never used, so a
             // school had no record of its own code, plan or limits.
             'school_onboarded' => [
-                'subject' => 'Your EmpowerEd school account is live — {school_name}',
+                'subject' => 'Your EmpowerED school account is live — {school_name}',
                 'variables' => '{school_name},{school_code},{subscription_type},{parent_limit},{child_seat_limit},{year}',
                 'description' => L::wrap(
                     'Your school account is live',
-                    L::p('<strong>{school_name}</strong> is now set up on EmpowerEd. Here are the details your parents will need.')
+                    L::p('<strong>{school_name}</strong> is now set up on EmpowerED. Here are the details your parents will need.')
                     . L::rows([
                         'School code' => '{school_code}',
                         'Plan' => '{subscription_type}',
@@ -74,18 +74,18 @@ class SchoolEmailTemplateSeeder extends Seeder
                     ])
                     . L::p('Share the school code only with the parents on your list. Each parent registers with the email address you gave us, and each address can be used once.')
                     . L::p('Parents you sent us have been emailed their own sign-in details separately. They add their children in the app, and each child uses one of your child places.', true)
-                    . L::note('Need the code changed, or more places? Contact the EmpowerEd team.'),
+                    . L::note('Need the code changed, or more places? Contact the EmpowerED team.'),
                     null,
-                    'Welcome to EmpowerEd'
+                    'Welcome to EmpowerED'
                 ),
             ],
 
             'signup_school_user' => [
-                'subject' => 'Your EmpowerEd account for {school_name}',
+                'subject' => 'Your EmpowerED account for {school_name}',
                 'variables' => '{name},{email},{password},{school_name},{school_code},{year}',
                 'description' => L::wrap(
-                    'Your school has created your EmpowerEd account',
-                    L::p('Hello {name}, <strong>{school_name}</strong> has set up an EmpowerEd account for you. Sign in with the details below and you can start adding your children straight away.')
+                    'Your school has created your EmpowerED account',
+                    L::p('Hello {name}, <strong>{school_name}</strong> has set up an EmpowerED account for you. Sign in with the details below and you can start adding your children straight away.')
                     . L::rows([
                         'Sign in with' => '{email}',
                         'School code' => '{school_code}',
@@ -99,11 +99,11 @@ class SchoolEmailTemplateSeeder extends Seeder
             ],
 
             'signup_teacher' => [
-                'subject' => 'Your EmpowerEd staff account for {school_name}',
+                'subject' => 'Your EmpowerED staff account for {school_name}',
                 'variables' => '{name},{username},{password},{school_name},{year}',
                 'description' => L::wrap(
                     'Your staff account is ready',
-                    L::p('Hello {name}, <strong>{school_name}</strong> has created an EmpowerEd staff account for you.')
+                    L::p('Hello {name}, <strong>{school_name}</strong> has created an EmpowerED staff account for you.')
                     . L::rows(['Username' => '{username}'])
                     . L::credential('Temporary password', '{password}')
                     . L::p('Please change this password after your first sign-in.', true)
@@ -114,11 +114,11 @@ class SchoolEmailTemplateSeeder extends Seeder
             ],
 
             'school_parent_invited' => [
-                'subject' => '{school_name} has invited you to EmpowerEd',
+                'subject' => '{school_name} has invited you to EmpowerED',
                 'variables' => '{name},{school_name},{school_code},{app_link},{year}',
                 'description' => L::wrap(
-                    '{school_name} has invited you to EmpowerEd',
-                    L::p('Hello {name}, your school has added you to its EmpowerEd programme. Download the app and register using the school code below.')
+                    '{school_name} has invited you to EmpowerED',
+                    L::p('Hello {name}, your school has added you to its EmpowerED programme. Download the app and register using the school code below.')
                     . L::rows(['School code' => '{school_code}'])
                     . L::p('Register with <strong>the email address this invitation was sent to</strong>. Your school registered that address for you, and it is the only one that will be recognised for {school_name}.', true)
                     . L::note('This invitation is for you alone and cannot be used by anyone else.'),

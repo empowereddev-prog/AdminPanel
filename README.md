@@ -1,6 +1,6 @@
-# Empowered Health — Admin panel & API
+# EmpowerED Health — Admin panel & API
 
-Laravel 11 backend for **Empowered Health**: a school / parent / child wellbeing product (mood tracking, quizzes, articles, video/podcasts, subscriptions).
+Laravel 11 backend for **EmpowerED Health**: a school / parent / child wellbeing product (mood tracking, quizzes, articles, video/podcasts, subscriptions).
 
 This repository is the **admin panel** (Blade) and the **mobile API** (`/api`). Production host used by the app: `https://admin.empoweredhealth.asia`.
 
@@ -32,7 +32,7 @@ php artisan key:generate
 Point `.env` at a **local** database. Do not use production RDS from a laptop checkout.
 
 ```env
-APP_NAME="Empowered Health"
+APP_NAME="EmpowerED Health"
 APP_ENV=local
 APP_DEBUG=true
 APP_URL=http://127.0.0.1:8000

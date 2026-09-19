@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <head>
         <meta charset="utf-8" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-        <title>EmpowerEd Child Healthcare</title>
+        <title>Teen Health &amp; Wellbeing App for Schools | EmpowerED</title>
+        <meta name="description" content="EmpowerED is a teen health and wellbeing platform for schools - expert-led content, mood tracking and gamified learning covering PSHE, RSE and health education for students aged 11-18." />
+        <meta name="keywords" content="teen health, teenage health, adolescent health, teen wellbeing, teenage wellbeing, adolescent wellbeing, student wellbeing, student health, youth mental health, teen mental health, health education, secondary school health education, school wellbeing, wellbeing education, PSHE, PSHE education, RSE, relationships and sex education, health and wellbeing curriculum, student wellbeing platform, digital health education, health education app, wellbeing app for schools" />
 
         <!-- GOOGLE FONTS -->
         <link href="https://fonts.googleapis.com/css?family=Karla:400,700|Roboto" rel="stylesheet">
@@ -25,7 +26,6 @@
         <link href="{{ url('assets/images/new.png') }}" rel="shortcut icon" />
         <!-- <link rel="icon" type="image/png" sizes="16x16" href="{{url('assets/images/favicon-16x16.png')}}"> -->
 
-    </head>
 </head>
 <body class="bg-light-gray login-page" id="body">
     <div class="container d-flex align-items-center justify-content-center" style="min-height: 100vh">

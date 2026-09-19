@@ -1996,6 +1996,6 @@ class SchoolController extends Controller
             return ' Credential emails were sent.';
         }
 
-        return ' Credential emails were queued. If they do not arrive, run php artisan queue:work.';
+        return 'Credential emails were queued. If they do not arrive, run php artisan queue:work.';
     }
 }

@@ -6,7 +6,9 @@ use App\Jobs\SendStudentSignupMail;
 use App\Models\EmailTemplate;
 use App\Models\School;
 use App\Models\SchoolParentInvite;
+use App\Models\User;
 use App\Services\School\SchoolNotifier;
+use Database\Seeders\AccountEmailTemplateSeeder;
 use Database\Seeders\SchoolEmailTemplateSeeder;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Cache;
@@ -32,6 +34,7 @@ class SchoolEmailTemplateContractTest extends TestCase
     use DatabaseTransactions;
 
     private const TEMPLATES = [
+        'delete_account',
         'signup_school_user',
         'signup_teacher',
         'school_parent_invited',
@@ -45,6 +48,7 @@ class SchoolEmailTemplateContractTest extends TestCase
         parent::setUp();
         Cache::flush();
         (new SchoolEmailTemplateSeeder())->run();
+        (new AccountEmailTemplateSeeder())->run();
         $this->transport()->flush();
     }
 
@@ -126,6 +130,31 @@ class SchoolEmailTemplateContractTest extends TestCase
         $body = $this->lastMessage()['body'];
         $this->assertStringContainsString('SchKp7Q@1', $body, 'The password must reach the parent - it is their only way in.');
         $this->assertStringContainsString('Riverside Primary', $body);
+    }
+
+    /**
+     * The delivered copy read "associated with the email  has been delete":
+     * a declared token the caller never supplied, resolved to ''. No {token}
+     * survives that, so assertFullyRendered alone cannot catch it - this
+     * asserts the values are actually present.
+     */
+    public function test_account_deletion_notice_names_the_account(): void
+    {
+        $user = User::factory()->parent()->create([
+            'name' => 'Priya Menon',
+            'email' => 'priya.menon@example.test',
+            'language' => 'english',
+        ]);
+
+        $this->actingAs($user, 'api')->postJson('/api/delete-user')->assertOk();
+
+        $this->assertFullyRendered('delete_account');
+
+        $body = $this->lastMessage()['body'];
+        $this->assertStringContainsString('priya.menon@example.test', $body, 'The notice must name the address it deleted.');
+        $this->assertStringContainsString('Priya Menon', $body);
+        $this->assertStringContainsString((string) date('Y'), $body, 'The footer year must render, not collapse to blank.');
+        $this->assertStringNotContainsString('has been delete ', $body);
     }
 
     public function test_off_roster_notice_renders_completely(): void
