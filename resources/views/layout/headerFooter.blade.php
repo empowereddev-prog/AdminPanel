@@ -587,6 +587,22 @@
                     @endif
                 </nav>
             </header>
+            {{-- Global validation summary.
+                 Individual forms display errors for some fields and not others -
+                 35 blades had a required field with no @error block at all, so a
+                 failed validation bounced back looking like nothing had happened.
+                 Rendering the bag here means no validation failure can ever be
+                 silent, whatever the form remembers to cover inline. --}}
+            @if ($errors->any())
+                <div class="alert alert-danger mx-3 mt-3" role="alert">
+                    <ul class="mb-0 ps-3">
+                        @foreach ($errors->unique() as $message)
+                            <li>{{ $message }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             @yield('content')
         </div>
     </div>

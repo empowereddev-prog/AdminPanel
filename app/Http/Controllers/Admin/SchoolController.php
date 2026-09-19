@@ -5,7 +5,15 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Mood;
 use App\Models\PermissionUser;
+use App\Jobs\SendStudentSignupMail;
+use App\Models\EmailTemplate;
 use App\Models\School;
+use App\Models\SchoolParentInvite;
+use App\Services\School\SchoolContractService;
+use App\Services\School\SchoolImportService;
+use App\Services\School\SchoolNotifier;
+use App\Services\School\SchoolRosterService;
+use App\Services\School\SchoolSeatService;
 use App\Models\Subscription;
 use App\Models\User;
 use Auth;
@@ -371,9 +379,12 @@ class SchoolController extends Controller
                 'not_regex:/<[^>]*>/u'
             ],
             'school_code' => 'required|max:50|unique:schools,school_code',
-            'max_limit' => 'required|numeric|min:1|max:100000000',
+            'max_limit' => 'nullable|numeric|min:1|max:100000000',
+            'child_seat_limit' => 'nullable|integer|min:1|max:100000000',
+            'per_parent_child_limit' => 'nullable|integer|min:1|max:50',
             'student_excel' => 'nullable|file|mimes:xlsx,xls',
             'subscription_type' => 'required',
+            'price' => 'nullable|numeric|min:0|max:999999.99',
             'email' => [
                 'required',
                 'email',
@@ -394,13 +405,24 @@ class SchoolController extends Controller
             'name' => $request->school_name,
             'school_code' => $request->school_code,
             'status' => 'active',
-            'max_limit' => $request->max_limit,
+            'max_limit' => $request->filled('max_limit') ? (int) $request->max_limit : null,
+            // NULL means unenforced, i.e. today's behaviour. The add form
+            // pre-fills per_parent_child_limit with 3 for new schools; the
+            // column itself must stay null-defaulted, or migrating would cap
+            // every existing school's parents at three children overnight.
+            'child_seat_limit' => $request->filled('child_seat_limit') ? (int) $request->child_seat_limit : null,
+            'per_parent_child_limit' => $request->filled('per_parent_child_limit') ? (int) $request->per_parent_child_limit : null,
             'user_id' => auth()->user()->id,
             'subscription_type' => $request->subscription_type,
+            'price' => $request->filled('price') ? $request->price : null,
             'email' => $request->email
         ];
         $school = School::create($school);
-        $school_data = School::latest()->first();
+        (new SchoolContractService())->recordOnCreate($school);
+        // Was School::latest()->first(), i.e. "newest school in the table" -
+        // which under two admins creating schools at once is somebody else's
+        // row, and it feeds the cleanup delete further down.
+        $school_data = $school;
 
         if ($request->hasFile('student_excel')) {
             $file = $request->file('student_excel');
@@ -414,22 +436,35 @@ class SchoolController extends Controller
             $header = array_slice($header, 0, 4);
 
             if ($header !== $expectedHeader) {
+                // The school row exists from here up, so every abort has to
+                // take it with it - otherwise the admin fixes the file and
+                // cannot resubmit: the name and code are now "already taken".
+                School::where('id', $school_data->id)->delete();
+
                 return back()->with('error', 'Invalid file format. Please use the provided sample.')->withInput();
             }
 
             $validData = [];
+            // Counted so the school's import summary reports real numbers.
+            // These rows are dropped silently on screen today; reporting them
+            // as zero would be worse than not reporting them at all.
+            $rejectedRows = 0;
+            $skippedRows = 0;
 
             foreach ($data as $row) {
                 if (array_filter($row) && !empty($row[0]) && !empty($row[1]) && !empty($row[2]) && !empty($row[3])) {
                     if (preg_match('/^0/', $row[3]) || preg_match('/^0+$/', $row[3]) || !preg_match('/^\d{8,15}$/', $row[3])) {
+                        $rejectedRows++;
                         continue;
                     }
 
                     if (!preg_match('/^\+\d+$/', $row[2])) {
+                        $rejectedRows++;
                         continue;
                     }
 
                     if (!filter_var($row[1], FILTER_VALIDATE_EMAIL)) {
+                        $rejectedRows++;
                         continue;
                     }
 
@@ -440,6 +475,8 @@ class SchoolController extends Controller
                         ->exists();
 
                     if ($existingUser) {
+                        School::where('id', $school_data->id)->delete();
+
                         return back()->with('error', 'Duplicate found: ' . $row[1] . ' with phone ' . $row[3] . ' already exists in this school.')->withInput();
                     }
 
@@ -449,6 +486,7 @@ class SchoolController extends Controller
                         ->exists();
 
                     if ($existingSchoolUser) {
+                        $skippedRows++;
                         continue;
                     }
 
@@ -466,17 +504,45 @@ class SchoolController extends Controller
                 return back()->with('error', 'The excel file data is invalid.')->withInput();
             }
 
-            $existingStudents = User::where('school_id', $school->id)->count();
-            $remainingLimit = $request->max_limit - $existingStudents;
+            // Teachers carry school_id too, so an unscoped count made a staff
+            // import eat the parent places the school paid for. update() has
+            // always scoped this correctly; store() had not.
+            // A blank parent limit means unlimited. Without this branch a null
+            // max_limit evaluated to "0 - existing", i.e. a negative remainder,
+            // and every import was refused as "limit reached".
+            if ($request->filled('max_limit')) {
+                $existingStudents = User::where('school_id', $school->id)
+                    ->where('user_role_id', 3)
+                    ->count();
+                $remainingLimit = (int) $request->max_limit - $existingStudents;
 
-            if ($remainingLimit <= 0) {
-                return back()->with('error', 'You have already reached the max limit of ' . $request->max_limit . ' students.')->withInput();
+                if ($remainingLimit <= 0) {
+                    School::where('id', $school_data->id)->delete();
+
+                    return back()->with('error', 'You have already reached the max limit of ' . $request->max_limit . ' parent accounts.')->withInput();
+                }
+
+                // ✅ Keep only top rows as per remaining limit
+                // Rows past the cap are dropped with no message on screen; they
+                // are at least reported to the school in the summary below.
+                $skippedRows += max(0, count($validData) - $remainingLimit);
+                $validData = array_slice($validData, 0, $remainingLimit);
             }
 
-            // ✅ Keep only top rows as per remaining limit
-            $validData = array_slice($validData, 0, $remainingLimit);
+            // Only now is the school certain to survive this request: every
+            // branch above deletes it again on abort, and mailing "your account
+            // is live" for a row that is about to be removed would be worse
+            // than sending nothing. This sits below the parent-limit gate for
+            // exactly that reason.
+            $onboardingMail = app(SchoolNotifier::class)->schoolOnboarded($school);
 
             $insertedCount = 0;
+            // Collected and mailed in one queued batch after the loop. Sending
+            // inline cost nothing while signup_school_user had no template and
+            // ___mail_sender returned immediately - now that the template
+            // exists, an inline send is one blocking SMTP round-trip per row
+            // and a large import would time out.
+            $studentsToMail = [];
 
             foreach ($validData as $student) {
                 $password = 'Sch' . \Str::studly(\Str::random(4) . '@1');
@@ -494,41 +560,66 @@ class SchoolController extends Controller
                     'password' => Hash::make($password)
                 ]);
 
-                $startDate = Carbon::now();
-                $endDate = match ($request->subscription_type) {
-                    'monthly'   => $startDate->copy()->addMonth(),
-                    'quarterly' => $startDate->copy()->addMonths(3),
-                    'yearly'    => $startDate->copy()->addYear(),
-                    default     => $startDate->copy()->addMonth(),
-                };
+                (new SchoolContractService())->grantParentEntitlement($school, $newUser);
 
-                Subscription::create([
-                    'user_id' => $newUser->id,
-                    'subscription_type_id' => $request->subscription_type == 'monthly' ? 'com.empowered.monthly' : ($request->subscription_type == 'quarterly' ? 'com.empowered.quarterly' : 'com.empowered.yearly'),
-                    'user_type' => 'parent',
-                    'subscription_type' => $request->subscription_type,
-                    'start_date' => $startDate->format('Y-m-d'),
-                    'end_date' => $endDate->format('Y-m-d'),
-                    'currency' => 'SGD',
-                    'status' => 'Successful',
-                    'price' => $request->subscription_type == 'monthly' ? '13.49' : ($request->subscription_type == 'quarterly' ? '33.81' : '101.63'),
-                ]);
+                // The school named this address, so the invite is claimed
+                // outright - the account already exists. This is what gives the
+                // roster something to check self sign-ups against later.
+                SchoolParentInvite::updateOrCreate(
+                    [
+                        'school_id' => $school->id,
+                        'email' => SchoolParentInvite::normaliseEmail($student['email']),
+                    ],
+                    [
+                        'name' => $student['name'],
+                        'country_code' => $student['country_code'],
+                        'phone_no' => $student['phone_number'],
+                        'status' => 'claimed',
+                        'claimed_user_id' => $newUser->id,
+                        'invited_at' => now(),
+                        'claimed_at' => now(),
+                    ]
+                );
 
-                $emailData = [
+                $studentsToMail[] = [
                     'email' => $student['email'],
                     'name' => $student['name'],
                     'password' => $password,
                     'school_code' => $school->school_code,
-                    'school_name' => $school->name
+                    'school_name' => $school->name,
                 ];
 
-                ___mail_sender($student['email'], 'signup_school_user', $emailData, 'english');
                 $insertedCount++;
             }
 
-            return redirect('school')->with('success', $insertedCount . ' students added successfully.');
+            if ($studentsToMail !== []) {
+                SendStudentSignupMail::dispatch($studentsToMail);
+            }
+
+            app(SchoolNotifier::class)->importSummary(
+                $school,
+                $insertedCount,
+                $skippedRows,
+                $rejectedRows,
+                (new SchoolSeatService())->remaining($school)
+            );
+
+            return redirect('school')->with(
+                'success',
+                $insertedCount . ' parent account(s) created successfully.'
+                    . $this->onboardingMailSuffix($onboardingMail)
+                    . $this->credentialMailSuffix($insertedCount)
+            );
         }
-        return redirect('school')->with('success', 'School added successfully.');
+
+        // No parent file was uploaded, so the school exists with no import to
+        // fail - send the onboarding mail here instead.
+        $onboardingMail = app(SchoolNotifier::class)->schoolOnboarded($school);
+
+        return redirect('school')->with(
+            'success',
+            'School added successfully.' . $this->onboardingMailSuffix($onboardingMail)
+        );
     }
 
 
@@ -538,8 +629,10 @@ class SchoolController extends Controller
     {
         $pre = PermissionUser::checkpermission(Auth::user()->id, $this->subadmin_menu_id);
         if (!empty($pre) && $pre->is_modify == 'yes') {
-            $school = School::with('students')->findOrFail($id);
-            return view('admin.schoolManagement.view', compact('school'));
+            $school = School::findOrFail($id);
+            $seats = (new SchoolSeatService())->summaryForSchool($school);
+
+            return view('admin.schoolManagement.view', compact('school', 'seats'));
         }
         return redirect('dashboard');
     }
@@ -604,93 +697,16 @@ class SchoolController extends Controller
     //     ]);
     // }
 
-    public function exportSchoolUsers(Request $request, $schoolId)
-    {
-        $request->validate([
-            'start_date' => 'nullable|date',
-            'end_date'   => 'nullable|date|after_or_equal:start_date',
-            'role_type'  => 'nullable|in:all,parent,teacher'
-        ]);
-
-        $school = School::findOrFail($schoolId);
-
-        $query = User::where('school_id', $schoolId);
-
-        $roleType = $request->input('role_type', 'all');
-        if ($roleType === 'parent') {
-            $query->where('user_role_id', 3);
-        } elseif ($roleType === 'teacher') {
-            $query->where('user_role_id', 5);
-        } else {
-            $query->whereIn('user_role_id', [3, 5]);
-        }
-
-        if ($request->filled('start_date') && $request->filled('end_date')) {
-            $query->whereBetween('created_at', [
-                $request->start_date . ' 00:00:00',
-                $request->end_date . ' 23:59:59'
-            ]);
-        }
-
-        $users = $query->get();
-
-        if ($users->isEmpty()) {
-            return back()->with('error', 'No users found matching the selected criteria.');
-        }
-
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-
-        $sheet->setCellValue('A1', 'Name');
-        $sheet->setCellValue('B1', 'Email');
-        $sheet->setCellValue('C1', 'Country Code');
-        $sheet->setCellValue('D1', 'Phone Number');
-        $sheet->setCellValue('E1', 'Username');
-        $sheet->setCellValue('F1', 'Role');
-        $sheet->setCellValue('G1', 'Status');
-        $sheet->setCellValue('H1', 'Created Date');
-
-        $row = 2;
-        foreach ($users as $user) {
-            $roleLabel = ($user->user_role_id == 5) ? 'Staff / Teacher' : 'Parent';
-
-            $sheet->setCellValue('A' . $row, $user->name);
-            $sheet->setCellValue('B' . $row, $user->email);
-
-            $sheet->setCellValueExplicit('C' . $row, $user->country_code ?? '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->setCellValueExplicit('D' . $row, $user->phone_no ?? '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-
-            $sheet->setCellValue('E' . $row, $user->username ?? '');
-            $sheet->setCellValue('F' . $row, $roleLabel);
-            $sheet->setCellValue('G' . $row, ucfirst($user->status));
-            $sheet->setCellValue('H' . $row, $user->created_at->format('Y-m-d'));
-            $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
-            $row++;
-        }
-
-        foreach (range('A', 'H') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
-
-        $fileName = 'school_users_' . now()->format('Ymd_His') . '.xlsx';
-        $writer = new Xlsx($spreadsheet);
-
-        return new StreamedResponse(function () use ($writer) {
-            $writer->save('php://output');
-        }, 200, [
-            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
-            'Cache-Control'       => 'max-age=0',
-        ]);
-    }
-
-
     public function edit(string $id)
     {
         $pre = PermissionUser::checkpermission(Auth::user()->id, $this->subadmin_menu_id);
         if (!empty($pre) && $pre->is_modify == 'yes') {
             $data = School::where('id', $id)->first();
-            return view('admin.schoolManagement.edit', compact('data'));
+            // Shown next to the Child Places field so an admin lowering the cap
+            // can see what the school is already using.
+            $childSeatsUsed = $data ? (new SchoolSeatService())->childCountForSchool($data->id) : 0;
+
+            return view('admin.schoolManagement.edit', compact('data', 'childSeatsUsed'));
         }
         return redirect('dashboard');
     }
@@ -882,11 +898,14 @@ class SchoolController extends Controller
                 'not_regex:/<[^>]*>/u'
             ],
             'school_code' => 'required|max:50|unique:schools,school_code,' . $id . ',id',
-            'max_limit' => 'required|numeric|min:1|max:100000000',
+            'max_limit' => 'nullable|numeric|min:1|max:100000000',
+            'child_seat_limit' => 'nullable|integer|min:1|max:100000000',
+            'per_parent_child_limit' => 'nullable|integer|min:1|max:50',
             'status' => 'required|in:active,inactive',
             'student_excel' => 'nullable|file|mimes:xlsx,xls',
             'staff_excel' => 'nullable|file|mimes:xlsx,xls',
-            'subscription_type' => 'required'
+            'subscription_type' => 'required',
+            'price' => 'nullable|numeric|min:0|max:999999.99',
         ]);
 
         if ($validator->fails()) {
@@ -894,14 +913,24 @@ class SchoolController extends Controller
         }
 
         $school = School::findOrFail($id);
+        $previousType = $school->subscription_type;
+        $previousPrice = $school->price;
 
         $school->update([
             'name' => $request->school_name,
             'school_code' => $request->school_code,
             'status' => $request->status,
-            'max_limit' => $request->max_limit,
-            'subscription_type' => $request->subscription_type
+            'max_limit' => $request->filled('max_limit') ? (int) $request->max_limit : null,
+            // Lowering a limit below current usage is allowed on purpose:
+            // existing children are grandfathered and never removed, only
+            // further creation is blocked.
+            'child_seat_limit' => $request->filled('child_seat_limit') ? (int) $request->child_seat_limit : null,
+            'per_parent_child_limit' => $request->filled('per_parent_child_limit') ? (int) $request->per_parent_child_limit : null,
+            'subscription_type' => $request->subscription_type,
+            'price' => $request->filled('price') ? $request->price : null,
         ]);
+
+        (new SchoolContractService())->syncOnUpdate($school->fresh(), $previousType, $previousPrice);
 
         if ($request->status === 'inactive') {
             User::where('school_id', $school->id)->update(['status' => 'inactive']);
@@ -924,6 +953,8 @@ class SchoolController extends Controller
                 }
 
                 $validData = [];
+                $rejectedRows = 0;
+                $skippedRows = 0;
 
                 foreach ($data as $row) {
                     if (!array_filter($row) || empty($row[0]) || empty($row[1]) || empty($row[2]) || empty($row[3])) {
@@ -931,14 +962,17 @@ class SchoolController extends Controller
                     }
 
                     if (preg_match('/^0/', $row[3]) || preg_match('/^0+$/', $row[3]) || !preg_match('/^\d{8,15}$/', $row[3])) {
+                        $rejectedRows++;
                         continue;
                     }
 
                     if (!preg_match('/^\+\d+$/', $row[2])) {
+                        $rejectedRows++;
                         continue;
                     }
 
                     if (!filter_var($row[1], FILTER_VALIDATE_EMAIL)) {
+                        $rejectedRows++;
                         continue;
                     }
 
@@ -956,6 +990,7 @@ class SchoolController extends Controller
                         ->exists();
 
                     if ($existingSchoolUser) {
+                        $skippedRows++;
                         continue;
                     }
 
@@ -971,18 +1006,25 @@ class SchoolController extends Controller
                     return back()->with('error', 'The Excel file data is invalid.')->withInput();
                 }
 
-                $existingStudents = User::where('school_id', $school->id)
-                    ->where('user_role_id', 3)
-                    ->count();
+                // Blank parent limit means unlimited - see the note in store().
+                if ($request->filled('max_limit')) {
+                    $existingStudents = User::where('school_id', $school->id)
+                        ->where('user_role_id', 3)
+                        ->count();
 
-                $remainingLimit = $request->max_limit - $existingStudents;
+                    $remainingLimit = (int) $request->max_limit - $existingStudents;
 
-                if ($remainingLimit <= 0) {
-                    return back()->with('error', 'You have already reached the max limit of ' . $request->max_limit . ' students.')->withInput();
+                    if ($remainingLimit <= 0) {
+                        return back()->with('error', 'You have already reached the max limit of ' . $request->max_limit . ' parent accounts.')->withInput();
+                    }
+
+                    $skippedRows += max(0, count($validData) - $remainingLimit);
+                    $validData = array_slice($validData, 0, $remainingLimit);
                 }
-
-                $validData = array_slice($validData, 0, $remainingLimit);
                 $insertedCount = 0;
+                // Queued after the loop - see the note in store(). An inline
+                // send here is one blocking SMTP call per imported row.
+                $studentsToMail = [];
 
                 foreach ($validData as $student) {
                     $password = 'Sch' . \Str::studly(\Str::random(4) . '@1');
@@ -1000,46 +1042,52 @@ class SchoolController extends Controller
                         'password' => Hash::make($password)
                     ]);
 
-                    $startDate = now();
-                    $endDate = match ($request->subscription_type) {
-                        'monthly' => $startDate->copy()->addMonth(),
-                        'quarterly' => $startDate->copy()->addMonths(3),
-                        'yearly' => $startDate->copy()->addYear(),
-                        default => $startDate->copy()->addMonth(),
-                    };
+                    (new SchoolContractService())->grantParentEntitlement($school, $newUser);
 
-                    Subscription::create([
-                        'user_id' => $newUser->id,
-                        'subscription_type_id' => match ($request->subscription_type) {
-                            'monthly' => 'com.empowered.monthly',
-                            'quarterly' => 'com.empowered.quarterly',
-                            'yearly' => 'com.empowered.yearly',
-                        },
-                        'user_type' => 'parent',
-                        'subscription_type' => $request->subscription_type,
-                        'start_date' => $startDate->toDateString(),
-                        'end_date' => $endDate->toDateString(),
-                        'currency' => 'SGD',
-                        'status' => 'Successful',
-                        'price' => match ($request->subscription_type) {
-                            'monthly' => '13.49',
-                            'quarterly' => '33.81',
-                            'yearly' => '101.63',
-                        },
-                    ]);
+                    SchoolParentInvite::updateOrCreate(
+                        [
+                            'school_id' => $school->id,
+                            'email' => SchoolParentInvite::normaliseEmail($student['email']),
+                        ],
+                        [
+                            'name' => $student['name'],
+                            'country_code' => $student['country_code'],
+                            'phone_no' => $student['phone_number'],
+                            'status' => 'claimed',
+                            'claimed_user_id' => $newUser->id,
+                            'invited_at' => now(),
+                            'claimed_at' => now(),
+                        ]
+                    );
 
-                    ___mail_sender($student['email'], 'signup_school_user', [
+                    $studentsToMail[] = [
                         'email' => $student['email'],
                         'name' => $student['name'],
                         'password' => $password,
                         'school_code' => $school->school_code,
-                        'school_name' => $school->name
-                    ], 'english');
+                        'school_name' => $school->name,
+                    ];
 
                     $insertedCount++;
                 }
 
-                return redirect('school')->with('success', $insertedCount . ' students added successfully.');
+                if ($studentsToMail !== []) {
+                    SendStudentSignupMail::dispatch($studentsToMail);
+                }
+
+                app(SchoolNotifier::class)->importSummary(
+                    $school,
+                    $insertedCount,
+                    $skippedRows,
+                    $rejectedRows,
+                    (new SchoolSeatService())->remaining($school)
+                );
+
+                return redirect('school')->with(
+                    'success',
+                    $insertedCount . ' parent account(s) created successfully.'
+                        . $this->credentialMailSuffix($insertedCount)
+                );
             } catch (\Throwable $e) {
                 return back()->with('error', 'Something went wrong while processing the Excel file.')->withInput();
             }
@@ -1187,10 +1235,15 @@ class SchoolController extends Controller
                         'password' => Hash::make($password)
                     ]);
 
+                    // school_name and year are declared by the signup_teacher
+                    // template; an unsupplied token falls back to $data['otp'],
+                    // so the payload has to cover the whole list.
                     $emailData = [
                         'name'     => $row[0],
                         'username' => $row[4],
-                        'password' => $password
+                        'password' => $password,
+                        'school_name' => $school->name,
+                        'year' => (string) date('Y'),
                     ];
 
                     ___mail_sender($row[1], 'signup_teacher', $emailData, 'english');
@@ -1266,6 +1319,12 @@ class SchoolController extends Controller
             ];
 
             ___mail_sender($school_user->email, 'delete_user_account', $emailData, 'english');
+
+            // Return the roster entry to 'invited' so the school can re-issue
+            // the place without an admin retyping the address. Their children
+            // are soft-deleted below, which frees the child seats by itself.
+            (new SchoolRosterService())->release($school_user);
+
             User::where('parent_id', $school_user->id)->delete();
             $school_user->delete();
 
@@ -1323,7 +1382,7 @@ class SchoolController extends Controller
 
         $writer = new Xlsx($spreadsheet);
 
-        $fileName = 'sample_students.xlsx';
+        $fileName = 'sample_parents.xlsx';
         $response = new StreamedResponse(function () use ($writer) {
             $writer->save('php://output');
         });
@@ -1446,5 +1505,497 @@ class SchoolController extends Controller
         $response->headers->set('Cache-Control', 'max-age=0');
 
         return $response;
+    }
+
+    /**
+     * -------------------------------------------------------------------
+     * Parent roster
+     *
+     * All of these authorise through PermissionUser::checkpermission against
+     * menu id 3, the same way show()/edit()/destroy() do, rather than through
+     * the hasPermission() Blade helper - the helper short-circuits super admins
+     * and is only used for cosmetic show/hide in views.
+     * -------------------------------------------------------------------
+     */
+
+    private function guardRoster(): ?\Illuminate\Http\JsonResponse
+    {
+        $pre = PermissionUser::checkpermission(Auth::user()->id, $this->subadmin_menu_id);
+
+        if (empty($pre) || $pre->is_modify != 'yes') {
+            return response()->json(['status' => false, 'message' => 'You do not have permission to do this.'], 403);
+        }
+
+        return null;
+    }
+
+    /**
+     * One feed for the merged Parents card: roster emails plus parent accounts
+     * that were never backfilled onto an invite row.
+     */
+    public function roster(Request $request, $id)
+    {
+        if ($denied = $this->guardRoster()) {
+            return $denied;
+        }
+
+        $rows = $this->parentDirectoryRows((int) $id);
+
+        return DataTables::of($rows)
+            ->addIndexColumn()
+            ->rawColumns(['roster_badge', 'account_badge', 'action'])
+            ->make(true);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function parentDirectoryRows(int $schoolId)
+    {
+        $invites = SchoolParentInvite::where('school_id', $schoolId)->orderByDesc('id')->get();
+        $parents = User::where('school_id', $schoolId)->where('user_role_id', 3)->get();
+        $byId = $parents->keyBy('id');
+        $byEmail = $parents->keyBy(fn (User $user) => SchoolParentInvite::normaliseEmail($user->email));
+
+        $parentIds = $parents->pluck('id')->filter()->all();
+        $childCounts = $parentIds === []
+            ? collect()
+            : User::where('user_role_id', 4)
+                ->whereIn('parent_id', $parentIds)
+                ->selectRaw('parent_id, COUNT(*) as aggregate')
+                ->groupBy('parent_id')
+                ->pluck('aggregate', 'parent_id');
+
+        $covered = [];
+        $rows = collect();
+
+        foreach ($invites as $invite) {
+            $user = $invite->claimed_user_id
+                ? $byId->get($invite->claimed_user_id)
+                : $byEmail->get($invite->email);
+
+            if ($user) {
+                $covered[$user->id] = true;
+            }
+
+            $rows->push($this->parentDirectoryRow(
+                $invite,
+                $user,
+                $user ? (int) ($childCounts[$user->id] ?? 0) : 0
+            ));
+        }
+
+        foreach ($parents as $user) {
+            if (isset($covered[$user->id])) {
+                continue;
+            }
+
+            $rows->push($this->parentDirectoryRow(
+                null,
+                $user,
+                (int) ($childCounts[$user->id] ?? 0)
+            ));
+        }
+
+        return $rows->values();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function parentDirectoryRow(?SchoolParentInvite $invite, ?User $user, int $children): array
+    {
+        $name = $user?->name ?: ($invite?->name ?: '-');
+        $email = $user?->email ?: ($invite?->email ?: '-');
+        $phone = trim(($user?->country_code ?? $invite?->country_code ?? '') . ' ' . ($user?->phone_no ?? $invite?->phone_no ?? ''));
+
+        $rosterMap = [
+            'claimed' => ['Claimed', '#2f6b46'],
+            'invited' => ['Invited', '#9a6410'],
+            'revoked' => ['Revoked', '#a63d38'],
+        ];
+        if ($invite) {
+            [$rosterLabel, $rosterColour] = $rosterMap[$invite->status] ?? [ucfirst((string) $invite->status), '#4d5a64'];
+        } else {
+            [$rosterLabel, $rosterColour] = ['Not on roster', '#4d5a64'];
+        }
+
+        if ($user) {
+            $accountActive = $user->status === 'active';
+            $accountLabel = $accountActive ? 'Active' : 'Inactive';
+            $accountColour = $accountActive ? '#2f6b46' : '#a63d38';
+        } else {
+            $accountLabel = 'No account';
+            $accountColour = '#4d5a64';
+        }
+
+        $badge = function (string $label, string $colour): string {
+            return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;color:#fff;background:'
+                . $colour . '">' . e($label) . '</span>';
+        };
+
+        return [
+            'name' => e($name),
+            'email' => e($email),
+            'phone_no' => e($phone !== '' ? $phone : '-'),
+            'roster_badge' => $badge($rosterLabel, $rosterColour),
+            'account_badge' => $badge($accountLabel, $accountColour),
+            'children' => $user ? (string) $children : '-',
+            'action' => $this->parentDirectoryActions($invite, $user),
+        ];
+    }
+
+    private function parentDirectoryActions(?SchoolParentInvite $invite, ?User $user): string
+    {
+        $btn = '';
+
+        if ($user) {
+            $btn .= '<a href="' . e(route('school-user-child-detail', $user->id, false)) . '" title="View details"'
+                . ' style="font-size:18px;margin-right:8px"><i class="mdi mdi-eye"></i></a>';
+
+            if ($user->status === 'active') {
+                $btn .= '<a href="javascript:void(0)" class="parent-status" data-id="' . (int) $user->id
+                    . '" data-next="inactive" title="Disable account"'
+                    . ' style="font-size:18px;margin-right:8px;color:#a63d38"><i class="mdi mdi-account-off"></i></a>';
+            } else {
+                $btn .= '<a href="javascript:void(0)" class="parent-status" data-id="' . (int) $user->id
+                    . '" data-next="active" title="Enable account"'
+                    . ' style="font-size:18px;margin-right:8px;color:#2f6b46"><i class="mdi mdi-account-check"></i></a>';
+            }
+
+            $btn .= '<a href="javascript:void(0)" class="parent-delete" data-id="' . (int) $user->id
+                . '" title="Remove account" style="font-size:18px;margin-right:8px;color:#a63d38"><i class="mdi mdi-trash-can"></i></a>';
+        }
+
+        if ($invite && $invite->status === 'invited') {
+            $btn .= '<a href="javascript:void(0)" class="roster-resend" data-id="' . (int) $invite->id
+                . '" title="Resend invitation" style="font-size:18px;margin-right:8px"><i class="mdi mdi-email-sync"></i></a>';
+        }
+
+        if ($invite && $invite->status === 'revoked') {
+            $btn .= '<a href="javascript:void(0)" class="roster-restore" data-id="' . (int) $invite->id
+                . '" title="Enable roster access" style="font-size:18px;color:#2f6b46"><i class="mdi mdi-backup-restore"></i></a>';
+        } elseif ($invite) {
+            $btn .= '<a href="javascript:void(0)" class="roster-revoke" data-id="' . (int) $invite->id
+                . '" title="Revoke roster access" style="font-size:18px;color:#a63d38"><i class="mdi mdi-cancel"></i></a>';
+        }
+
+        return $btn !== '' ? $btn : '<span class="text-muted">&mdash;</span>';
+    }
+
+    /**
+     * Server-side feed for the Teacher Roster table.
+     *
+     * Teachers are plain users rows (role 5) carrying the school_id - there is
+     * no teacher equivalent of school_parent_invites, because a teacher has no
+     * self-registration path to gate.
+     */
+    public function teachers(Request $request, $id)
+    {
+        if ($denied = $this->guardRoster()) {
+            return $denied;
+        }
+
+        $teachers = User::where('school_id', $id)
+            ->where('user_role_id', 5)
+            ->select(['id', 'name', 'email', 'username', 'country_code', 'phone_no', 'status', 'created_at'])
+            ->latest('id');
+
+        return DataTables::of($teachers)
+            ->addIndexColumn()
+            ->editColumn('name', fn ($row) => e($row->name ?: '-'))
+            ->editColumn('email', fn ($row) => e($row->email))
+            ->editColumn('username', fn ($row) => e($row->username ?: '-'))
+            ->addColumn('phone', fn ($row) => e(trim(($row->country_code ?? '') . ' ' . ($row->phone_no ?? '')) ?: '-'))
+            ->addColumn('status_badge', function ($row) {
+                $active = $row->status === 'active';
+
+                return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;color:#fff;'
+                    . 'background:' . ($active ? '#2f6b46' : '#a63d38') . '">'
+                    . ($active ? 'Active' : 'Inactive') . '</span>';
+            })
+            ->addColumn('added', fn ($row) => optional($row->created_at)->format('d M Y') ?: '-')
+            ->addColumn('action', fn ($row) => '<a href="javascript:void(0)" class="teacher-delete" data-id="' . $row->id
+                . '" title="Remove teacher" style="font-size:18px;color:#a63d38"><i class="mdi mdi-trash-can"></i></a>')
+            ->rawColumns(['status_badge', 'action'])
+            ->make(true);
+    }
+
+    /**
+     * Server-side feed for the Child Accounts table.
+     *
+     * A child row carries no school_id of its own - it is only attached to a
+     * school through its parent - so this joins back through parent_id, the
+     * same derivation SchoolSeatService uses to count the school's places.
+     */
+    public function children(Request $request, $id)
+    {
+        if ($denied = $this->guardRoster()) {
+            return $denied;
+        }
+
+        // DB::table, not User::query()->from(...): the SoftDeletes global scope
+        // would append `users.deleted_at is null` against a table aliased to
+        // `c`, which matches nothing. Both deleted_at predicates are explicit
+        // below instead - same reason SchoolSeatService builds its count this way.
+        $children = DB::table('users as c')
+            ->join('users as p', 'p.id', '=', 'c.parent_id')
+            ->where('p.school_id', $id)
+            ->where('p.user_role_id', 3)
+            ->where('c.user_role_id', 4)
+            ->whereNull('c.deleted_at')
+            ->whereNull('p.deleted_at')
+            ->select([
+                'c.id', 'c.name', 'c.username', 'c.dob', 'c.status', 'c.created_at',
+                'p.name as parent_name', 'p.email as parent_email',
+            ])
+            ->orderByDesc('c.id');
+
+        return DataTables::of($children)
+            ->addIndexColumn()
+            ->editColumn('name', fn ($row) => e($row->name ?: '-'))
+            ->editColumn('username', fn ($row) => e($row->username ?: '-'))
+            ->addColumn('parent', fn ($row) => e($row->parent_name ?: '-') . '<br><small class="text-muted">'
+                . e($row->parent_email) . '</small>')
+            ->addColumn('age', function ($row) {
+                if (empty($row->dob)) {
+                    return '-';
+                }
+
+                // dob is stored as YYYY-MM by addChild, so parse loosely.
+                try {
+                    return \Carbon\Carbon::parse($row->dob)->age . ' yrs';
+                } catch (\Throwable $e) {
+                    return e($row->dob);
+                }
+            })
+            ->addColumn('status_badge', function ($row) {
+                $active = $row->status === 'active';
+
+                return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;color:#fff;'
+                    . 'background:' . ($active ? '#2f6b46' : '#a63d38') . '">'
+                    . ($active ? 'Active' : 'Inactive') . '</span>';
+            })
+            ->addColumn('added', fn ($row) => $row->created_at ? \Carbon\Carbon::parse($row->created_at)->format('d M Y') : '-')
+            ->rawColumns(['parent', 'status_badge'])
+            ->make(true);
+    }
+
+    /**
+     * Parent list upload from the school view.
+     *
+     * Same spreadsheet and same rules as the Edit screen; this just puts the
+     * upload where an admin is already looking at the roster.
+     */
+    public function importParents(Request $request, $id)
+    {
+        $pre = PermissionUser::checkpermission(Auth::user()->id, $this->subadmin_menu_id);
+
+        if (empty($pre) || $pre->is_modify != 'yes') {
+            return redirect('dashboard');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'parent_excel' => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        if ($validator->fails()) {
+            return back()->with('error', $validator->errors()->first());
+        }
+
+        $school = School::findOrFail($id);
+
+        $result = (new SchoolImportService())->importParents(
+            $school,
+            $request->file('parent_excel'),
+            $school->max_limit !== null ? (int) $school->max_limit : null
+        );
+
+        $message = $result['message'];
+        if ($result['status'] && ($result['imported'] ?? 0) > 0) {
+            $message .= $this->credentialMailSuffix((int) $result['imported']);
+        }
+
+        return back()->with($result['status'] ? 'success' : 'error', $message);
+    }
+
+    /**
+     * Teacher list upload from the school view.
+     *
+     * Staff import was previously only reachable from Edit, so an admin had to
+     * leave the school they were looking at to add teachers.
+     */
+    public function importStaff(Request $request, $id)
+    {
+        $pre = PermissionUser::checkpermission(Auth::user()->id, $this->subadmin_menu_id);
+
+        if (empty($pre) || $pre->is_modify != 'yes') {
+            return redirect('dashboard');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'staff_excel' => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        if ($validator->fails()) {
+            return back()->with('error', $validator->errors()->first());
+        }
+
+        $result = (new SchoolImportService())->importStaff(School::findOrFail($id), $request->file('staff_excel'));
+
+        return back()->with($result['status'] ? 'success' : 'error', $result['message']);
+    }
+
+    public function revokeInvite(Request $request, $inviteId)
+    {
+        if ($denied = $this->guardRoster()) {
+            return $denied;
+        }
+
+        $invite = SchoolParentInvite::findOrFail($inviteId);
+        $result = (new SchoolRosterService())->revoke($invite);
+
+        return response()->json($result);
+    }
+
+    public function restoreInvite(Request $request, $inviteId)
+    {
+        if ($denied = $this->guardRoster()) {
+            return $denied;
+        }
+
+        $invite = SchoolParentInvite::findOrFail($inviteId);
+        $result = (new SchoolRosterService())->restore($invite);
+
+        $status = ($result['status'] ?? false) ? 200 : 422;
+
+        return response()->json($result, $status);
+    }
+
+    /**
+     * Disable or re-enable a parent account. Children follow the parent so
+     * a disabled parent cannot keep using the app through a child login.
+     */
+    public function toggleParentStatus(Request $request, $id, $userId)
+    {
+        if ($denied = $this->guardRoster()) {
+            return $denied;
+        }
+
+        $request->validate([
+            'status' => 'required|in:active,inactive',
+        ]);
+
+        $user = User::where('id', $userId)
+            ->where('school_id', $id)
+            ->where('user_role_id', 3)
+            ->first();
+
+        if (!$user) {
+            return response()->json(['status' => false, 'message' => 'Parent account not found.'], 404);
+        }
+
+        $status = $request->input('status');
+        $user->update(['status' => $status]);
+        User::where('parent_id', $user->id)->where('user_role_id', 4)->update(['status' => $status]);
+
+        $message = $status === 'active'
+            ? 'Parent account enabled. They and their children can sign in again.'
+            : 'Parent account disabled. They and their children cannot sign in until enabled.';
+
+        return response()->json(['status' => true, 'message' => $message, 'value' => $status]);
+    }
+
+    public function resendInvite(Request $request, $inviteId)
+    {
+        if ($denied = $this->guardRoster()) {
+            return $denied;
+        }
+
+        $invite = SchoolParentInvite::with('school')->findOrFail($inviteId);
+
+        app(SchoolNotifier::class)->parentInvited($invite->school, $invite);
+
+        return response()->json(['status' => true, 'message' => 'Invitation re-sent.']);
+    }
+
+    /**
+     * Toggles one of the two school flags.
+     *
+     * Turning enforce_parent_roster on is refused while any of the school's
+     * parents lack a claimed invite - otherwise the flag locks out exactly the
+     * people it is meant to admit.
+     */
+    public function toggleSchoolFlag(Request $request, $id, $flag)
+    {
+        if ($denied = $this->guardRoster()) {
+            return $denied;
+        }
+
+        // Whitelist, never the raw segment: this value names a column.
+        if (!in_array($flag, ['enforce_parent_roster', 'self_signup_enabled'], true)) {
+            return response()->json(['status' => false, 'message' => 'Unknown setting.'], 422);
+        }
+
+        $school = School::findOrFail($id);
+        $next = ($school->{$flag} ?? 'no') === 'yes' ? 'no' : 'yes';
+
+        if ($flag === 'enforce_parent_roster' && $next === 'yes') {
+            $unrostered = User::where('school_id', $school->id)
+                ->where('user_role_id', 3)
+                ->whereNotNull('email')
+                ->whereNotExists(function ($q) {
+                    $q->select(DB::raw(1))
+                        ->from('school_parent_invites')
+                        ->whereColumn('school_parent_invites.school_id', 'users.school_id')
+                        ->whereColumn('school_parent_invites.claimed_user_id', 'users.id');
+                })
+                ->count();
+
+            if ($unrostered > 0) {
+                return response()->json([
+                    'status' => false,
+                    'message' => "Run  php artisan school:backfill-roster --school={$school->id}  first - {$unrostered} existing parent(s) are not on the roster and would be locked out.",
+                ], 422);
+            }
+        }
+
+        $school->update([$flag => $next]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Setting updated.',
+            'value' => $next,
+        ]);
+    }
+
+    /**
+     * @param  array{sent:bool,reason:string}  $result
+     */
+    private function onboardingMailSuffix(array $result): string
+    {
+        return match ($result['reason'] ?? '') {
+            'sent' => ' Onboarding email sent to the school contact.',
+            'no_email' => ' Onboarding email skipped: no school contact email.',
+            'no_template' => ' Onboarding email was not sent (missing school_onboarded template). Run: php artisan db:seed --class=SchoolEmailTemplateSeeder',
+            default => ' Onboarding email failed to send. Check mail settings and storage/logs/laravel.log.',
+        };
+    }
+
+    private function credentialMailSuffix(int $queued): string
+    {
+        if ($queued < 1) {
+            return '';
+        }
+
+        if (!EmailTemplate::where('variable_name', 'signup_school_user')->exists()) {
+            return ' Parent emails were not sent (missing signup_school_user template). Run: php artisan db:seed --class=SchoolEmailTemplateSeeder';
+        }
+
+        if (config('queue.default') === 'sync') {
+            return ' Credential emails were sent.';
+        }
+
+        return ' Credential emails were queued. If they do not arrive, run php artisan queue:work.';
     }
 }

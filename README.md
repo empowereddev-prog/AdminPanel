@@ -17,7 +17,7 @@ Audience types on content: `parent`, `child`, `both` (all). Stack: PHP 8.2+, Lar
 ## Requirements
 
 - PHP **8.2** or **8.3** with extensions: `bcmath`, `ctype`, `curl`, `fileinfo`, `json`, `mbstring`, `openssl`, `pdo_mysql`, `tokenizer`, `xml`, `gd` (or `imagick`)
-- **Composer** 2
+- **Composer** 2 — only needed to install or change dependencies. If `vendor/` is already present you can run the app without it.
 - **MySQL** 8 (local or RDS)
 - **FFmpeg** on the PATH if you upload/transcode video (`pbmedia/laravel-ffmpeg`)
 - Node 18+ only if you run Vite (`npm run dev` / `npm run build`); the admin UI mostly uses Blade + `public/assets`
@@ -49,7 +49,7 @@ QUEUE_CONNECTION=sync
 FILESYSTEM_DISK=local
 ```
 
-When `APP_ENV=local`, admin login **skips email OTP** and signs you in directly.
+Admin login requires an email OTP in **every** environment, local included — see [Signing in locally](#signing-in-locally-otp) for how to read it.
 
 ### Optional env
 
@@ -92,6 +92,77 @@ Admin: [http://127.0.0.1:8000](http://127.0.0.1:8000)
 Seeded by `AdminUserSeeder` (also creates admin menu rows and view/modify permissions). `php artisan db:seed` also runs `FeaturesContentSeeder` and `StaticContentSeeder`.
 
 Change that password before any shared or production use.
+
+### Signing in locally (OTP)
+
+There is **no fixed or magic OTP**, and no local bypass. `___otp_code()` is `rand(1000, 9999)`, so the code is a
+random four digits that rotates on every login attempt and every resend. Both historical shortcuts are commented out
+and should stay that way — `'4444'` in [`LoginController::verifyOtp`](app/Http/Controllers/Admin/LoginController.php)
+and `'111111'` in [`RegisterService::verifyOtp`](app/Services/RegisterService.php).
+
+Submit the email and password first, then read the code that was generated:
+
+```bash
+php artisan tinker --execute="echo \App\Models\User::where('email','admin@empowered.local')->value('otp');"
+```
+
+Read it *after* submitting, not before — the previous value is already stale by then.
+
+The same column holds the OTP for a mobile-API user part-way through registration:
+
+```bash
+php artisan tinker --execute="echo \App\Models\User::where('email','PARENT_EMAIL')->value('otp');"
+```
+
+With `MAIL_MAILER=log` the admin OTP is also written into `storage/logs/laravel.log`, but the template renders it
+inside a styled block, so grepping for digits picks up noise. Prefer the database read above.
+
+### Mail and queues locally
+
+`MAIL_MAILER=log` means no mail leaves the machine — everything renders into the log:
+
+```bash
+tail -f storage/logs/laravel.log
+```
+
+The school parent import **dispatches** `SendStudentSignupMail` rather than sending inline, because sending N
+credential emails inside one HTTP request times out a large import. With `QUEUE_CONNECTION=database` those jobs sit in
+the `jobs` table until something drains them. In production the scheduler does it (`app/Console/Kernel.php`); locally
+nothing does, so run a worker in a second terminal whenever you test an import:
+
+```bash
+php artisan queue:work
+```
+
+Without it the import still succeeds, but no credential email is ever rendered.
+
+> **Twilio sends real SMS from your laptop.** `___sms_sender` calls the live Twilio API on every successful
+> registration, and `.env` normally carries working credentials. The test suite is safe — `phpunit.xml` blanks
+> `TWILIO_SID` — but **running the register API locally will send a genuine message** to whatever number you pass.
+> Use an obviously fake number, or blank `TWILIO_SID` in `.env` while developing.
+
+### Stopping the server
+
+`php artisan serve` and `php artisan queue:work` both run in the foreground, so **Ctrl+C** in that terminal stops them.
+
+Check what is actually running before killing anything:
+
+```bash
+pgrep -fl "artisan serve|artisan queue:work"
+```
+
+If one is orphaned — terminal closed, or started with `&` — match on the command, not the port:
+
+```bash
+pkill -f "artisan serve"
+```
+
+`artisan serve` spawns a child PHP built-in server that holds the socket, so killing only the port-holder
+(`lsof -ti tcp:8000 | xargs kill`) leaves the parent alive and it can hand the port straight back. `pkill -f` takes
+both. Confirm with the `pgrep` above; add `-9` only if something refuses to exit.
+
+Nothing here installs a background service. The scheduled `queue:work` entry only fires when **cron** runs
+`schedule:run`, which is a production concern, so there is no lingering process on a dev machine.
 
 ### Front-end assets (optional)
 
@@ -229,6 +300,9 @@ server {
     index index.php;
 
     add_header X-Frame-Options "SAMEORIGIN";
+    # Videos no longer travel through nginx: the browser PUTs them straight to
+    # S3 (docs/DEPLOYMENT.md), so this only has to cover thumbnails and
+    # form fields. Raising it is not how you allow bigger videos.
     client_max_body_size 64M;
 
     location / {
@@ -242,6 +316,10 @@ server {
     location ~ \.php$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        # Default fastcgi_read_timeout is 60s. Podcast upload + S3 + ffmpeg
+        # often exceeds that after the browser already shows 100% progress.
+        fastcgi_read_timeout 300s;
+        fastcgi_send_timeout 300s;
     }
 
     location ~ /\.(?!well-known).* {
@@ -257,7 +335,23 @@ sudo apt-get install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d admin.empoweredhealth.asia
 ```
 
-### 5. Later deploys (two options)
+PHP (php.ini / pool) must match the 64M nginx cap and the 300s FastCGI timeout, or the worker dies with browser `xhr.status === 0`:
+
+```ini
+upload_max_filesize = 64M
+post_max_size = 64M
+max_execution_time = 300
+```
+
+Admin video uploads also need the S3 bucket CORS rule (`ExposeHeaders: ETag`) and the `assets/video/tmp/` lifecycle rule from [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §1. Without them uploads silently fall back to posting through PHP and large files fail with 413 again.
+
+FCM after a podcast save is queued (`NotifyVideoContentAudience`). On the admin host use a real queue (`QUEUE_CONNECTION=database` or `redis`, not `sync`) and keep `php artisan queue:work` (or supervisor) running. Details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §4.
+
+### 5. Later deploys
+
+> The full release runbook — pre-flight, migrations, queue, smoke tests, rollback — is
+> [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). What follows is the short form.
+
 
 **A — Manual (always works)**
 
@@ -294,6 +388,18 @@ Open `https://admin.empoweredhealth.asia` and log in as an admin. Mobile API bas
 ```bash
 php artisan test
 ```
+
+`phpunit.xml` blanks `TWILIO_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_NUMBER`. Without that the suite makes live Twilio
+API calls on every registration test — slow, billable, and one real phone number away from sending an actual SMS from
+a test run. Leave them blank.
+
+Two gates worth knowing before you change API behaviour:
+
+- `tests/Feature/Api/ResponseContractSnapshotTest.php` records the v1 response shape of every endpoint and fails if a
+  key is removed, renamed or retyped. Additive keys pass by design. Regenerate only after reviewing the diff:
+  `UPDATE_API_SNAPSHOTS=1 php vendor/bin/phpunit tests/Feature/Api/ResponseContractSnapshotTest.php`
+- `tests/Feature/School/` covers the parent roster and child-seat caps, including the flag-off cases that pin
+  unchanged behaviour for schools that have not opted in.
 
 ## License
 

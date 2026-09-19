@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\RespondsToVideoUpload;
+use App\Jobs\NotifyVideoContentAudience;
 use App\Models\AgeGroup;
 use App\Models\Category;
 use App\Models\DeviceToken;
 use App\Models\KnowledgeBase;
 use App\Models\School;
 use App\Models\VideoContent;
+use App\Services\VideoMediaService;
 use Illuminate\Http\Request;
 use Yajra\Datatables\datatables;
 use Validator;
@@ -21,6 +24,7 @@ use App\Models\User;
 use App\Models\UserLikedVideo;
 class VideoMoreController extends Controller
 {
+    use RespondsToVideoUpload;
       private $video_content = 17;
     private $subadmin_menu_id = 38;
     public function index()
@@ -56,6 +60,9 @@ class VideoMoreController extends Controller
         'description' => 'nullable|string',
         'category' => 'required|string|max:255',
         'media' => 'nullable|mimes:mp4,mov,avi,wmv',
+        // Set instead of 'media' when the browser uploaded straight to S3.
+        'media_key' => 'nullable|string|max:255|starts_with:assets/video/tmp/',
+        'media_duration' => 'nullable|regex:/^\d{2}:\d{2}$/',
         'thumbnail' => 'nullable',
         'points' => 'nullable|numeric|min:0|max:10',
         'featured_key' => 'nullable|string|min:3|max:255|not_regex:/<[^>]*>/u',
@@ -79,59 +86,19 @@ class VideoMoreController extends Controller
     }
 
     if ($request->hasFile('media')) {
-    $file = $request->file('media');
-
-    // 1. File name ko sanitize karein (Spaces hatayein)
-    $originalName = $file->getClientOriginalName();
-    $safeName = time() . '_' . str_replace(' ', '_', $originalName);
-
-    // 2. Temp path ke liye safe name use karein (Move karne se pehle copy karein)
-    $tmpVideoPath = sys_get_temp_dir() . '/' . $safeName;
-    copy($file->getRealPath(), $tmpVideoPath);
-
-    // 3. Ab file ko uske final destination par move karein
-    $file->move(public_path('assets/video'), $safeName);
-    $mediaName = $safeName;
-    $mediaPath = $mediaName;
-
-    if (file_exists($tmpVideoPath)) {
-        try {
-            // FFProbe logic
-            $ffprobe = FFProbe::create();
-            $durationInSeconds = $ffprobe->format($tmpVideoPath)->get('duration');
-
-            if ($durationInSeconds !== null) {
-                $minutes = floor($durationInSeconds / 60);
-                $seconds = intval($durationInSeconds % 60);
-                $videoDuration = sprintf("%02d:%02d", $minutes, $seconds);
-            }
-
-            if (!$thumbnailPath) {
-                $ffmpeg = FFMpeg::create();
-                $video = $ffmpeg->open($tmpVideoPath);
-
-                $thumbnailName = pathinfo($mediaName, PATHINFO_FILENAME) . '.jpg';
-                $tmpThumbnailPath = sys_get_temp_dir() . '/' . $thumbnailName;
-
-                $video->frame(TimeCode::fromSeconds(1))->save($tmpThumbnailPath);
-
-                if (file_exists($tmpThumbnailPath)) {
-                    // Yahan check karein ki uploadFile helper function safeName accept karta hai ya nahi
-                    $thumbnailFile = new \Illuminate\Http\UploadedFile($tmpThumbnailPath, $thumbnailName, 'image/jpeg', null, true);
-                    $thumbnailPath = uploadFile($thumbnailFile, 'assets/images');
-                }
-                @unlink($tmpThumbnailPath);
-            }
-        } catch (\Exception $e) {
-            \Log::error("FFMpeg Error: " . $e->getMessage());
+        $file = $request->file('media');
+        $mediaName = uploadFile($file, 'assets/video');
+        $mediaPath = $mediaName;
+        $probe = app(VideoMediaService::class)->probe($file, (string) $mediaName, !$thumbnailPath);
+        $videoDuration = $probe['duration'];
+        if (!$thumbnailPath && $probe['thumbnail']) {
+            $thumbnailPath = $probe['thumbnail'];
         }
-
-        // Temp file delete karna mat bhulein
-        if (file_exists($tmpVideoPath)) {
-            @unlink($tmpVideoPath);
-        }
+    } elseif ($request->filled('media_key')) {
+        // Direct-to-S3 upload: the bytes never reached PHP.
+        $mediaPath = adoptUploadedObject($request->input('media_key'), 'assets/video');
+        $videoDuration = $request->input('media_duration') ?: '00:00';
     }
-}
 
     $video_content_details = VideoContent::create([
         'title' => $request->title,
@@ -158,12 +125,10 @@ class VideoMoreController extends Controller
     }
 
     $userIds = $userQuery->pluck('id')->toArray();
-    $users = DeviceToken::whereIn('user_id', $userIds)
-        ->whereNotNull('token')
-        ->get();
 
     $content = getNotificationContent('video_content', [
         'title' => $video_content_details->title,
+        'video_link' => getImagePathUrl($video_content_details->video_link, 'assets/video'),
     ]);
 
     $userData = [
@@ -179,18 +144,15 @@ class VideoMoreController extends Controller
         'link'        => \App\Services\DeepLinkService::canonicalUrl('podcast', (int) $video_content_details->id),
     ];
 
-    foreach ($users as $user) {
-        sendNotificationSender(
-            $user->user_id,
-            $content['title'],
-            $content['body'],
-            'video_content',
-            $userData,
-            "user"
-        );
-    }
+    NotifyVideoContentAudience::dispatch(
+        $userIds,
+        $content['title'] ?? '',
+        $content['body'] ?? '',
+        'video_content',
+        $userData
+    );
 
-    return redirect()->route('video-other.index')->with('success', 'Video Content added successfully.');
+    return $this->videoSavedResponse($request, 'video-other.index', 'Video Content added successfully.');
     }
 
     public function getVideoData(Request $request)
@@ -338,6 +300,9 @@ public function update(Request $request, string $id)
             'status' => 'required|in:active,inactive',
             'ratio_type' => 'required|in:landscape,portrait',
             'media' => 'nullable|mimes:mp4,mov,ogg,qt,avi,wmv', // Synchronized with store types safely
+            // Set instead of 'media' when the browser uploaded straight to S3.
+            'media_key' => 'nullable|string|max:255|starts_with:assets/video/tmp/',
+            'media_duration' => 'nullable|regex:/^\d{2}:\d{2}$/',
             'thumbnail' => 'nullable|image|mimes:jpg,jpeg,png|max:5000',
         ]);
 
@@ -345,27 +310,16 @@ public function update(Request $request, string $id)
 
         if ($request->hasFile('media')) {
             $file = $request->file('media');
-
-            $originalName = $file->getClientOriginalName();
-            $safeName = time() . '_' . str_replace(' ', '_', $originalName);
-            $tmpVideoPath = sys_get_temp_dir() . '/' . $safeName;
-            copy($file->getRealPath(), $tmpVideoPath);
-
-            $videoContent->video_link = uploadFile($file, 'assets/video', $videoContent->video_link);
-
-            if (file_exists($tmpVideoPath)) {
-                try {
-                    $ffprobe = FFProbe::create();
-                    $durationInSeconds = $ffprobe->format($tmpVideoPath)->get('duration');
-                    if ($durationInSeconds !== null) {
-                        $minutes = floor($durationInSeconds / 60);
-                        $seconds = intval($durationInSeconds % 60);
-                        $videoContent->video_duration = sprintf("%02d:%02d", $minutes, $seconds);
-                    }
-                } catch (\Exception $e) {
-                    \Log::error("FFMpeg Probe Update Error: " . $e->getMessage());
-                }
-                @unlink($tmpVideoPath);
+            $mediaName = uploadFile($file, 'assets/video', $videoContent->video_link);
+            $videoContent->video_link = $mediaName;
+            $probe = app(VideoMediaService::class)->probe($file, (string) $mediaName, false);
+            $videoContent->video_duration = $probe['duration'];
+        } elseif ($request->filled('media_key')) {
+            // Direct-to-S3 upload; adopt the object and drop the old one.
+            $mediaName = adoptUploadedObject($request->input('media_key'), 'assets/video', $videoContent->video_link);
+            if ($mediaName) {
+                $videoContent->video_link = $mediaName;
+                $videoContent->video_duration = $request->input('media_duration') ?: $videoContent->video_duration;
             }
         }
 
@@ -388,16 +342,7 @@ public function update(Request $request, string $id)
 
         $videoContent->save();
 
-        // Exact response layout match for your custom sweetalerts/AJAX workflows
-        if ($request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Updated successfully.',
-                'redirect'=> route('video-other.index')
-            ]);
-        }
-
-        return redirect()->route('video-other.index')->with('success', 'Updated successfully.');
+        return $this->videoSavedResponse($request, 'video-other.index', 'Updated successfully.');
     }
 
  public function destroy(string $id)

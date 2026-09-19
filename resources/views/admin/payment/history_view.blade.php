@@ -29,7 +29,7 @@
                                     <div class="row mb-3">
                                         <div class="col-md-6">
                                             <div class="form-group">
-                                                <label for="name">Name</label>
+                                                <label for="name">Payer</label>
                                                 <p class="form-control" id="name">{{ $data->user->name ?? 'N/A' }}</p>
                                             </div>
                                         </div>

@@ -28,5 +28,14 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
+        <!-- ___sms_sender builds a Twilio client and calls the live API on every
+             successful registration. With real credentials in .env the suite was
+             making outbound API calls - slow, billable, and one real phone number
+             away from sending an actual SMS from a test run. Blanking the sid
+             makes the client constructor throw immediately, which the helper's
+             own try/catch already swallows. -->
+        <env name="TWILIO_SID" value=""/>
+        <env name="TWILIO_AUTH_TOKEN" value=""/>
+        <env name="TWILIO_NUMBER" value=""/>
     </php>
 </phpunit>

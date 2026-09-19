@@ -23,9 +23,49 @@ use Kreait\Firebase\Factory;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Exception\MessagingException;
 
+if (!function_exists('___apply_admin_mail_settings')) {
+    function ___apply_admin_mail_settings(): void
+    {
+        if (app()->runningUnitTests()) {
+            return;
+        }
+        $mailer = getSetting('MAIL_MAILER');
+        $host = getSetting('MAIL_HOST');
+        $port = getSetting('MAIL_PORT');
+        $username = getSetting('MAIL_USERNAME');
+        $password = getSetting('MAIL_PASSWORD');
+        $fromAddress = getSetting('MAIL_FROM_ADDRESS');
+        $fromName = getSetting('MAIL_FROM_NAME');
+
+        if ($mailer !== '') {
+            Config::set('mail.default', $mailer);
+        }
+        if ($host !== '') {
+            Config::set('mail.mailers.smtp.host', $host);
+        }
+        if ($port !== '') {
+            Config::set('mail.mailers.smtp.port', $port);
+        }
+        if ($username !== '') {
+            Config::set('mail.mailers.smtp.username', $username);
+        }
+        if ($password !== '') {
+            Config::set('mail.mailers.smtp.password', $password);
+        }
+        if ($fromAddress !== '') {
+            Config::set('mail.from.address', $fromAddress);
+        }
+        if ($fromName !== '') {
+            Config::set('mail.from.name', $fromName);
+        }
+    }
+}
+
 if (!function_exists('___mail_sender')) {
     function ___mail_sender($email, $template_code, $data, $lan)
     {
+        ___apply_admin_mail_settings();
+
         $template = EmailTemplate::where('variable_name', $template_code)
             ->when($lan, fn ($q) => $q->where('language', $lan))
             ->first()
@@ -59,14 +99,14 @@ if (!function_exists('___mail_sender')) {
 
         if ($recipients === []) {
             Log::warning('Mail skipped: empty recipient', ['template' => $template_code]);
-            return;
+            return false;
         }
 
         $view = 'emails.' . $template_code;
         $useView = view()->exists($view);
         if (!$useView && empty($body)) {
             Log::warning('Mail skipped: missing template', ['template' => $template_code]);
-            return;
+            return false;
         }
 
         if ($template_code === 'admin_otp' && ($subject === 'Empowered Health' || $subject === '')) {
@@ -99,7 +139,10 @@ if (!function_exists('___mail_sender')) {
                 'to' => $recipients,
                 'error' => $e->getMessage(),
             ]);
+            return false;
         }
+
+        return true;
     }
 }
 function sendContactEmail($userEmail, $template_code, $data, $lan)
@@ -458,6 +501,20 @@ function ___otp_code()
 
 function ___sms_sender($message, $recipients, $language = 'english')
 {
+    // Without this guard a blank or missing Twilio credential makes the client
+    // constructor raise a TypeError - an Error, not an Exception, so the catch
+    // below never saw it and the throw escaped into the caller. That turned a
+    // configuration gap into a 500 on registration rather than an SMS that
+    // quietly did not go out.
+    if (empty(config('services.twilio.sid')) || empty(config('services.twilio.token'))) {
+        Log::warning('SMS skipped: Twilio is not configured');
+
+        return response()->json([
+            'success' => false,
+            'error' => 'SMS transport is not configured.',
+        ], 500);
+    }
+
     try {
         $client = new Client(
             config('services.twilio.sid'),
@@ -478,7 +535,11 @@ function ___sms_sender($message, $recipients, $language = 'english')
                 ? 'OTP sent successfully!'
                 : 'OTP 发送成功',
         ], 200);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
+        // Throwable, not Exception: the Twilio SDK raises TypeError and
+        // ConfigurationException for malformed credentials, and neither is an
+        // Exception. A failed SMS must never take the surrounding request down.
+        Log::error('SMS send failed', ['error' => $e->getMessage()]);
 
         return response()->json([
             'success' => false,
@@ -863,6 +924,11 @@ function getNotificationContent($variable_name, $data = [])
         $subject     = str_replace('{' . $key . '}', $value, $subject);
         $description = str_replace('{' . $key . '}', $value, $description);
     }
+    // Any token the caller did not supply would otherwise reach the user as a
+    // literal "{video_link}". Drop leftovers rather than show braces.
+    $subject = trim(preg_replace('/\s*\{[a-z_]+\}/i', '', $subject));
+    $description = trim(preg_replace('/\s*\{[a-z_]+\}/i', '', $description));
+
     return [
         'title' => $subject,
         'body'  =>  $description,
@@ -1021,23 +1087,204 @@ if (! function_exists('battery_debit_once_per_day')) {
 
 function uploadFile($file, $folder, $dbFileName = null)
 {
-    if (!$file || !$file->isValid()) {
-        return null;
-    }
-    $filename = time() . '-' . rand(10, 99) . '.' . $file->getClientOriginalExtension();
-    $path = $folder . '/' . $filename;
     try {
-        $oldPath = $folder . '/' . $dbFileName;
-        if ($dbFileName && Storage::disk('s3')->exists($oldPath)) {
+        $oldPath = ($dbFileName !== null && $dbFileName !== '')
+            ? $folder . '/' . ltrim((string) $dbFileName, '/')
+            : null;
+
+        $hasNewFile = $file && $file->isValid();
+
+        // Call sites use uploadFile(null, $folder, $oldName) as a delete-only.
+        if (!$hasNewFile) {
+            if ($oldPath && Storage::disk('s3')->exists($oldPath)) {
+                Storage::disk('s3')->delete($oldPath);
+            }
+
+            return null;
+        }
+
+        if ($oldPath && Storage::disk('s3')->exists($oldPath) && uploadFileMatchesExisting($file, $oldPath)) {
+            return ltrim((string) $dbFileName, '/');
+        }
+
+        $filename = time() . '-' . rand(10, 99) . '.' . $file->getClientOriginalExtension();
+        // Stream the file. file_get_contents loaded entire videos into RAM and
+        // killed the PHP worker on podcast uploads (browser xhr.status 0).
+        $uploaded = Storage::disk('s3')->putFileAs($folder, $file, $filename);
+
+        if (!$uploaded) {
+            Log::error('S3 upload failed: putFileAs returned false');
+
+            return null;
+        }
+
+        $newPath = $folder . '/' . $filename;
+        if ($oldPath && $oldPath !== $newPath && Storage::disk('s3')->exists($oldPath)) {
             Storage::disk('s3')->delete($oldPath);
         }
-        Storage::disk('s3')->put($path, file_get_contents($file));
-        Log::error('S3 upload success: hai');
+
         return $filename;
     } catch (\Exception $e) {
         Log::error('S3 upload failed: ' . $e->getMessage());
         return null;
     }
+}
+
+/**
+ * Adopt an object the browser already PUT straight to S3 (presigned multipart,
+ * see VideoUploadSignController) by moving it out of the tmp prefix into
+ * $folder. Mirrors uploadFile()'s naming, old-file cleanup and return value so
+ * call sites can treat the two paths the same. No bytes pass through PHP.
+ */
+function adoptUploadedObject(?string $key, string $folder, $dbFileName = null): ?string
+{
+    $key = $key !== null ? trim($key) : '';
+    $prefix = \App\Http\Controllers\Admin\VideoUploadSignController::TMP_PREFIX;
+
+    if ($key === '' || !str_starts_with($key, $prefix) || str_contains($key, '..')) {
+        Log::error('Rejected direct-upload key outside the tmp prefix', ['key' => $key]);
+
+        return null;
+    }
+
+    try {
+        $disk = Storage::disk('s3');
+
+        if (!$disk->exists($key)) {
+            Log::error('Direct-upload object missing on S3', ['key' => $key]);
+
+            return null;
+        }
+
+        $extension = pathinfo($key, PATHINFO_EXTENSION);
+        $filename = time() . '-' . rand(10, 99) . ($extension !== '' ? '.' . $extension : '');
+        $newPath = $folder . '/' . $filename;
+
+        if (!$disk->move($key, $newPath)) {
+            Log::error('Direct-upload move failed', ['key' => $key, 'target' => $newPath]);
+
+            return null;
+        }
+
+        $oldPath = ($dbFileName !== null && $dbFileName !== '')
+            ? $folder . '/' . ltrim((string) $dbFileName, '/')
+            : null;
+
+        if ($oldPath && $oldPath !== $newPath && $disk->exists($oldPath)) {
+            $disk->delete($oldPath);
+        }
+
+        return $filename;
+    } catch (\Throwable $e) {
+        Log::error('Direct-upload adoption failed: ' . $e->getMessage());
+
+        return null;
+    }
+}
+
+/**
+ * Same bytes as the existing S3 object: skip put. Fail open (return false)
+ * on checksum errors so a glitch still replaces rather than blocking save.
+ *
+ * The comparison is against the object's ETag, read with one HeadObject call.
+ * It used to stream the whole remote object back through PHP to sha256 it,
+ * which meant re-saving a 60 MB video downloaded 60 MB just to avoid one
+ * upload - and on a large file that alone outran max_execution_time.
+ */
+function uploadFileMatchesExisting($file, string $oldPath): bool
+{
+    try {
+        $disk = Storage::disk('s3');
+        if ((int) $file->getSize() !== (int) $disk->size($oldPath)) {
+            return false;
+        }
+
+        $localPath = $file->getRealPath();
+        if (!$localPath || !is_file($localPath)) {
+            return false;
+        }
+
+        $remoteEtag = s3ObjectEtag($oldPath);
+
+        if ($remoteEtag !== null) {
+            // A multipart upload's ETag is "<hash>-<partcount>", not an MD5 of
+            // the content, so there is nothing to compare against. Fail open.
+            if (str_contains($remoteEtag, '-')) {
+                return false;
+            }
+
+            $localMd5 = md5_file($localPath);
+
+            return $localMd5 !== false && hash_equals($localMd5, $remoteEtag);
+        }
+
+        // No S3 client on this disk (Storage::fake, or a local-driver override):
+        // fall back to hashing the stream so behaviour is unchanged off S3.
+        $localHash = hash_file('sha256', $localPath);
+        $remoteHash = s3StreamSha256($oldPath);
+
+        if ($localHash === false || $remoteHash === null) {
+            return false;
+        }
+
+        return hash_equals($localHash, $remoteHash);
+    } catch (\Throwable $e) {
+        Log::error('S3 checksum compare failed: ' . $e->getMessage());
+
+        return false;
+    }
+}
+
+/**
+ * The object's ETag, lowercased and unquoted, or null when this disk has no
+ * S3 client behind it (the faked disk in tests) so the caller can fall back.
+ */
+function s3ObjectEtag(string $path): ?string
+{
+    $disk = Storage::disk('s3');
+
+    if (!method_exists($disk, 'getClient')) {
+        return null;
+    }
+
+    try {
+        $head = $disk->getClient()->headObject([
+            'Bucket' => (string) config('filesystems.disks.s3.bucket'),
+            'Key' => $path,
+        ]);
+    } catch (\Throwable $e) {
+        Log::error('S3 headObject failed: ' . $e->getMessage());
+
+        return null;
+    }
+
+    $etag = trim((string) ($head['ETag'] ?? ''), '"');
+
+    return $etag === '' ? null : strtolower($etag);
+}
+
+function s3StreamSha256(string $path): ?string
+{
+    $stream = Storage::disk('s3')->readStream($path);
+    if (!is_resource($stream)) {
+        return null;
+    }
+
+    $ctx = hash_init('sha256');
+    while (!feof($stream)) {
+        $chunk = fread($stream, 1024 * 1024);
+        if ($chunk === false) {
+            fclose($stream);
+
+            return null;
+        }
+        if ($chunk !== '') {
+            hash_update($ctx, $chunk);
+        }
+    }
+    fclose($stream);
+
+    return hash_final($ctx);
 }
 
 function getImagePathUrl($filename, $folder)

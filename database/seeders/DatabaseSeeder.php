@@ -21,10 +21,18 @@ class DatabaseSeeder extends Seeder
 
         $this->call(
             [
+                // Reference data these screens cannot function without: an empty
+                // `countries` leaves every country <select> with no options, and an
+                // empty `notification_templates` makes every push and in-app
+                // notification render with a blank title and body.
+                CountrySeeder::class,
+                NotificationTemplateSeeder::class,
+                AdminMenuSeeder::class,
                 AdminUserSeeder::class,
                 FeaturesContentSeeder::class,
                 StaticContentSeeder::class,
                 AdminOtpEmailTemplateSeeder::class,
+                SchoolEmailTemplateSeeder::class,
             ]);
 
     }

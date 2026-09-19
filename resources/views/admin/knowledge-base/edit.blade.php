@@ -363,6 +363,24 @@
 <script src="https://cdn.ckeditor.com/ckeditor5/23.0.0/classic/ckeditor.js"></script>
 
 @push('scripts')
+    {{-- Large videos go straight to S3 so nginx/PHP never see them (no 413).
+         Falls back to the original in-form upload if anything fails. --}}
+    <script src="{{ asset('assets/js/direct-video-upload.js') }}"></script>
+    <script>
+        window.directVideoUploadRoutes = {
+            create:   "{{ route('uploads.video.create') }}",
+            part:     "{{ route('uploads.video.part') }}",
+            complete: "{{ route('uploads.video.complete') }}",
+            abort:    "{{ route('uploads.video.abort') }}"
+        };
+        // Bound before the form's own handler below, so it runs first.
+        $(function () {
+            if (window.initDirectVideoUpload) {
+                window.initDirectVideoUpload('#knowledgeForm');
+            }
+        });
+    </script>
+
     <script>
         $(document).ready(function() {
 
@@ -565,8 +583,8 @@
                     success: function (res) {
                         hideProgress();
                         $btn.prop('disabled', false).text('Update');
-                        showToast('Video resource updated successfully!', 'success');
-                        setTimeout(() => { window.location.href = "{{ route('knowledge-base.index') }}"; }, 1500);
+                        showToast((res && res.message) || 'Video resource updated successfully!', 'success');
+                        setTimeout(() => { window.location.href = (res && res.redirect) || "{{ route('knowledge-base.index') }}"; }, 1500);
                     },
                     error: function (xhr) {
                         hideProgress();
@@ -574,7 +592,7 @@
                         console.error('Update Request Fail Code:', xhr.status);
 
                         let msg = 'An unexpected update operational error occurred.';
-                        if (xhr.status === 0)         msg = 'Network connection interrupted during file sync.';
+                        if (xhr.status === 0)         msg = 'Connection lost before the server responded. The file may be too large, or the server closed the request while processing.';
                         else if (xhr.status === 413)  msg = 'Payload size limit exceeded. Server rejected stream.';
                         else if (xhr.status === 419)  msg = 'Security session expired (419). Please reload.';
                         else if (xhr.status === 422) {

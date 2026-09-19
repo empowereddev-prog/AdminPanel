@@ -42,7 +42,7 @@
                         <thead>
                             <tr>
                                 <th scope="col" style="min-width: 60px;">#</th>
-                                <th scope="col" style="min-width: 60px;"> User Name </th>
+                                <th scope="col" style="min-width: 60px;"> Payer </th>
                                 <th scope="col" style="min-width: 60px;">Subscription Type</th>
                                 <th scope="col" style="min-width: 60px;">Amount($)</th>
                                 <th scope="col" style="min-width: 60px;">Purchased On</th>
@@ -111,7 +111,7 @@
                     },
                     {
                         data: 'user_name',
-                        name: 'user_name',
+                        name: 'payer_name',
                         searchable: true, orderable: true,
                         render: function(data, type, row) {
                             return data ? data : 'N/A';
@@ -144,7 +144,6 @@
                         searchable: false,
                         orderable: false
                     },
-                      { data: 'id', name: 'id', visible: false }
                 ],
                 // order: [[7, 'desc']],
                 // columnDefs: [{
@@ -190,7 +189,7 @@
                     },
                     {
                         data: 'user_name',
-                        name: 'user_name',
+                        name: 'payer_name',
                         searchable: true, orderable: true,
                         render: function(data, type, row) {
                             return data ? data : 'N/A';
@@ -224,7 +223,6 @@
                         searchable: false,
                         orderable: false
                     },
-                      { data: 'id', name: 'id', visible: false }
                 ],
                 // order: [[8, 'desc']],
                 // columnDefs: [{

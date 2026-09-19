@@ -69,6 +69,11 @@ class User extends Authenticatable implements AuditableContract
         return $this->belongsTo(User::class, 'parent_id', 'id');
     }
 
+    public function school()
+    {
+        return $this->belongsTo(School::class, 'school_id', 'id');
+    }
+
     public function userAvatar()
     {
         return $this->hasOne(UserAvtarImage::class, 'child_id', 'id');

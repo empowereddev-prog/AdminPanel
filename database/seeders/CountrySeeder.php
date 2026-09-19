@@ -12,6 +12,12 @@ class CountrySeeder extends Seeder
      */
     public function run()
     {
+        // Reference data, not a fixture: seed it once. The truncate below runs
+        // with foreign key checks off, which must never hit a populated table.
+        if (DB::table('countries')->exists()) {
+            return;
+        }
+
         DB::statement('SET FOREIGN_KEY_CHECKS = 0');
         DB::table('countries')->truncate();
         $data = array(

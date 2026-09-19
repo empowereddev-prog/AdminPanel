@@ -22,7 +22,7 @@ use App\Models\School;
 use App\Models\Child;
 use App\Models\Country;
 use App\Models\PaymentHistory;
-use App\Models\Subscription;
+use App\Services\Payment\PaymentHistoryQuery;
 
 class DashboardController extends Controller
 {
@@ -32,7 +32,10 @@ class DashboardController extends Controller
         $totalUser = User::where('user_role_id', '3')->where('status', 'active')->where('deleted_at', null)->whereNotNull('email_verified_at')->where('is_mobile_verified', 'yes')->whereNull('school_id')->count();
         $totalSchool = School::where('status', 'active')->count();
         $totalChild = Child::where('status', 'active')->count();
-        $paymentHistory = Subscription::where('status', 'successful')->count();
+        // Must match the Payment History list exactly - a bare count on
+        // `subscriptions` counted school-onboarded parents the list excludes
+        // and missed school contracts entirely.
+        $paymentHistory = (new PaymentHistoryQuery())->successfulCount();
         $items = [];
         $page = request()->query('page', 1); // Get the current page from the query string, default to 1 if not provided
         $perPage = 10; // Number of items per page
