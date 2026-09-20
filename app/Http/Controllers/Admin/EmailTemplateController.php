@@ -13,6 +13,30 @@ class EmailTemplateController extends Controller
 {
     private $content = 5;
     private $subadmin_menu_id = 6;
+
+    /**
+     * School templates that shipped alongside the contracted work but were not
+     * part of it, hidden from the panel until billed. See config/scope.php.
+     *
+     * signup_school_user and signup_teacher are deliberately NOT here - those
+     * are the contracted parent and teacher registration emails and must stay
+     * configurable.
+     */
+    private const GATED_TEMPLATES = [
+        'school_onboarded',
+        'school_parent_invited',
+        'school_offroster_attempt',
+        'school_seat_threshold',
+        'school_import_summary',
+    ];
+
+    /**
+     * @return array<int, string> Templates to hide from the panel right now.
+     */
+    private function gatedTemplates(): array
+    {
+        return config('scope.school_extras') ? [] : self::GATED_TEMPLATES;
+    }
     /**
      * Display a listing of the resource.
      */
@@ -27,6 +51,9 @@ class EmailTemplateController extends Controller
             if(!empty($pre) && $pre->is_modify == 'yes'){
             // $data = EmailTemplate::orderBy('id', 'DESC')->get();
             $emailTemplate = EmailTemplate::select('variable_name', \DB::raw('GROUP_CONCAT(subject) as subject, GROUP_CONCAT(description) as description'))
+            ->when($this->gatedTemplates(), function ($query, $hidden) {
+                return $query->whereNotIn('variable_name', $hidden);
+            })
             ->groupBy('variable_name')
             ->get();
             return DataTables::of($emailTemplate)
@@ -92,6 +119,11 @@ class EmailTemplateController extends Controller
      */
     public function edit(string $var_name)
     {
+        // Hiding a row from the list does not close the edit URL behind it.
+        if (in_array($var_name, $this->gatedTemplates(), true)) {
+            return redirect()->route('email-template.index');
+        }
+
         $pre = PermissionUser::checkpermission(Auth::user()->id, $this->subadmin_menu_id);
         if(!empty($pre) && $pre->is_modify == 'yes'){
         $data = EmailTemplate::where('variable_name', $var_name)->get()->keyBy('language');
@@ -105,6 +137,10 @@ class EmailTemplateController extends Controller
      */
     public function update(EmailTemplateRequest $request, string $var_name)
     {
+        if (in_array($var_name, $this->gatedTemplates(), true)) {
+            return redirect()->route('email-template.index');
+        }
+
         // dd($var_name,$request->all());
         // Update the email template
         $languages = ['english'];

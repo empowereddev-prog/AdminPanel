@@ -70,6 +70,7 @@ class Kernel extends HttpKernel
         'checkActive' => \App\Http\Middleware\CheckActiveUser::class,
         'nocache' => \App\Http\Middleware\NoCache::class,
         'redirIfAuthBack' => \App\Http\Middleware\RedirectIfAuthenticatedBack::class,
+        'school.extras' => \App\Http\Middleware\EnsureSchoolExtrasEnabled::class,
 
     ];
 
