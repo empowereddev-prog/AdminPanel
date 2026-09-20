@@ -29,6 +29,11 @@ class SchoolViewImportTest extends TestCase
         parent::setUp();
         (new SchoolEmailTemplateSeeder())->run();
         Mail::fake();
+
+        // These cover the roster and teacher features themselves, so they run
+        // with the extras gate open. The gate is asserted separately in
+        // SchoolExtrasGateTest.
+        config(['scope.school_extras' => true]);
     }
 
     private function admin(string $isModify = 'yes'): User

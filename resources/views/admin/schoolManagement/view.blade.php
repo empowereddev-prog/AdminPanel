@@ -36,9 +36,11 @@
                     <h3 class="fw-bold text-primary mb-0">
                         <i class="mdi mdi-school"></i> {{ $school->name }}
                     </h3>
-                    <a href="{{ route('school.children.progress', $school->id) }}" class="btn btn-outline-primary px-4">
-                        <i class="mdi mdi-chart-bar"></i> Students Report
-                    </a>
+                    @if (config('scope.school_extras'))
+                        <a href="{{ route('school.children.progress', $school->id) }}" class="btn btn-outline-primary px-4">
+                            <i class="mdi mdi-chart-bar"></i> Students Report
+                        </a>
+                    @endif
                 </div>
 
                 <hr class="my-3">
@@ -48,31 +50,33 @@
                     <span class="ms-2">{{ $school->school_code }}</span>
                 </div>
 
-                {{-- Relabelled from "Max Limit": this number has always capped
-                     PARENT accounts, and the ambiguity is half the reason
-                     nobody noticed children were never counted. --}}
-                <div class="mb-2">
-                    <span class="fw-semibold text-muted">👥 Parent Limit:</span>
-                    <span class="ms-2">
-                        {{ $seats['parents_used'] }} / {{ $school->max_limit ?? 'Unlimited' }}
-                    </span>
-                </div>
+                @if (config('scope.school_extras'))
+                    {{-- Relabelled from "Max Limit": this number has always capped
+                         PARENT accounts, and the ambiguity is half the reason
+                         nobody noticed children were never counted. --}}
+                    <div class="mb-2">
+                        <span class="fw-semibold text-muted">👥 Parent Limit:</span>
+                        <span class="ms-2">
+                            {{ $seats['parents_used'] }} / {{ $school->max_limit ?? 'Unlimited' }}
+                        </span>
+                    </div>
 
-                <div class="mb-2">
-                    <span class="fw-semibold text-muted">🎟️ Child Places:</span>
-                    <span class="ms-2">
-                        {{ $seats['child_seats_used'] }} /
-                        {{ $seats['child_seat_limit'] ?? 'Unlimited' }}
-                        @if (!is_null($seats['child_seats_remaining']))
-                            <small class="text-muted">({{ $seats['child_seats_remaining'] }} remaining)</small>
-                        @endif
-                    </span>
-                </div>
+                    <div class="mb-2">
+                        <span class="fw-semibold text-muted">🎟️ Child Places:</span>
+                        <span class="ms-2">
+                            {{ $seats['child_seats_used'] }} /
+                            {{ $seats['child_seat_limit'] ?? 'Unlimited' }}
+                            @if (!is_null($seats['child_seats_remaining']))
+                                <small class="text-muted">({{ $seats['child_seats_remaining'] }} remaining)</small>
+                            @endif
+                        </span>
+                    </div>
 
-                <div class="mb-2">
-                    <span class="fw-semibold text-muted">👤 Children Per Parent:</span>
-                    <span class="ms-2">{{ $seats['per_parent_child_limit'] ?? 'Unlimited' }}</span>
-                </div>
+                    <div class="mb-2">
+                        <span class="fw-semibold text-muted">👤 Children Per Parent:</span>
+                        <span class="ms-2">{{ $seats['per_parent_child_limit'] ?? 'Unlimited' }}</span>
+                    </div>
+                @endif
 
                 <div class="mb-2">
                     <span class="fw-semibold text-muted">📦 Subscription:</span>
@@ -88,8 +92,11 @@
             <div class="card shadow p-4">
                 <h3 class="fw-bold" style="margin:0 0 6px;">Parents</h3>
                 <p class="text-muted" style="margin:0 0 16px;max-width:70ch;">
-                    Parent accounts and the school's parent email list in one place. Teachers have their own list in the Teacher Roster below.
-                    Disable an account to block sign-in without deleting it; you can enable it again later.
+                    Parent accounts and the school's parent email list in one place.
+                    @if (config('scope.school_extras'))
+                        Teachers have their own list in the Teacher Roster below.
+                        Disable an account to block sign-in without deleting it; you can enable it again later.
+                    @endif
                 </p>
 
                 {{-- Parents are added by spreadsheet only, so the upload lives
@@ -157,7 +164,9 @@
                                 <th>Name</th>
                                 <th>Email</th>
                                 <th>Phone</th>
-                                <th>Roster</th>
+                                @if (config('scope.school_extras'))
+                                    <th>Roster</th>
+                                @endif
                                 <th>Account</th>
                                 <th>Children</th>
                                 <th>Action</th>
@@ -172,12 +181,15 @@
                     <i class="mdi mdi-account-child"></i> Child Accounts
                 </h4>
                 <p class="text-muted" style="margin:0 0 20px;max-width:70ch;">
-                    Children created by this school's parents. Each one uses a child place:
-                    <strong>{{ $seats['child_seats_used'] }} of {{ $seats['child_seat_limit'] ?? 'unlimited' }}</strong>
-                    @if (!is_null($seats['child_seats_remaining']))
-                        used, {{ $seats['child_seats_remaining'] }} remaining.
-                    @else
-                        used.
+                    Children created by this school's parents.
+                    @if (config('scope.school_extras'))
+                        Each one uses a child place:
+                        <strong>{{ $seats['child_seats_used'] }} of {{ $seats['child_seat_limit'] ?? 'unlimited' }}</strong>
+                        @if (!is_null($seats['child_seats_remaining']))
+                            used, {{ $seats['child_seats_remaining'] }} remaining.
+                        @else
+                            used.
+                        @endif
                     @endif
                 </p>
 
@@ -198,54 +210,56 @@
                 </div>
             </div>
 
-            <div class="card shadow p-4 mt-4">
-                <h4 class="fw-bold text-primary" style="margin:0 0 6px;">
-                    <i class="mdi mdi-human-male-board"></i> Teacher Roster
-                </h4>
-                <p class="text-muted" style="margin:0 0 20px;max-width:70ch;">
-                    Staff accounts for this school. Teachers are added by spreadsheet and use no parent or child
-                    places — they are counted separately from the school's paid seats.
-                </p>
+            @if (config('scope.school_extras'))
+                <div class="card shadow p-4 mt-4">
+                    <h4 class="fw-bold text-primary" style="margin:0 0 6px;">
+                        <i class="mdi mdi-human-male-board"></i> Teacher Roster
+                    </h4>
+                    <p class="text-muted" style="margin:0 0 20px;max-width:70ch;">
+                        Staff accounts for this school. Teachers are added by spreadsheet and use no parent or child
+                        places — they are counted separately from the school's paid seats.
+                    </p>
 
-                <div style="border:1px solid #e6edf5;border-radius:8px;padding:18px;background:#fafbfd;margin:0 0 24px;">
-                    <form action="{{ route('school.import.staff', $school->id, false) }}" method="POST"
-                        enctype="multipart/form-data">
-                        @csrf
-                        <div class="fw-semibold" style="margin-bottom:4px;">Import teachers</div>
-                        <div class="text-muted" style="font-size:13px;margin-bottom:12px;">
-                            Each row needs a username as well as a name, email, country code and phone number.
-                        </div>
+                    <div style="border:1px solid #e6edf5;border-radius:8px;padding:18px;background:#fafbfd;margin:0 0 24px;">
+                        <form action="{{ route('school.import.staff', $school->id, false) }}" method="POST"
+                            enctype="multipart/form-data">
+                            @csrf
+                            <div class="fw-semibold" style="margin-bottom:4px;">Import teachers</div>
+                            <div class="text-muted" style="font-size:13px;margin-bottom:12px;">
+                                Each row needs a username as well as a name, email, country code and phone number.
+                            </div>
 
-                        <input type="file" name="staff_excel" id="staff_excel" class="d-none" accept=".xlsx,.xls" required>
+                            <input type="file" name="staff_excel" id="staff_excel" class="d-none" accept=".xlsx,.xls" required>
 
-                        <div style="display:flex;flex-wrap:wrap;align-items:center;">
-                            <button type="button" class="btn btn-secondary" style="margin:0 8px 8px 0;"
-                                onclick="document.getElementById('staff_excel').click();">Choose File</button>
-                            <span id="staff_excel_name" class="text-muted" style="font-size:13px;margin:0 8px 8px 0;">No file chosen</span>
-                            <button type="submit" class="btn btn-primary" style="margin:0 8px 8px 0;">Upload</button>
-                            <a href="{{ route('download.sample.staff.excel', [], false) }}" class="text-muted"
-                                style="font-size:13px;margin-bottom:8px;">Download sample</a>
-                        </div>
-                    </form>
+                            <div style="display:flex;flex-wrap:wrap;align-items:center;">
+                                <button type="button" class="btn btn-secondary" style="margin:0 8px 8px 0;"
+                                    onclick="document.getElementById('staff_excel').click();">Choose File</button>
+                                <span id="staff_excel_name" class="text-muted" style="font-size:13px;margin:0 8px 8px 0;">No file chosen</span>
+                                <button type="submit" class="btn btn-primary" style="margin:0 8px 8px 0;">Upload</button>
+                                <a href="{{ route('download.sample.staff.excel', [], false) }}" class="text-muted"
+                                    style="font-size:13px;margin-bottom:8px;">Download sample</a>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table id="teacherTable" class="table table-striped w-100">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Username</th>
+                                    <th>Phone</th>
+                                    <th>Status</th>
+                                    <th>Added</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
                 </div>
-
-                <div class="table-responsive">
-                    <table id="teacherTable" class="table table-striped w-100">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Username</th>
-                                <th>Phone</th>
-                                <th>Status</th>
-                                <th>Added</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                    </table>
-                </div>
-            </div>
+            @endif
         </div>
 
         <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
@@ -272,7 +286,9 @@
                         { data: 'name', name: 'name' },
                         { data: 'email', name: 'email' },
                         { data: 'phone_no', name: 'phone_no', orderable: false },
+                        @if (config('scope.school_extras'))
                         { data: 'roster_badge', orderable: false, searchable: false },
+                        @endif
                         { data: 'account_badge', orderable: false, searchable: false },
                         { data: 'children', orderable: false, searchable: false },
                         { data: 'action', orderable: false, searchable: false }
@@ -295,161 +311,165 @@
                     ]
                 });
 
-                var teacherTable = $('#teacherTable').DataTable({
-                    processing: true,
-                    serverSide: true,
-                    ajax: '{{ route('school.teachers.data', $school->id, false) }}',
-                    columns: [
-                        { data: 'DT_RowIndex', orderable: false, searchable: false },
-                        { data: 'name', name: 'name' },
-                        { data: 'email', name: 'email' },
-                        { data: 'username', name: 'username' },
-                        { data: 'phone', orderable: false, searchable: false },
-                        { data: 'status_badge', name: 'status' },
-                        { data: 'added', orderable: false, searchable: false },
-                        { data: 'action', orderable: false, searchable: false }
-                    ]
-                });
+                @if (config('scope.school_extras'))
+                    var teacherTable = $('#teacherTable').DataTable({
+                        processing: true,
+                        serverSide: true,
+                        ajax: '{{ route('school.teachers.data', $school->id, false) }}',
+                        columns: [
+                            { data: 'DT_RowIndex', orderable: false, searchable: false },
+                            { data: 'name', name: 'name' },
+                            { data: 'email', name: 'email' },
+                            { data: 'username', name: 'username' },
+                            { data: 'phone', orderable: false, searchable: false },
+                            { data: 'status_badge', name: 'status' },
+                            { data: 'added', orderable: false, searchable: false },
+                            { data: 'action', orderable: false, searchable: false }
+                        ]
+                    });
 
-                $('#teacherTable').on('click', '.teacher-delete', function() {
-                    var id = $(this).data('id');
+                    $('#teacherTable').on('click', '.teacher-delete', function() {
+                        var id = $(this).data('id');
 
-                    swal({
-                        title: 'Remove this teacher?',
-                        text: 'Their staff account will be removed from this school.',
-                        icon: 'warning',
-                        buttons: ['Cancel', 'Remove'],
-                        dangerMode: true
-                    }).then(function(confirmed) {
-                        if (!confirmed) {
-                            return;
-                        }
-
-                        $.ajax({
-                            type: 'POST',
-                            url: '/delete-school-user/' + id,
-                            headers: { 'X-CSRF-TOKEN': csrfToken },
-                            data: { _token: csrfToken, _method: 'DELETE' },
-                            success: function() {
-                                teacherTable.ajax.reload(null, false);
-                                swal('', 'Teacher removed.', 'success');
-                            },
-                            error: function() {
-                                swal('', 'Could not remove that teacher.', 'error');
+                        swal({
+                            title: 'Remove this teacher?',
+                            text: 'Their staff account will be removed from this school.',
+                            icon: 'warning',
+                            buttons: ['Cancel', 'Remove'],
+                            dangerMode: true
+                        }).then(function(confirmed) {
+                            if (!confirmed) {
+                                return;
                             }
+
+                            $.ajax({
+                                type: 'POST',
+                                url: '/delete-school-user/' + id,
+                                headers: { 'X-CSRF-TOKEN': csrfToken },
+                                data: { _token: csrfToken, _method: 'DELETE' },
+                                success: function() {
+                                    teacherTable.ajax.reload(null, false);
+                                    swal('', 'Teacher removed.', 'success');
+                                },
+                                error: function() {
+                                    swal('', 'Could not remove that teacher.', 'error');
+                                }
+                            });
                         });
                     });
-                });
+                @endif
 
-                $('#rosterTable').on('click', '.roster-revoke', function() {
-                    var id = $(this).data('id');
+                @if (config('scope.school_extras'))
+                    $('#rosterTable').on('click', '.roster-revoke', function() {
+                        var id = $(this).data('id');
 
-                    swal({
-                        title: 'Revoke this parent?',
-                        text: 'They will no longer be able to join this school with the school code. Their existing account is not deleted.',
-                        icon: 'warning',
-                        buttons: ['Cancel', 'Revoke'],
-                        dangerMode: true
-                    }).then(function(confirmed) {
-                        if (!confirmed) {
-                            return;
-                        }
-
-                        $.ajax({
-                            type: 'POST',
-                            url: '/school/roster/' + id + '/revoke',
-                            headers: { 'X-CSRF-TOKEN': csrfToken },
-                            data: { _token: csrfToken },
-                            success: function(res) {
-                                rosterTable.ajax.reload(null, false);
-                                swal('', res.message, 'success');
-                            },
-                            error: function() {
-                                swal('', 'Could not revoke that entry.', 'error');
+                        swal({
+                            title: 'Revoke this parent?',
+                            text: 'They will no longer be able to join this school with the school code. Their existing account is not deleted.',
+                            icon: 'warning',
+                            buttons: ['Cancel', 'Revoke'],
+                            dangerMode: true
+                        }).then(function(confirmed) {
+                            if (!confirmed) {
+                                return;
                             }
+
+                            $.ajax({
+                                type: 'POST',
+                                url: '/school/roster/' + id + '/revoke',
+                                headers: { 'X-CSRF-TOKEN': csrfToken },
+                                data: { _token: csrfToken },
+                                success: function(res) {
+                                    rosterTable.ajax.reload(null, false);
+                                    swal('', res.message, 'success');
+                                },
+                                error: function() {
+                                    swal('', 'Could not revoke that entry.', 'error');
+                                }
+                            });
                         });
                     });
-                });
 
-                $('#rosterTable').on('click', '.roster-resend', function() {
-                    var id = $(this).data('id');
-
-                    $.ajax({
-                        type: 'POST',
-                        url: '/school/roster/' + id + '/resend',
-                        headers: { 'X-CSRF-TOKEN': csrfToken },
-                        data: { _token: csrfToken },
-                        success: function(res) {
-                            swal('', res.message, 'success');
-                        },
-                        error: function() {
-                            swal('', 'Could not send that invitation.', 'error');
-                        }
-                    });
-                });
-
-                $('#rosterTable').on('click', '.roster-restore', function() {
-                    var id = $(this).data('id');
-
-                    swal({
-                        title: 'Enable roster access?',
-                        text: 'This parent will be able to use the school code again.',
-                        icon: 'info',
-                        buttons: ['Cancel', 'Enable']
-                    }).then(function(confirmed) {
-                        if (!confirmed) {
-                            return;
-                        }
+                    $('#rosterTable').on('click', '.roster-resend', function() {
+                        var id = $(this).data('id');
 
                         $.ajax({
                             type: 'POST',
-                            url: '/school/roster/' + id + '/restore',
+                            url: '/school/roster/' + id + '/resend',
                             headers: { 'X-CSRF-TOKEN': csrfToken },
                             data: { _token: csrfToken },
                             success: function(res) {
-                                rosterTable.ajax.reload(null, false);
                                 swal('', res.message, 'success');
                             },
-                            error: function(xhr) {
-                                swal('', (xhr.responseJSON && xhr.responseJSON.message) || 'Could not restore that entry.', 'error');
+                            error: function() {
+                                swal('', 'Could not send that invitation.', 'error');
                             }
                         });
                     });
-                });
 
-                $('#rosterTable').on('click', '.parent-status', function() {
-                    var id = $(this).data('id');
-                    var next = $(this).data('next');
-                    var enabling = next === 'active';
+                    $('#rosterTable').on('click', '.roster-restore', function() {
+                        var id = $(this).data('id');
 
-                    swal({
-                        title: enabling ? 'Enable this parent?' : 'Disable this parent?',
-                        text: enabling
-                            ? 'They and their children will be able to sign in again.'
-                            : 'They and their children will not be able to sign in until you enable them again. The account is not deleted.',
-                        icon: enabling ? 'info' : 'warning',
-                        buttons: ['Cancel', enabling ? 'Enable' : 'Disable'],
-                        dangerMode: !enabling
-                    }).then(function(confirmed) {
-                        if (!confirmed) {
-                            return;
-                        }
-
-                        $.ajax({
-                            type: 'POST',
-                            url: '/school/{{ $school->id }}/parents/' + id + '/status',
-                            headers: { 'X-CSRF-TOKEN': csrfToken },
-                            data: { _token: csrfToken, status: next },
-                            success: function(res) {
-                                rosterTable.ajax.reload(null, false);
-                                swal('', res.message, 'success');
-                            },
-                            error: function(xhr) {
-                                swal('', (xhr.responseJSON && xhr.responseJSON.message) || 'Could not update that account.', 'error');
+                        swal({
+                            title: 'Enable roster access?',
+                            text: 'This parent will be able to use the school code again.',
+                            icon: 'info',
+                            buttons: ['Cancel', 'Enable']
+                        }).then(function(confirmed) {
+                            if (!confirmed) {
+                                return;
                             }
+
+                            $.ajax({
+                                type: 'POST',
+                                url: '/school/roster/' + id + '/restore',
+                                headers: { 'X-CSRF-TOKEN': csrfToken },
+                                data: { _token: csrfToken },
+                                success: function(res) {
+                                    rosterTable.ajax.reload(null, false);
+                                    swal('', res.message, 'success');
+                                },
+                                error: function(xhr) {
+                                    swal('', (xhr.responseJSON && xhr.responseJSON.message) || 'Could not restore that entry.', 'error');
+                                }
+                            });
                         });
                     });
-                });
+
+                    $('#rosterTable').on('click', '.parent-status', function() {
+                        var id = $(this).data('id');
+                        var next = $(this).data('next');
+                        var enabling = next === 'active';
+
+                        swal({
+                            title: enabling ? 'Enable this parent?' : 'Disable this parent?',
+                            text: enabling
+                                ? 'They and their children will be able to sign in again.'
+                                : 'They and their children will not be able to sign in until you enable them again. The account is not deleted.',
+                            icon: enabling ? 'info' : 'warning',
+                            buttons: ['Cancel', enabling ? 'Enable' : 'Disable'],
+                            dangerMode: !enabling
+                        }).then(function(confirmed) {
+                            if (!confirmed) {
+                                return;
+                            }
+
+                            $.ajax({
+                                type: 'POST',
+                                url: '/school/{{ $school->id }}/parents/' + id + '/status',
+                                headers: { 'X-CSRF-TOKEN': csrfToken },
+                                data: { _token: csrfToken, status: next },
+                                success: function(res) {
+                                    rosterTable.ajax.reload(null, false);
+                                    swal('', res.message, 'success');
+                                },
+                                error: function(xhr) {
+                                    swal('', (xhr.responseJSON && xhr.responseJSON.message) || 'Could not update that account.', 'error');
+                                }
+                            });
+                        });
+                    });
+                @endif
 
                 $('#rosterTable').on('click', '.parent-delete', function() {
                     var id = $(this).data('id');

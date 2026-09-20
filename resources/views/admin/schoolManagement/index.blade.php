@@ -9,7 +9,9 @@
                 <div class="card-head mb-2">
                     @if (!empty($pre) && $pre->is_modify == 'yes')
                         <a href="{{ route('school.create') }}" class="btn btn-pill btn-primary">Add School</a>
-                        <a href="{{ route('school.moods.overview') }}" class="btn btn-pill btn-primary ml-2">Show Moods</a>
+                        @if (config('scope.school_extras'))
+                            <a href="{{ route('school.moods.overview') }}" class="btn btn-pill btn-primary ml-2">Show Moods</a>
+                        @endif
                     @endif
                 </div>
                 <div class="table-responsive">

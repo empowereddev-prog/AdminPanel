@@ -1639,7 +1639,10 @@ class SchoolController extends Controller
             'name' => e($name),
             'email' => e($email),
             'phone_no' => e($phone !== '' ? $phone : '-'),
-            'roster_badge' => $badge($rosterLabel, $rosterColour),
+            // The roster state is part of the gated extras - the matching
+            // column is dropped from the table in view.blade.php, so sending
+            // the badge here would leave DataTables a value with no column.
+            'roster_badge' => config('scope.school_extras') ? $badge($rosterLabel, $rosterColour) : '',
             'account_badge' => $badge($accountLabel, $accountColour),
             'children' => $user ? (string) $children : '-',
             'action' => $this->parentDirectoryActions($invite, $user),
@@ -1650,33 +1653,39 @@ class SchoolController extends Controller
     {
         $btn = '';
 
+        // Enable/disable and the three roster actions are gated extras; the
+        // view-details link and the delete icon are not. See config/scope.php.
+        $extras = (bool) config('scope.school_extras');
+
         if ($user) {
             $btn .= '<a href="' . e(route('school-user-child-detail', $user->id, false)) . '" title="View details"'
                 . ' style="font-size:18px;margin-right:8px"><i class="mdi mdi-eye"></i></a>';
 
-            if ($user->status === 'active') {
-                $btn .= '<a href="javascript:void(0)" class="parent-status" data-id="' . (int) $user->id
-                    . '" data-next="inactive" title="Disable account"'
-                    . ' style="font-size:18px;margin-right:8px;color:#a63d38"><i class="mdi mdi-account-off"></i></a>';
-            } else {
-                $btn .= '<a href="javascript:void(0)" class="parent-status" data-id="' . (int) $user->id
-                    . '" data-next="active" title="Enable account"'
-                    . ' style="font-size:18px;margin-right:8px;color:#2f6b46"><i class="mdi mdi-account-check"></i></a>';
+            if ($extras) {
+                if ($user->status === 'active') {
+                    $btn .= '<a href="javascript:void(0)" class="parent-status" data-id="' . (int) $user->id
+                        . '" data-next="inactive" title="Disable account"'
+                        . ' style="font-size:18px;margin-right:8px;color:#a63d38"><i class="mdi mdi-account-off"></i></a>';
+                } else {
+                    $btn .= '<a href="javascript:void(0)" class="parent-status" data-id="' . (int) $user->id
+                        . '" data-next="active" title="Enable account"'
+                        . ' style="font-size:18px;margin-right:8px;color:#2f6b46"><i class="mdi mdi-account-check"></i></a>';
+                }
             }
 
             $btn .= '<a href="javascript:void(0)" class="parent-delete" data-id="' . (int) $user->id
                 . '" title="Remove account" style="font-size:18px;margin-right:8px;color:#a63d38"><i class="mdi mdi-trash-can"></i></a>';
         }
 
-        if ($invite && $invite->status === 'invited') {
+        if ($extras && $invite && $invite->status === 'invited') {
             $btn .= '<a href="javascript:void(0)" class="roster-resend" data-id="' . (int) $invite->id
                 . '" title="Resend invitation" style="font-size:18px;margin-right:8px"><i class="mdi mdi-email-sync"></i></a>';
         }
 
-        if ($invite && $invite->status === 'revoked') {
+        if ($extras && $invite && $invite->status === 'revoked') {
             $btn .= '<a href="javascript:void(0)" class="roster-restore" data-id="' . (int) $invite->id
                 . '" title="Enable roster access" style="font-size:18px;color:#2f6b46"><i class="mdi mdi-backup-restore"></i></a>';
-        } elseif ($invite) {
+        } elseif ($extras && $invite) {
             $btn .= '<a href="javascript:void(0)" class="roster-revoke" data-id="' . (int) $invite->id
                 . '" title="Revoke roster access" style="font-size:18px;color:#a63d38"><i class="mdi mdi-cancel"></i></a>';
         }

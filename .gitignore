@@ -37,6 +37,11 @@ code-db-20251010.zip
 /public/assets/avtar/
 /public/assets/aws/
 
+# Working notes and commercial documents. The two docs already tracked
+# (API_REMEDIATION.md, DEPLOYMENT.md) stay tracked - .gitignore does not
+# affect files already in the index - so this only covers new additions.
+/docs/
+
 /.claude/
 /.cursor/
 /.cursorrules

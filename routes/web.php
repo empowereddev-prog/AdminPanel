@@ -250,25 +250,25 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     // Management screen (menu 3) and authorise against it inside the controller.
     Route::get('school/{id}/roster', [SchoolController::class, 'roster'])->name('school.roster.data');
     Route::post('school/{id}/import/parents', [SchoolController::class, 'importParents'])->name('school.import.parents');
-    Route::post('school/{id}/import/staff', [SchoolController::class, 'importStaff'])->name('school.import.staff');
-    Route::get('school/{id}/teachers', [SchoolController::class, 'teachers'])->name('school.teachers.data');
+    Route::post('school/{id}/import/staff', [SchoolController::class, 'importStaff'])->name('school.import.staff')->middleware('school.extras');
+    Route::get('school/{id}/teachers', [SchoolController::class, 'teachers'])->name('school.teachers.data')->middleware('school.extras');
     Route::get('school/{id}/children', [SchoolController::class, 'children'])->name('school.children.data');
-    Route::post('school/roster/{invite}/revoke', [SchoolController::class, 'revokeInvite'])->name('school.roster.revoke');
-    Route::post('school/roster/{invite}/restore', [SchoolController::class, 'restoreInvite'])->name('school.roster.restore');
-    Route::post('school/roster/{invite}/resend', [SchoolController::class, 'resendInvite'])->name('school.roster.resend');
-    Route::post('school/{id}/parents/{userId}/status', [SchoolController::class, 'toggleParentStatus'])->name('school.parents.status');
+    Route::post('school/roster/{invite}/revoke', [SchoolController::class, 'revokeInvite'])->name('school.roster.revoke')->middleware('school.extras');
+    Route::post('school/roster/{invite}/restore', [SchoolController::class, 'restoreInvite'])->name('school.roster.restore')->middleware('school.extras');
+    Route::post('school/roster/{invite}/resend', [SchoolController::class, 'resendInvite'])->name('school.roster.resend')->middleware('school.extras');
+    Route::post('school/{id}/parents/{userId}/status', [SchoolController::class, 'toggleParentStatus'])->name('school.parents.status')->middleware('school.extras');
     Route::post('school/{id}/toggle-flag/{flag}', [SchoolController::class, 'toggleSchoolFlag'])->name('school.flag.toggle');
     Route::get('settings', [GeneralSettingsController::class, 'editSystemSetting'])->name('settings.edit');
     Route::PUT('settings/update', [GeneralSettingsController::class, 'updateSystemSetting'])->name('settings.update');
     Route::get('/download-sample-excel', [SchoolController::class, 'downloadSampleExcel'])->name('download.sample.excel');
-    Route::get('/download-sample-staff-excel', [SchoolController::class, 'downloadSampleStaffExcel'])->name('download.sample.staff.excel');
-    Route::get('school/moods-overview', [SchoolController::class, 'moodsOverview'])->name('school.moods.overview');
+    Route::get('/download-sample-staff-excel', [SchoolController::class, 'downloadSampleStaffExcel'])->name('download.sample.staff.excel')->middleware('school.extras');
+    Route::get('school/moods-overview', [SchoolController::class, 'moodsOverview'])->name('school.moods.overview')->middleware('school.extras');
 
     Route::controller(SchoolUserDetailController::class)->group(function () {
         Route::get('school/user/child/{user_id}/detail/', 'index')->name('school-user-child-detail');
-        Route::get('school/user/{user_id}/children-progress', 'childrenProgress')->name('school-user-children-progress');
+        Route::get('school/user/{user_id}/children-progress', 'childrenProgress')->name('school-user-children-progress')->middleware('school.extras');
         Route::get('school/{id}/children-progress', 'allChildrenProgress')
-            ->name('school.children.progress');
+            ->name('school.children.progress')->middleware('school.extras');
     });
 
     // Route::get('payment-histories', [PaymentManagementController::class, 'historyIndex'])->name('payment.history_index');

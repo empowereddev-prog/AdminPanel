@@ -151,32 +151,34 @@
                                 </div>
                             </div>
 
-                            <div class="row mb-4">
-                                <div class="col-md-8">
-                                    <div class="form-group">
-                                        @php $staffPath = 'uploads/' . $data->id . '_sample_staff.xlsx'; @endphp
-                                        <label for="staff_excel">Upload Staff (Teacher) Excel (Optional)</label>
-                                        <div class="text-muted small mb-2">
-                                            Creates teacher accounts. These do not consume parent or child places.
-                                        </div>
-                                        <div class="input-group">
-                                            <!-- <input type="text" class="form-control" id="uploaded_staff_file_name" value="{{ Storage::exists($staffPath) ? $data->id . '_sample_staff.xlsx' : '' }}" readonly> -->
-                                            <input type="text"
-                                                class="form-control"
-                                                id="uploaded_staff_file_name"
-                                                value=""
-                                                readonly
-                                                placeholder="No file chosen">
-                                            <input type="file" class="form-control d-none" name="staff_excel" id="staff_excel" accept=".xlsx,.xls">
-                                            <div class="input-group-append">
-                                                <button class="btn btn-primary" type="button" onclick="document.getElementById('staff_excel').click();">Choose File</button>
+                            @if (config('scope.school_extras'))
+                                <div class="row mb-4">
+                                    <div class="col-md-8">
+                                        <div class="form-group">
+                                            @php $staffPath = 'uploads/' . $data->id . '_sample_staff.xlsx'; @endphp
+                                            <label for="staff_excel">Upload Staff (Teacher) Excel (Optional)</label>
+                                            <div class="text-muted small mb-2">
+                                                Creates teacher accounts. These do not consume parent or child places.
                                             </div>
-                                            <a href="{{ route('download.sample.staff.excel') }}" class="btn"><strong>Download Sample</strong></a>
+                                            <div class="input-group">
+                                                <!-- <input type="text" class="form-control" id="uploaded_staff_file_name" value="{{ Storage::exists($staffPath) ? $data->id . '_sample_staff.xlsx' : '' }}" readonly> -->
+                                                <input type="text"
+                                                    class="form-control"
+                                                    id="uploaded_staff_file_name"
+                                                    value=""
+                                                    readonly
+                                                    placeholder="No file chosen">
+                                                <input type="file" class="form-control d-none" name="staff_excel" id="staff_excel" accept=".xlsx,.xls">
+                                                <div class="input-group-append">
+                                                    <button class="btn btn-primary" type="button" onclick="document.getElementById('staff_excel').click();">Choose File</button>
+                                                </div>
+                                                <a href="{{ route('download.sample.staff.excel') }}" class="btn"><strong>Download Sample</strong></a>
+                                            </div>
+                                            @error('staff_excel') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
                                         </div>
-                                        @error('staff_excel') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
                                     </div>
                                 </div>
-                            </div>
+                            @endif
 
 
                             <div class="row ">
