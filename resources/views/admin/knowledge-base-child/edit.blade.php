@@ -376,6 +376,8 @@
     </script>
 
     <script>
+        var descriptionEditor = null;
+
         $(document).ready(function() {
 
             $('#media').on('change', function(event) {
@@ -416,7 +418,9 @@
 
             if (typeof ClassicEditor !== 'undefined') {
                 $('#description').each(function() {
-                    ClassicEditor.create(this).catch(error => console.error(error));
+                    ClassicEditor.create(this)
+                        .then(editor => { descriptionEditor = editor; })
+                        .catch(error => console.error(error));
                 });
             }
 
@@ -541,6 +545,10 @@
                 if (!writtenBy) { showToast('The written by field is required.', 'error'); return false; }
                 if (!ratioType) { showToast('The ratio type field is required.', 'error'); return false; }
                 if (!status) { showToast('The status field is required.', 'error'); return false; }
+
+                if (descriptionEditor) {
+                    descriptionEditor.updateSourceElement();
+                }
 
                 let $form    = $(this);
                 let formData = new FormData(this);

@@ -439,10 +439,16 @@
                 toggleAgeRange();
             });
 
-            // Initialize Classic Text Editor (CKEditor) safely
+            // Initialize Classic Text Editor (CKEditor) safely — keep instances so AJAX FormData can sync
+            let descriptionEditor = null;
+            let descriptionChineseEditor = null;
             if (typeof ClassicEditor !== 'undefined') {
-                ClassicEditor.create(document.querySelector('#description')).catch(error => console.error(error));
-                ClassicEditor.create(document.querySelector('#description_chinese')).catch(error => console.error(error));
+                ClassicEditor.create(document.querySelector('#description'))
+                    .then(editor => { descriptionEditor = editor; })
+                    .catch(error => console.error(error));
+                ClassicEditor.create(document.querySelector('#description_chinese'))
+                    .then(editor => { descriptionChineseEditor = editor; })
+                    .catch(error => console.error(error));
             }
 
             // Elegant Dynamic Toast Alerts Layer
@@ -496,6 +502,13 @@
                 if (title.length < 3) { showToast('The title must be at least 3 characters.', 'error'); return false; }
                 if (!writtenBy) { showToast('The written by field is required.', 'error'); return false; }
                 if (!ratioType) { showToast('The ratio type field is required.', 'error'); return false; }
+
+                if (descriptionEditor) {
+                    descriptionEditor.updateSourceElement();
+                }
+                if (descriptionChineseEditor) {
+                    descriptionChineseEditor.updateSourceElement();
+                }
 
                 let $form    = $(this);
                 let formData = new FormData(this);
