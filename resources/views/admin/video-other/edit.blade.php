@@ -191,9 +191,12 @@
 <script>
 $(document).ready(function () {
 
-    // Check if ClassicEditor is initialized to prevent script execution crashes
+    // Keep editor instance so AJAX FormData can sync description before submit
+    let descriptionEditor = null;
     if (typeof ClassicEditor !== 'undefined') {
-        ClassicEditor.create(document.querySelector('#description')).catch(err => console.error(err));
+        ClassicEditor.create(document.querySelector('#description'))
+            .then(editor => { descriptionEditor = editor; })
+            .catch(err => console.error(err));
     }
 
     // Dynamic color picker mapper
@@ -251,6 +254,10 @@ $(document).ready(function () {
         if (!ratioType) { showToast('The ratio type field is required.', 'error'); return false; }
         if (!title) { showToast('The title field is required.', 'error'); return false; }
         if (!writtenBy) { showToast('The written by field is required.', 'error'); return false; }
+
+        if (descriptionEditor) {
+            descriptionEditor.updateSourceElement();
+        }
 
         let $form    = $(this);
         let formData = new FormData(this);
