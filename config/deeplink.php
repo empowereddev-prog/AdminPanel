@@ -20,7 +20,10 @@ return [
 
     'android_sha256_fingerprints' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('DEEPLINK_ANDROID_SHA256', ''))
+        explode(',', (string) env(
+            'DEEPLINK_ANDROID_SHA256',
+            'A7:E2:6C:79:9E:01:19:2C:C7:87:59:5D:A2:65:58:F8:5D:E7:5D:DB:B5:B8:26:C7:69:CB:FA:7F:C0:31:73:80'
+        ))
     ))),
 
     'ios_store_url' => env('DEEPLINK_IOS_STORE_URL', 'https://apps.apple.com/app/empowered-health/id6742772237'),

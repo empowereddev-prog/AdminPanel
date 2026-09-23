@@ -108,21 +108,22 @@ Serve `https://admin.empoweredhealth.asia/.well-known/assetlinks.json`:
 ```json
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "asia.empoweredhealth",
       "sha256_cert_fingerprints": [
-        "DEBUG_KEYSTORE_SHA256",
-        "UPLOAD_KEYSTORE_SHA256",
-        "PLAY_APP_SIGNING_SHA256"
+        "A7:E2:6C:79:9E:01:19:2C:C7:87:59:5D:A2:65:58:F8:5D:E7:5D:DB:B5:B8:26:C7:69:CB:FA:7F:C0:31:73:80"
       ]
     }
   }
 ]
 ```
 
-Must include **Play App Signing** SHA-256 from Play Console (not only local `release.keystore`), plus debug fingerprint if you want `yarn android` verification.
+Must include **Play App Signing** SHA-256 from Play Console (not only local `release.keystore`), plus debug fingerprint if you want `yarn android` verification. Set via `DEEPLINK_ANDROID_SHA256` (comma-separated for multiple).
 
 ### 3. Web fallback pages (app not installed)
 

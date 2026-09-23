@@ -34,7 +34,10 @@ class DeepLinkController extends Controller
         $fingerprints = config('deeplink.android_sha256_fingerprints', []);
         $payload = [
             [
-                'relation' => ['delegate_permission/common.handle_all_urls'],
+                'relation' => [
+                    'delegate_permission/common.handle_all_urls',
+                    'delegate_permission/common.get_login_creds',
+                ],
                 'target' => [
                     'namespace' => 'android_app',
                     'package_name' => config('deeplink.android_package'),
