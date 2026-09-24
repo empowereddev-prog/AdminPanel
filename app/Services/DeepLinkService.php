@@ -187,7 +187,7 @@ class DeepLinkService
         if ($contentAudience === 'all') {
             $allowed = true;
         } elseif ($contentAudience === 'child') {
-            $allowed = $viewerKind === 'child';
+            $allowed = in_array($viewerKind, ['child', 'staff'], true);
         } elseif ($contentAudience === 'parent') {
             $allowed = in_array($viewerKind, ['parent', 'staff'], true);
         } elseif ($contentAudience === 'staff') {

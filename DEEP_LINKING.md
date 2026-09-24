@@ -273,7 +273,8 @@ On article and video detail, add Copy/Share using `canonical_url` from API or bu
 **Roles and audience**
 
 - Child opens a parent-only article → snackbar + home, do not show parent HTML.
-- Parent/staff opens child-only video → same.
+- Parent opens child-only video → same (parents stay blocked from Teen/child curriculum).
+- Staff/teachers may open child-audience content in-app (Teen Section preview); deep-link resolve allows `staff` on `child` audience.
 - Staff (`Teacher_AppStack`) vs parent: both have `KnowledgeSessionDetail` and `VideoScreen`; navigate on the **current** stack, do not `replace` to the wrong role.
 
 **Content lifecycle**
