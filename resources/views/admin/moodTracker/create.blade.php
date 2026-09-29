@@ -74,7 +74,7 @@
                                             <div class="col-md-6">
                                                 <label for="points">Points (%)</label>
                                                 <input type="text" class="form-control" name="points"
-                                                    placeholder="Enter Points" value="{{ old('points',$setting->option_value) }}" readonly>
+                                                    placeholder="Enter Points" value="{{ old('points', $setting->option_value ?? 10) }}" readonly>
                                                 @error('points')
                                                     <div class="text-danger small mt-1">{{ $message }}</div>
                                                 @enderror
@@ -155,17 +155,13 @@
                                 <div class="card card-default mb-4" id="referred_video_box">
                                     <div class="card-header"><strong>Referred Videos</strong></div>
                                     <div class="card-body">
-                                        <label for="video">Select Video(s)</label>
-                                        <select class="form-control select2" name="video[]" id="video" multiple>
-                                            @foreach ($video_title as $title)
-                                                <option value="{{ $title->id }}"
-                                                    {{ in_array($title->id, old('video', [])) ? 'selected' : '' }}>
-                                                    {{ $title->title }}</option>
-                                            @endforeach
-                                        </select>
-                                        @error('video')
-                                            <div class="text-danger small mt-1">{{ $message }}</div>
-                                        @enderror
+                                        @php
+                                            $moodSelectedVideoIds = array_map('strval', (array) old('video', []));
+                                        @endphp
+                                        @include('admin.moodTracker.partials.video-picker', [
+                                            'videos' => $video_title,
+                                            'selectedIds' => $moodSelectedVideoIds,
+                                        ])
                                     </div>
                                 </div>
 
@@ -184,69 +180,14 @@
         </div>
     </div>
 @endsection
-<script src="https://cdn.ckeditor.com/4.16.2/standard/ckeditor.js"></script>
 
 @push('scripts')
     <script>
-        // function toggleVideoField() {
-        //     const selectedType = $('#type').val();
-        //     if (selectedType === 'negative') {
-        //         $('#referred_video_box').show();
-        //     } else {
-        //         $('#referred_video_box').hide();
-        //         $('#video').val(null).trigger('change'); // clear selection if hidden
-        //     }
-        // }
-
-        // $(document).ready(function() {
-        //     toggleVideoField(); // On page load
-        //     $('#type').on('change', toggleVideoField); // On change
-        // });
-        CKEDITOR.replace('description', {
-            height: 100,
-            removePlugins: 'image',
-        });
         $(document).ready(function() {
             $('#type').select2({
                 placeholder: "Select type",
                 allowClear: true
             });
-            $('#age_range').select2({
-                placeholder: "Select age range",
-                allowClear: true
-            });
-            $('#category').select2({
-                placeholder: "Select category",
-                allowClear: true
-            });
-
-            $('#video').select2({
-                placeholder: "Select referred videos"
-            });
-
-            // Fix for overflowing selected tags in Select2
-            setTimeout(function() {
-                const select2Container = $('.select2-selection--multiple');
-
-                // Style the container to limit height and allow scroll
-                select2Container.css({
-                    'max-height': '100px',
-                    'overflow-y': 'auto',
-                    'white-space': 'normal'
-                });
-
-                // Truncate long tag names
-                $('.select2-selection__choice').css({
-                    'max-width': '100%',
-                    'overflow': 'hidden',
-                    'text-overflow': 'ellipsis',
-                    'white-space': 'nowrap'
-                });
-
-                // Make sure Select2 fits the form width
-                $('.select2-container').css('width', '100%');
-            }, 100); // Timeout ensures Select2 has rendered
-
         });
     </script>
 @endpush

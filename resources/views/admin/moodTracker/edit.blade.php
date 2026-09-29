@@ -164,24 +164,23 @@
                                 <div class="card card-default mb-4" id="referred_video_box">
                                     <div class="card-header"><strong>Referred Videos</strong></div>
                                     <div class="card-body">
+                                        @php
+                                            $moodSelectedVideoIds = array_map(
+                                                'strval',
+                                                (array) old('video', collect($data->referred_video)->pluck('id')->toArray()),
+                                            );
+                                        @endphp
                                         <div class="row">
-                                            <div class="col-sm-6">
-                                                <label for="video">Select Video(s)</label>
-                                                <select class="form-control select2" name="video[]" id="video"
-                                                    multiple>
-                                                    @foreach ($referred_video as $video)
-                                                        <option value="{{ $video->id }}"
-                                                            {{ collect(old('video', collect($data->referred_video)->pluck('id')->toArray()))->contains($video->id) ? 'selected' : '' }}>
-                                                            {{ $video->title }}
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                                @error('video')
-                                                    <div class="text-danger small mt-1">{{ $message }}</div>
-                                                @enderror
+                                            <div class="col-sm-12">
+                                                @include('admin.moodTracker.partials.video-picker', [
+                                                    'videos' => $referred_video,
+                                                    'selectedIds' => $moodSelectedVideoIds,
+                                                ])
                                             </div>
+                                        </div>
+                                        <div class="row mt-3">
                                             <div class="col-sm-6">
-                                                <label for="exampleFormControlFile1">Status</label>
+                                                <label for="optionSelect">Status</label>
                                                 <select name="status" class="form-control" id="optionSelect">
                                                     <option value="">Select Status</option>
                                                     <option value="active"
@@ -222,76 +221,14 @@
         </div>
     </div>
 @endsection
-<script src="https://cdn.ckeditor.com/4.16.2/standard/ckeditor.js"></script>
 
 @push('scripts')
     <script>
-        // function toggleVideoField() {
-        //     const selectedType = $('#type').val();
-        //     if (selectedType === 'negative') {
-        //         $('#referred_video_box').show();
-        //     } else {
-        //         $('#referred_video_box').hide();
-        //         $('#video').val(null).trigger('change'); // Optional: clear selection
-        //     }
-        // }
-
-        // $(document).ready(function() {
-        //     // Init Select2
-        //     $('#type, #video').select2();
-
-        //     // Initial check on load
-        //     toggleVideoField();
-
-        //     // Listen for changes
-        //     $('#type').on('change', toggleVideoField);
-        // });
-
-        CKEDITOR.replace('description', {
-            height: 100,
-            removePlugins: 'image',
-        });
         $(document).ready(function() {
             $('#type').select2({
                 placeholder: "Select type",
                 allowClear: true
             });
-            $('#age_range').select2({
-                placeholder: "Select age range",
-                allowClear: true
-            });
-            $('#category').select2({
-                placeholder: "Select category",
-                allowClear: true
-            });
-        });
-        $(document).ready(function() {
-            $('#video').select2({
-                placeholder: "Select referred videos",
-                //  width: '100%'
-            });
-            // Fix for overflowing selected tags in Select2
-            setTimeout(function() {
-                const select2Container = $('.select2-selection--multiple');
-
-                // Style the container to limit height and allow scroll
-                select2Container.css({
-                    'max-height': '100px',
-                    'overflow-y': 'auto',
-                    'white-space': 'normal'
-                });
-
-                // Truncate long tag names
-                $('.select2-selection__choice').css({
-                    'max-width': '100%',
-                    'overflow': 'hidden',
-                    'text-overflow': 'ellipsis',
-                    'white-space': 'nowrap'
-                });
-
-                // Make sure Select2 fits the form width
-                $('.select2-container').css('width', '100%');
-            }, 100); // Timeout ensures Select2 has rendered
         });
     </script>
 @endpush
