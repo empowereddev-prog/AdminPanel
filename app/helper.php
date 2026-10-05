@@ -125,7 +125,10 @@ if (!function_exists('___mail_sender')) {
         ]);
 
         try {
-            Mail::send($useView ? $view : 'emails.default', $payload, function ($message) use ($recipients, $subject, $fromAddress, $fromName, $data) {
+            Mail::send($useView ? $view : 'emails.default', $payload, function ($message) use ($recipients, $subject, $fromAddress, $fromName, $data, $template_code) {
+                if ($template_code === 'signup_teacher') {
+                    app(\App\Services\TeacherSignupEmail::class)->addDownloadBlock($message);
+                }
                 $message->to($recipients)
                     ->subject($subject)
                     ->from($fromAddress, $fromName);

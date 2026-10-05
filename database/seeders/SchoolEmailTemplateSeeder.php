@@ -101,16 +101,7 @@ class SchoolEmailTemplateSeeder extends Seeder
             'signup_teacher' => [
                 'subject' => 'Your EmpowerED staff account for {school_name}',
                 'variables' => '{name},{username},{password},{school_name},{year}',
-                'description' => L::wrap(
-                    'Your staff account is ready',
-                    L::p('Hello {name}, <strong>{school_name}</strong> has created an EmpowerED staff account for you.')
-                    . L::rows(['Username' => '{username}'])
-                    . L::credential('Temporary password', '{password}')
-                    . L::p('Please change this password after your first sign-in.', true)
-                    . L::note('If you were not expecting this email, please contact your school.'),
-                    null,
-                    'Staff access'
-                ),
+                'description' => \Database\Seeders\Emails\TeacherSignupTemplate::html(),
             ],
 
             'school_parent_invited' => [
