@@ -93,7 +93,7 @@ class SchoolViewImportTest extends TestCase
 
     public function test_teachers_can_be_imported_from_the_school_view(): void
     {
-        $school = School::factory()->create();
+        $school = School::factory()->create(['name' => 'Greenwood School']);
         $email = 't' . uniqid() . '@example.test';
         $username = 'tch' . substr(uniqid(), -6);
 
@@ -108,8 +108,85 @@ class SchoolViewImportTest extends TestCase
             'email' => $email,
             'school_id' => $school->id,
             'user_role_id' => 5,
-            'username' => $username,
+            'username' => 'dt_greenwood_school',
         ]);
+    }
+
+    public function test_teachers_can_be_imported_with_only_name_and_email(): void
+    {
+        $school = School::factory()->create(['name' => 'Greenwood School']);
+        $email = 't' . uniqid() . '@example.test';
+
+        $this->actingAs($this->admin(), 'admin')
+            ->post(route('school.import.staff', $school->id, false), [
+                'staff_excel' => $this->sheet(['Name', 'Email'], [[' Daniel Tan ', $email]]),
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('users', [
+            'email' => $email,
+            'name' => 'Daniel Tan',
+            'username' => 'dt_greenwood_school',
+            'country_code' => null,
+            'phone_no' => null,
+            'is_mobile_verified' => 'no',
+        ]);
+    }
+
+    public function test_generated_teacher_usernames_handle_collisions_and_optional_contacts(): void
+    {
+        $school = School::factory()->create(['name' => 'Greenwood School']);
+        $existing = User::factory()->create(['username' => 'dt_greenwood_school']);
+        $existing->delete();
+        $firstEmail = 't' . uniqid() . '@example.test';
+        $secondEmail = 't' . uniqid() . '@example.test';
+
+        $this->actingAs($this->admin(), 'admin')
+            ->post(route('school.import.staff', $school->id, false), [
+                'staff_excel' => $this->sheet(['Name', 'Email', 'Country Code', 'Phone Number'], [
+                    ['Daniel Tan', $firstEmail, '', ''],
+                    ['David Thomas', $secondEmail, '+65', '81110009'],
+                ]),
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('users', ['email' => $firstEmail, 'username' => 'dt_greenwood_school_2', 'country_code' => null, 'phone_no' => null]);
+        $this->assertDatabaseHas('users', ['email' => $secondEmail, 'username' => 'dt_greenwood_school_3', 'country_code' => '+65', 'phone_no' => '81110009']);
+    }
+
+    public function test_teacher_import_rejects_missing_required_fields_and_invalid_emails(): void
+    {
+        $school = School::factory()->create();
+
+        $this->actingAs($this->admin(), 'admin')
+            ->post(route('school.import.staff', $school->id, false), [
+                'staff_excel' => $this->sheet(['Name', 'Email'], [
+                    [' ', 'teacher@example.test'],
+                    ['Daniel Tan', ''],
+                    ['Daniel Tan', 'invalid-email'],
+                ]),
+            ])
+            ->assertSessionHas('success', '0 teacher account(s) created. 0 skipped, 3 rejected.');
+
+        $this->assertSame(0, User::where('school_id', $school->id)->where('user_role_id', 5)->count());
+    }
+
+    public function test_school_edit_uses_the_same_teacher_import_rules(): void
+    {
+        $school = School::factory()->create(['name' => 'Greenwood School']);
+        $email = 't' . uniqid() . '@example.test';
+
+        $this->actingAs($this->admin(), 'admin')
+            ->put(route('school.update', $school->id, false), [
+                'school_name' => $school->name,
+                'school_code' => $school->school_code,
+                'status' => 'active',
+                'subscription_type' => $school->subscription_type,
+                'staff_excel' => $this->sheet(['Name', 'Email'], [['Daniel Tan', $email]]),
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('users', ['email' => $email, 'username' => 'dt_greenwood_school', 'country_code' => null, 'phone_no' => null]);
     }
 
     /** Teachers must not appear on the parent roster or eat parent places. */
@@ -197,7 +274,7 @@ class SchoolViewImportTest extends TestCase
 
     public function test_an_imported_teacher_appears_in_the_teacher_roster(): void
     {
-        $school = School::factory()->create();
+        $school = School::factory()->create(['name' => 'Greenwood School']);
         $username = 'tch' . substr(uniqid(), -6);
 
         $this->actingAs($this->admin(), 'admin')
@@ -213,7 +290,7 @@ class SchoolViewImportTest extends TestCase
             ->json('data');
 
         $this->assertCount(1, $data);
-        $this->assertSame($username, $data[0]['username']);
+        $this->assertSame('dt_greenwood_school', $data[0]['username']);
     }
 
     public function test_a_view_only_admin_cannot_read_the_teacher_roster(): void

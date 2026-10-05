@@ -158,7 +158,7 @@
                                             @php $staffPath = 'uploads/' . $data->id . '_sample_staff.xlsx'; @endphp
                                             <label for="staff_excel">Upload Staff (Teacher) Excel (Optional)</label>
                                             <div class="text-muted small mb-2">
-                                                Creates teacher accounts. These do not consume parent or child places.
+                                                Only name and email are required. Country code and phone number are optional. Usernames are generated from teacher initials and the school name. Teachers do not consume parent or child places.
                                             </div>
                                             <div class="input-group">
                                                 <!-- <input type="text" class="form-control" id="uploaded_staff_file_name" value="{{ Storage::exists($staffPath) ? $data->id . '_sample_staff.xlsx' : '' }}" readonly> -->
