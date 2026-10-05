@@ -48,6 +48,19 @@ class TeacherSignupEmailTest extends TestCase
         $this->assertCount(1, $email->getAttachments());
     }
 
+    public function test_legacy_full_html_keeps_the_download_block_inside_the_body(): void
+    {
+        $email = (new Email())->html('<!DOCTYPE html><html><body><p>Staff access and credentials</p></BODY></html>');
+
+        app(TeacherSignupEmail::class)->addDownloadBlock(new Message($email));
+
+        $body = $email->getHtmlBody();
+        $this->assertStringStartsWith('<!DOCTYPE html><html><body><p>Staff access and credentials</p>', $body);
+        $this->assertLessThan(strpos($body, '</BODY>'), strpos($body, 'Get the EmpowerED app'));
+        $this->assertStringEndsWith('</BODY></html>', $body);
+        $this->assertCount(1, $email->getAttachments());
+    }
+
     public function test_real_mail_helper_embeds_the_teacher_qr_and_leaves_parent_mail_unchanged(): void
     {
         // This test never uses the database configured in .env.
