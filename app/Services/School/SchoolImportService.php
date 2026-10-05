@@ -182,9 +182,10 @@ class SchoolImportService
                 continue;
             }
 
-            $teachers = User::withTrashed()->whereRaw('LOWER(email) = ?', [strtolower($email)])
+            // Deleted teachers remain archived; reimporting creates a fresh account.
+            $teachers = User::whereRaw('LOWER(email) = ?', [strtolower($email)])
                 ->where('user_role_id', 5)->get();
-            $teacher = $teachers->first(fn (User $user) => !$user->trashed() && (string) $user->school_id === (string) $school->id);
+            $teacher = $teachers->first(fn (User $user) => (string) $user->school_id === (string) $school->id);
 
             if ($teacher) {
                 $alreadyEnrolled++;
@@ -193,12 +194,12 @@ class SchoolImportService
                 continue;
             }
 
-            if ($teachers->count() > 1 || ($teachers->count() === 1 && ($teachers->first()->trashed() || $teachers->first()->school_id !== null))) {
+            if ($teachers->count() > 1 || ($teachers->count() === 1 && $teachers->first()->school_id !== null)) {
                 $conflicts++;
                 $skipped++;
                 $details[] = [...$detail, 'result' => 'Conflict', 'reason' => $teachers->count() > 1
                     ? 'Multiple teacher accounts match this email; review their school assignments.'
-                    : ($teachers->first()->trashed() ? 'Teacher account has been deleted; review it before importing.' : 'Teacher belongs to another school; no assignment changed.')];
+                    : 'Teacher belongs to another school; no assignment changed.'];
                 continue;
             }
 
