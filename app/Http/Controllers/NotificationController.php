@@ -45,11 +45,17 @@ class NotificationController extends Controller
 
     public function sendMessage(Request $request)
     {
-        $lan = $request->language ?? 'english';
+        // Older mobile clients send the misspelled key and ISO language codes.
+        $lan = $request->language ?? $request->laguage ?? 'english';
+        $lan = match ($lan) {
+            'en' => 'english',
+            'zh' => 'chinese',
+            default => $lan,
+        };
 
         $validator = Validator::make($request->all(), [
             'name'    => 'required|string|max:255',
-            'subject' => 'required|string|max:255',
+            'subject' => 'nullable|string|max:255',
             'message' => 'required|string|max:5000',
         ]);
 
@@ -64,7 +70,7 @@ class NotificationController extends Controller
         $emailData = [
             'name' => $request->name,
             'email' => $user->email,
-            'subject' => $request->subject,
+            'subject' => $request->filled('subject') ? $request->subject : 'Contact Support',
             'message' => $request->message,
         ];
 
