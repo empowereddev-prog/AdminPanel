@@ -1099,8 +1099,8 @@ class SchoolController extends Controller
                 $result = (new SchoolImportService())->importStaff($school, $request->file('staff_excel'));
 
                 return $result['status']
-                    ? redirect('school')->with('success', $result['message'])
-                    : back()->with('error', $result['message'])->withInput();
+                    ? redirect('school')->with('success', $result['message'])->with('teacher_import_rows', $result['rows'] ?? [])
+                    : back()->with('error', $result['message'])->with('teacher_import_rows', $result['rows'] ?? [])->withInput();
             } catch (\Throwable $e) {
                 return back()->with('error', 'Staff Parsing Exception: ' . $e->getMessage())->withInput();
             }
@@ -1694,7 +1694,8 @@ class SchoolController extends Controller
 
         $result = (new SchoolImportService())->importStaff(School::findOrFail($id), $request->file('staff_excel'));
 
-        return back()->with($result['status'] ? 'success' : 'error', $result['message']);
+        return back()->with($result['status'] ? 'success' : 'error', $result['message'])
+            ->with('teacher_import_rows', $result['rows'] ?? []);
     }
 
     public function revokeInvite(Request $request, $inviteId)

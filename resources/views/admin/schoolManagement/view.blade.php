@@ -3,6 +3,7 @@
 @section('content')
     <div class="content-wrapper">
         <div class="content">
+            @include('admin.schoolManagement.partials.teacher-import-report')
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h2>View School Details</h2>
                 <a href="{{ route('school.index') }}" class="btn btn-secondary">

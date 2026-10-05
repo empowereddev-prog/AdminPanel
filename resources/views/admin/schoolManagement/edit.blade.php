@@ -2,6 +2,7 @@
 @section('content')
     <div class="content-wrapper">
         <div class="content">
+            @include('admin.schoolManagement.partials.teacher-import-report')
         <div class="title_left">
                 <h2>Edit School</h2>
             </div>
