@@ -108,7 +108,7 @@ class SchoolViewImportTest extends TestCase
             'email' => $email,
             'school_id' => $school->id,
             'user_role_id' => 5,
-            'username' => 'dt_greenwood_school',
+            'username' => explode('@', $email)[0] . '_gs',
         ]);
     }
 
@@ -126,7 +126,7 @@ class SchoolViewImportTest extends TestCase
         $this->assertDatabaseHas('users', [
             'email' => $email,
             'name' => 'Daniel Tan',
-            'username' => 'dt_greenwood_school',
+            'username' => explode('@', $email)[0] . '_gs',
             'country_code' => null,
             'phone_no' => null,
             'is_mobile_verified' => 'no',
@@ -136,10 +136,11 @@ class SchoolViewImportTest extends TestCase
     public function test_generated_teacher_usernames_handle_collisions_and_optional_contacts(): void
     {
         $school = School::factory()->create(['name' => 'Greenwood School']);
-        $existing = User::factory()->create(['username' => 'dt_greenwood_school']);
+        $prefix = 'daniel.tan+' . uniqid();
+        $existing = User::factory()->create(['username' => $prefix . '_gs']);
         $existing->delete();
-        $firstEmail = 't' . uniqid() . '@example.test';
-        $secondEmail = 't' . uniqid() . '@example.test';
+        $firstEmail = strtoupper($prefix) . '@example.test';
+        $secondEmail = $prefix . '@another.test';
 
         $this->actingAs($this->admin(), 'admin')
             ->post(route('school.import.staff', $school->id, false), [
@@ -150,8 +151,8 @@ class SchoolViewImportTest extends TestCase
             ])
             ->assertSessionHas('success');
 
-        $this->assertDatabaseHas('users', ['email' => $firstEmail, 'username' => 'dt_greenwood_school_2', 'country_code' => null, 'phone_no' => null]);
-        $this->assertDatabaseHas('users', ['email' => $secondEmail, 'username' => 'dt_greenwood_school_3', 'country_code' => '+65', 'phone_no' => '81110009']);
+        $this->assertDatabaseHas('users', ['email' => $firstEmail, 'username' => $prefix . '_gs_2', 'country_code' => null, 'phone_no' => null]);
+        $this->assertDatabaseHas('users', ['email' => $secondEmail, 'username' => $prefix . '_gs_3', 'country_code' => '+65', 'phone_no' => '81110009']);
     }
 
     public function test_teacher_import_rejects_missing_required_fields_and_invalid_emails(): void
@@ -186,7 +187,7 @@ class SchoolViewImportTest extends TestCase
             ])
             ->assertSessionHas('success');
 
-        $this->assertDatabaseHas('users', ['email' => $email, 'username' => 'dt_greenwood_school', 'country_code' => null, 'phone_no' => null]);
+        $this->assertDatabaseHas('users', ['email' => $email, 'username' => explode('@', $email)[0] . '_gs', 'country_code' => null, 'phone_no' => null]);
     }
 
     public function test_teacher_import_allows_emails_used_by_other_roles(): void
@@ -282,10 +283,12 @@ class SchoolViewImportTest extends TestCase
 
     public function test_deleted_teacher_is_reimported_as_a_fresh_account(): void
     {
+        $email = 't' . uniqid() . '@example.test';
         $school = School::factory()->create(['name' => 'Greenwood School']);
         $teacher = User::factory()->teacher()->inSchool($school)->create([
             'name' => 'Daniel Tan',
-            'username' => 'dt_greenwood_school',
+            'email' => $email,
+            'username' => explode('@', $email)[0] . '_gs',
         ]);
         $teacher->delete();
         $original = $teacher->fresh()->getAttributes();
@@ -300,7 +303,7 @@ class SchoolViewImportTest extends TestCase
         $fresh = User::where('email', $teacher->email)->where('user_role_id', 5)->sole();
         $this->assertNotEquals($teacher->id, $fresh->id);
         $this->assertEquals($school->id, $fresh->school_id);
-        $this->assertSame('dt_greenwood_school_2', $fresh->username);
+        $this->assertSame(explode('@', $email)[0] . '_gs_2', $fresh->username);
         $this->assertNotSame($teacher->password, $fresh->password);
         $this->assertSame(2, User::withTrashed()->where('email', $teacher->email)->where('user_role_id', 5)->count());
         $this->assertSame($original, $teacher->fresh()->getAttributes());
@@ -392,13 +395,14 @@ class SchoolViewImportTest extends TestCase
 
     public function test_an_imported_teacher_appears_in_the_teacher_roster(): void
     {
+        $email = 't' . uniqid() . '@example.test';
         $school = School::factory()->create(['name' => 'Greenwood School']);
         $username = 'tch' . substr(uniqid(), -6);
 
         $this->actingAs($this->admin(), 'admin')
             ->post(route('school.import.staff', $school->id, false), [
                 'staff_excel' => $this->staffSheet([
-                    ['Daniel Tan', 't' . uniqid() . '@example.test', '+65', '81110009', $username],
+                    ['Daniel Tan', $email, '+65', '81110009', $username],
                 ]),
             ]);
 
@@ -408,7 +412,7 @@ class SchoolViewImportTest extends TestCase
             ->json('data');
 
         $this->assertCount(1, $data);
-        $this->assertSame('dt_greenwood_school', $data[0]['username']);
+        $this->assertSame(explode('@', $email)[0] . '_gs', $data[0]['username']);
     }
 
     public function test_a_view_only_admin_cannot_read_the_teacher_roster(): void
