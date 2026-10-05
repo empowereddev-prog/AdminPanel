@@ -226,7 +226,7 @@
                             @csrf
                             <div class="fw-semibold" style="margin-bottom:4px;">Import teachers</div>
                             <div class="text-muted" style="font-size:13px;margin-bottom:12px;">
-                                Each row needs a username as well as a name, email, country code and phone number.
+                                Only name and email are required. Country code and phone number are optional. Usernames are generated from teacher initials and the school name.
                             </div>
 
                             <input type="file" name="staff_excel" id="staff_excel" class="d-none" accept=".xlsx,.xls" required>

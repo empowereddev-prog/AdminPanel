@@ -1094,170 +1094,13 @@ class SchoolController extends Controller
             }
         }
 
-        // NEW PROCESSING ENGINE: Parse and Import Staff Details Excel File
-        // if ($request->hasFile('staff_excel')) {
-        //     try {
-        //         $file = $request->file('staff_excel');
-        //         $filePath = $file->storeAs('uploads', $id . '_staff_' . $file->getClientOriginalName());
-        //         $spreadsheet = IOFactory::load(storage_path('app/' . $filePath));
-        //         $sheet = $spreadsheet->getActiveSheet();
-        //         $data = $sheet->toArray();
-
-        //         $header = array_slice(array_shift($data), 0, 5);
-        //         $expectedHeader = ['Name', 'Email', 'Country Code', 'Phone Number', 'Username'];
-
-        //         if ($header !== $expectedHeader) {
-        //             return back()->with('error', 'Invalid staff file format. Please use the provided staff sample.')->withInput();
-        //         }
-
-        //         $insertedStaffCount = 0;
-
-        //         foreach ($data as $row) {
-        //             if (!array_filter($row) || empty($row[0]) || empty($row[1]) || empty($row[2]) || empty($row[3]) || empty($row[4])) {
-        //                 continue;
-        //             }
-
-        //             if (!filter_var($row[1], FILTER_VALIDATE_EMAIL)) {
-        //                 continue;
-        //             }
-
-        //             $existingGlobalUser = User::where('email', $row[1])->exists();
-        //             if ($existingGlobalUser) {
-        //                 continue;
-        //             }
-
-        //             $existingUsername = User::where('username', $row[4])->exists();
-        //             if ($existingUsername) {
-        //                 continue;
-        //             }
-
-        //             $password = 'Tch' . \Str::studly(\Str::random(4) . '@2');
-
-        //             $newTeacher = User::create([
-        //                 'name' => $row[0],
-        //                 'email' => $row[1],
-        //                 'country_code' => $row[2],
-        //                 'phone_no' => $row[3],
-        //                 'username' => $row[4],
-        //                 'school_id' => $school->id,
-        //                 'user_role_id' => 5,
-        //                 'user_type' => 'teacher',
-        //                 'email_verified_at' => now(),
-        //                 'is_mobile_verified' => 'yes',
-        //                 'password' => Hash::make($password)
-        //             ]);
-
-        //             $emailData = [
-        //                 'name'     => $row[0],
-        //                 'username' => $row[4],
-        //                 'password' => $password
-        //             ];
-
-        //             ___mail_sender($row[1], 'signup_teacher', $emailData, 'english');
-
-        //             $insertedStaffCount++;
-        //         }
-
-        //         if ($insertedStaffCount === 0) {
-        //             return back()
-        //                 ->with('error', 'The Staff/Teacher Excel file data or format is invalid.')
-        //                 ->withInput();
-        //         }
-
-        //         return redirect('school')->with('success', $insertedStaffCount . ' staff members added successfully.');
-
-        //     } catch (\Throwable $e) {
-        //         return back()->with('error', 'Staff Error: ' . $e->getMessage())->withInput();
-        //     }
-        // }
-
-        // NEW PROCESSING ENGINE: Parse and Import Staff Details Excel File
         if ($request->hasFile('staff_excel')) {
             try {
-                $file = $request->file('staff_excel');
-                $filePath = $file->storeAs('uploads', $id . '_staff_' . $file->getClientOriginalName());
-                $spreadsheet = IOFactory::load(storage_path('app/' . $filePath));
-                $sheet = $spreadsheet->getActiveSheet();
-                $data = $sheet->toArray();
-                $header = array_slice(array_shift($data), 0, 5);
-                $expectedHeader = ['Name', 'Email', 'Country Code', 'Phone Number', 'Username'];
+                $result = (new SchoolImportService())->importStaff($school, $request->file('staff_excel'));
 
-                if ($header !== $expectedHeader) {
-                    return back()->with('error', 'Invalid staff file format. Please use the exact staff import layout structure.')->withInput();
-                }
-
-                $insertedStaffCount = 0;
-                $rowNumber = 1;
-
-                foreach ($data as $row) {
-                    $rowNumber++;
-
-                    if (!array_filter($row)) {
-                        continue;
-                    }
-
-                    if (empty($row[0]) || empty($row[1]) || empty($row[2]) || empty($row[3]) || empty($row[4])) {
-                        return back()->with('error', "Row {$rowNumber}: All fields (Name, Email, Country Code, Phone Number, Username) are required.") ->withInput();
-                    }
-
-                    if (!filter_var($row[1], FILTER_VALIDATE_EMAIL)) {
-                        return back()->with('error', "Row {$rowNumber}: '{$row[1]}' is not a valid email address.")->withInput();
-                    }
-
-                    $existingGlobalUser = User::where('email', $row[1])->exists();
-                    if ($existingGlobalUser) {
-                        continue;
-                        // return back()->with('error', "Row {$rowNumber}: Duplicate Email found. '{$row[1]}' is already registered in the system.") ->withInput();
-                    }
-
-                    $existingUsername = User::where('username', $row[4])->exists();
-                    if ($existingUsername) {
-                        continue;
-                        // return back()->with('error', "Row {$rowNumber}: Duplicate Username found. '{$row[4]}' is already taken.") ->withInput();
-                    }
-
-                    if (preg_match('/[^a-zA-Z0-9_\-\+]/', $row[4])) {
-                        return back()->with('error', "Row {$rowNumber}: Invalid username format for '{$row[4]}'. Use only letters, numbers, underscores, dashes, or plus signs.") ->withInput();
-                    }
-
-                    $password = 'Tch' . \Str::studly(\Str::random(4) . '@2');
-
-                    $newTeacher = User::create([
-                        'name' => $row[0],
-                        'email' => $row[1],
-                        'country_code' => $row[2],
-                        'phone_no' => $row[3],
-                        'username' => $row[4],
-                        'school_id' => $school->id,
-                        'user_role_id' => 5,
-                        'user_type' => 'teacher',
-                        'email_verified_at' => now(),
-                        'is_mobile_verified' => 'yes',
-                        'password' => Hash::make($password)
-                    ]);
-
-                    // school_name and year are declared by the signup_teacher
-                    // template; an unsupplied token falls back to $data['otp'],
-                    // so the payload has to cover the whole list.
-                    $emailData = [
-                        'name'     => $row[0],
-                        'username' => $row[4],
-                        'password' => $password,
-                        'school_name' => $school->name,
-                        'year' => (string) date('Y'),
-                    ];
-
-                    ___mail_sender($row[1], 'signup_teacher', $emailData, 'english');
-
-                    $insertedStaffCount++;
-                }
-
-                if ($insertedStaffCount === 0) {
-                    return back()->with('error', 'The Excel file contains no valid staff records to process.')->withInput();
-                }
-
-                return redirect('school')->with('success', $insertedStaffCount . ' staff members added successfully.');
-
+                return $result['status']
+                    ? redirect('school')->with('success', $result['message'])
+                    : back()->with('error', $result['message'])->withInput();
             } catch (\Throwable $e) {
                 return back()->with('error', 'Staff Parsing Exception: ' . $e->getMessage())->withInput();
             }
@@ -1481,15 +1324,13 @@ class SchoolController extends Controller
         $sheet->setCellValue('B1', 'Email');
         $sheet->setCellValue('C1', 'Country Code');
         $sheet->setCellValue('D1', 'Phone Number');
-        $sheet->setCellValue('E1', 'Username');
 
         $sheet->setCellValue('A2', 'Teacher Alex');
         $sheet->setCellValue('B2', 'teacher.alex@example.com');
         $sheet->setCellValueExplicit('C2', '+65', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         $sheet->setCellValueExplicit('D2', '81234567', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheet->setCellValue('E2', 'alex_teacher123');
 
-        foreach (range('A', 'E') as $columnID) {
+        foreach (range('A', 'D') as $columnID) {
             $sheet->getColumnDimension($columnID)->setAutoSize(true);
         }
         $sheet->getStyle('D2')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);

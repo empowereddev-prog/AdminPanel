@@ -24,7 +24,7 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 class SchoolImportService
 {
     private const PARENT_HEADER = ['Name', 'Email', 'Country Code', 'Phone Number'];
-    private const STAFF_HEADER = ['Name', 'Email', 'Country Code', 'Phone Number', 'Username'];
+    private const STAFF_HEADER = ['Name', 'Email', 'Country Code', 'Phone Number'];
 
     /**
      * @return array{status:bool,message:string,imported:int,skipped:int,rejected:int}
@@ -159,43 +159,49 @@ class SchoolImportService
                 continue;
             }
 
-            if (empty($row[0]) || empty($row[1]) || empty($row[2]) || empty($row[3]) || empty($row[4])) {
+            $name = trim((string) ($row[0] ?? ''));
+            $email = trim((string) ($row[1] ?? ''));
+            $countryCode = trim((string) ($row[2] ?? ''));
+            $phone = trim((string) ($row[3] ?? ''));
+
+            if ($name === '' || $email === '') {
                 $rejected++;
                 continue;
             }
 
-            if (!filter_var($row[1], FILTER_VALIDATE_EMAIL) || preg_match('/[^a-zA-Z0-9_\-\+]/', $row[4])) {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $rejected++;
                 continue;
             }
 
-            if (User::where('email', $row[1])->exists() || User::where('username', $row[4])->exists()) {
+            if (User::where('email', $email)->exists()) {
                 $skipped++;
                 continue;
             }
 
+            $username = $this->teacherUsername($name, $school);
             $password = 'Tch' . Str::studly(Str::random(4) . '@2');
 
             User::create([
-                'name' => $row[0],
-                'email' => $row[1],
-                'country_code' => $row[2],
-                'phone_no' => $row[3],
-                'username' => $row[4],
+                'name' => $name,
+                'email' => $email,
+                'country_code' => $countryCode === '' ? null : $countryCode,
+                'phone_no' => $phone === '' ? null : $phone,
+                'username' => $username,
                 'school_id' => $school->id,
                 'user_role_id' => 5,
                 'user_type' => 'teacher',
                 'email_verified_at' => now(),
-                'is_mobile_verified' => 'yes',
+                'is_mobile_verified' => $phone === '' ? 'no' : 'yes',
                 'password' => Hash::make($password),
             ]);
 
             // Teachers are few and imported rarely, so this stays inline. Every
             // token the signup_teacher template declares must be present, or
             // ___mail_sender substitutes the OTP in its place.
-            ___mail_sender($row[1], 'signup_teacher', [
-                'name' => $row[0],
-                'username' => $row[4],
+            ___mail_sender($email, 'signup_teacher', [
+                'name' => $name,
+                'username' => $username,
                 'password' => $password,
                 'school_name' => $school->name,
                 'year' => (string) date('Y'),
@@ -217,6 +223,23 @@ class SchoolImportService
         ];
     }
 
+    private function teacherUsername(string $name, School $school): string
+    {
+        $words = preg_split('/[^a-z0-9]+/', strtolower(Str::ascii($name)), -1, PREG_SPLIT_NO_EMPTY);
+        $initials = implode('', array_map(fn (string $word) => $word[0], $words)) ?: 'teacher';
+        $schoolName = Str::slug($school->name, '_') ?: 'school_' . $school->id;
+        // Leave space within the username column for collision suffixes.
+        $base = substr($initials . '_' . $schoolName, 0, 240);
+        $username = $base;
+        $suffix = 2;
+
+        while (User::withTrashed()->where('username', $username)->exists()) {
+            $username = $base . '_' . $suffix++;
+        }
+
+        return $username;
+    }
+
     /** @return array<int,array>|null null when the header does not match */
     private function rows(School $school, UploadedFile $file, string $kind, array $expected): ?array
     {
@@ -225,7 +248,21 @@ class SchoolImportService
         $path = $file->storeAs('uploads', $school->id . '_' . $kind . '_' . now()->format('YmdHis') . '.' . $file->getClientOriginalExtension());
 
         $data = IOFactory::load(storage_path('app/' . $path))->getActiveSheet()->toArray();
-        $header = array_slice((array) array_shift($data), 0, count($expected));
+        $header = (array) array_shift($data);
+
+        if ($kind === 'staff') {
+            // Name/Email alone is enough. Accept optional contact columns and
+            // legacy Username columns, whose values are now ignored.
+            $header = array_slice($header, 0, 5);
+            while ($header !== [] && end($header) === null) {
+                array_pop($header);
+            }
+            $legacyHeader = [...self::STAFF_HEADER, 'Username'];
+
+            return count($header) >= 2 && $header === array_slice($legacyHeader, 0, count($header)) ? $data : null;
+        }
+
+        $header = array_slice($header, 0, count($expected));
 
         return $header === $expected ? $data : null;
     }
