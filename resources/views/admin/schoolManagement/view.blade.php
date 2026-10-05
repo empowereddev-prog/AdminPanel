@@ -227,7 +227,7 @@
                             @csrf
                             <div class="fw-semibold" style="margin-bottom:4px;">Import teachers</div>
                             <div class="text-muted" style="font-size:13px;margin-bottom:12px;">
-                                Only name and email are required. Country code and phone number are optional. Usernames are generated from teacher initials and the school name.
+                                Only name and email are required. Country code and phone number are optional. Usernames are generated from the email prefix and school initials (e.g. daniel.tan_gs for Greenwood School).
                             </div>
 
                             <input type="file" name="staff_excel" id="staff_excel" class="d-none" accept=".xlsx,.xls" required>

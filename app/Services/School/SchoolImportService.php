@@ -212,7 +212,7 @@ class SchoolImportService
                 continue;
             }
 
-            $username = $this->teacherUsername($name, $school);
+            $username = $this->teacherUsername($email, $school);
             $password = 'Tch' . Str::studly(Str::random(4) . '@2');
 
             User::create([
@@ -261,13 +261,13 @@ class SchoolImportService
         ];
     }
 
-    private function teacherUsername(string $name, School $school): string
+    private function teacherUsername(string $email, School $school): string
     {
-        $words = preg_split('/[^a-z0-9]+/', strtolower(Str::ascii($name)), -1, PREG_SPLIT_NO_EMPTY);
-        $initials = implode('', array_map(fn (string $word) => $word[0], $words)) ?: 'teacher';
-        $schoolName = Str::slug($school->name, '_') ?: 'school_' . $school->id;
+        $emailPrefix = strtolower(Str::before($email, '@'));
+        $words = preg_split('/[^a-z0-9]+/', strtolower(Str::ascii($school->name)), -1, PREG_SPLIT_NO_EMPTY);
+        $schoolInitials = implode('', array_map(fn (string $word) => $word[0], $words)) ?: 'school_' . $school->id;
         // Leave space within the username column for collision suffixes.
-        $base = substr($initials . '_' . $schoolName, 0, 240);
+        $base = substr($emailPrefix . '_' . $schoolInitials, 0, 240);
         $username = $base;
         $suffix = 2;
 
