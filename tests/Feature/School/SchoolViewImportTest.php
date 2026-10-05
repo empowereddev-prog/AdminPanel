@@ -280,19 +280,30 @@ class SchoolViewImportTest extends TestCase
         $this->assertSame(1, User::where('email', $email)->where('user_role_id', 5)->count());
     }
 
-    public function test_deleted_teacher_is_reported_without_recreating_or_restoring_it(): void
+    public function test_deleted_teacher_is_reimported_as_a_fresh_account(): void
     {
-        $school = School::factory()->create();
-        $teacher = User::factory()->teacher()->create();
+        $school = School::factory()->create(['name' => 'Greenwood School']);
+        $teacher = User::factory()->teacher()->inSchool($school)->create([
+            'name' => 'Daniel Tan',
+            'username' => 'dt_greenwood_school',
+        ]);
         $teacher->delete();
+        $original = $teacher->fresh()->getAttributes();
 
         $this->actingAs($this->admin(), 'admin')
             ->post(route('school.import.staff', $school->id, false), [
-                'staff_excel' => $this->sheet(['Name', 'Email'], [[$teacher->name, $teacher->email]]),
+                'staff_excel' => $this->sheet(['Name', 'Email'], [[$teacher->name, $teacher->email], [$teacher->name, strtoupper($teacher->email)]]),
             ])
-            ->assertSessionHas('teacher_import_rows', fn ($rows) => $rows[0]['result'] === 'Conflict');
+            ->assertSessionHas('success', '1 teacher account(s) created. 0 linked, 1 already enrolled, 0 conflicts, 0 rejected.')
+            ->assertSessionHas('teacher_import_rows', fn ($rows) => $rows[0]['result'] === 'Created' && $rows[1]['result'] === 'Already enrolled');
 
-        $this->assertSame(1, User::withTrashed()->where('email', $teacher->email)->where('user_role_id', 5)->count());
+        $fresh = User::where('email', $teacher->email)->where('user_role_id', 5)->sole();
+        $this->assertNotEquals($teacher->id, $fresh->id);
+        $this->assertEquals($school->id, $fresh->school_id);
+        $this->assertSame('dt_greenwood_school_2', $fresh->username);
+        $this->assertNotSame($teacher->password, $fresh->password);
+        $this->assertSame(2, User::withTrashed()->where('email', $teacher->email)->where('user_role_id', 5)->count());
+        $this->assertSame($original, $teacher->fresh()->getAttributes());
         $this->assertTrue($teacher->fresh()->trashed());
     }
 
