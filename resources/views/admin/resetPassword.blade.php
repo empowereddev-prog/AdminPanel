@@ -48,7 +48,6 @@
                             <form class="second-form" action="{{ url('reset-password/'.$token)}}" method="post">
                                 @csrf
                                 <div class="row">
-                                    <input type="hidden" name="old_password" value="{{$decryptedPassword}}">
                                     <div class="form-group col-md-12 mb-4 field password">
                                     <label for="email">New Password</label>
                                     <input type="password"

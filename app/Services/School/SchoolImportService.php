@@ -140,7 +140,7 @@ class SchoolImportService
     }
 
     /**
-     * @return array{status:bool,message:string,imported:int,skipped:int,rejected:int}
+     * @return array{status:bool,message:string,imported:int,skipped:int,rejected:int,linked?:int,already_enrolled?:int,conflicts?:int,rows?:array}
      */
     public function importStaff(School $school, UploadedFile $file): array
     {
@@ -153,8 +153,12 @@ class SchoolImportService
         $imported = 0;
         $skipped = 0;
         $rejected = 0;
+        $linked = 0;
+        $alreadyEnrolled = 0;
+        $conflicts = 0;
+        $details = [];
 
-        foreach ($rows as $row) {
+        foreach ($rows as $index => $row) {
             if (!array_filter($row)) {
                 continue;
             }
@@ -164,18 +168,46 @@ class SchoolImportService
             $countryCode = trim((string) ($row[2] ?? ''));
             $phone = trim((string) ($row[3] ?? ''));
 
+            $detail = ['row' => $index + 2, 'email' => $email];
+
             if ($name === '' || $email === '') {
+                $details[] = [...$detail, 'result' => 'Rejected', 'reason' => 'Name and email are required.'];
                 $rejected++;
                 continue;
             }
 
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $details[] = [...$detail, 'result' => 'Rejected', 'reason' => 'Invalid email address.'];
                 $rejected++;
                 continue;
             }
 
-            if (User::where('email', $email)->exists()) {
+            $teachers = User::withTrashed()->whereRaw('LOWER(email) = ?', [strtolower($email)])
+                ->where('user_role_id', 5)->get();
+            $teacher = $teachers->first(fn (User $user) => !$user->trashed() && (string) $user->school_id === (string) $school->id);
+
+            if ($teacher) {
+                $alreadyEnrolled++;
                 $skipped++;
+                $details[] = [...$detail, 'result' => 'Already enrolled', 'reason' => 'Teacher already belongs to this school; credentials preserved.'];
+                continue;
+            }
+
+            if ($teachers->count() > 1 || ($teachers->count() === 1 && ($teachers->first()->trashed() || $teachers->first()->school_id !== null))) {
+                $conflicts++;
+                $skipped++;
+                $details[] = [...$detail, 'result' => 'Conflict', 'reason' => $teachers->count() > 1
+                    ? 'Multiple teacher accounts match this email; review their school assignments.'
+                    : ($teachers->first()->trashed() ? 'Teacher account has been deleted; review it before importing.' : 'Teacher belongs to another school; no assignment changed.')];
+                continue;
+            }
+
+            if ($teacher = $teachers->first()) {
+                // Only an unassigned teacher can be linked. Never reset their
+                // password, username, status, or profile from an import.
+                $teacher->update(['school_id' => $school->id]);
+                $linked++;
+                $details[] = [...$detail, 'result' => 'Linked', 'reason' => 'Existing teacher linked to this school; credentials preserved.'];
                 continue;
             }
 
@@ -208,18 +240,23 @@ class SchoolImportService
             ], 'english');
 
             $imported++;
+            $details[] = [...$detail, 'result' => 'Created', 'reason' => 'Teacher account created; login details emailed.'];
         }
 
-        if ($imported === 0 && $skipped === 0 && $rejected === 0) {
+        if ($imported === 0 && $linked === 0 && $skipped === 0 && $rejected === 0) {
             return $this->fail('The Excel file contains no usable staff rows.');
         }
 
         return [
             'status' => true,
-            'message' => "{$imported} teacher account(s) created. {$skipped} skipped, {$rejected} rejected.",
+            'message' => "{$imported} teacher account(s) created. {$linked} linked, {$alreadyEnrolled} already enrolled, {$conflicts} conflicts, {$rejected} rejected.",
             'imported' => $imported,
             'skipped' => $skipped,
             'rejected' => $rejected,
+            'linked' => $linked,
+            'already_enrolled' => $alreadyEnrolled,
+            'conflicts' => $conflicts,
+            'rows' => $details,
         ];
     }
 

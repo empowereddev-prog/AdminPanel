@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Str;
 
 
 class LoginController extends Controller
@@ -169,7 +170,7 @@ class LoginController extends Controller
         $user = User::where('email', $mail)->whereIn('user_role_id', [1, 2])->first();
 
         if ($user) {
-            $reset = md5(microtime());
+            $reset = Str::random(64);
             $code = (string) ___otp_code();
             $user->password_reset_code = $reset;
             $expirationTime = now()->addMinutes(10);
@@ -199,10 +200,8 @@ class LoginController extends Controller
     {
         $user = User::where('password_reset_code', $token)->first();
 
-        if ($user && now() <= $user->password_reset_expires_at) {
-            $decryptedPassword = $user->password;
-            // dd($decryptedPassword);
-            return view('admin.resetPassword', compact('token','decryptedPassword'));
+        if ($user && $user->password_reset_expires_at && now() <= $user->password_reset_expires_at) {
+            return view('admin.resetPassword', compact('token'));
         } else {
             return view('admin.resetExpire', compact('token'));
         }
@@ -215,7 +214,6 @@ class LoginController extends Controller
         $validator = Validator::make($request->all(), [
             // 'password' => 'required|string|min:8|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{6,}$/',
             // 'confirm_password' => 'required|string|min:8|same:password|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{6,}$/',
-            'old_password' => 'required',
             'password' => 'required|min:8|max:15|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9]).{8,15}$/',
             'confirm_password' => 'required|same:password|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9]).{8,15}$/',
         ], [
@@ -224,41 +222,31 @@ class LoginController extends Controller
             // 'password.regex' => 'The new password must contain 1 Upper Case,1 Lower Case, 1 Numeric and 1 Special Character.',
             // 'confirm_password.regex' => 'The confirm password must contain 1 Upper Case,1 Lower Case, 1 Numeric and 1 Special Character.',
             // 'confirm_password.same' => 'The new password and confirm Password should be same.',|
-            'old_password.required' => "Old password is required.",
             'password.required' => "New password is required.",
             'confirm_password.required' => "Confirm password is required.",
             'password.regex' => "The password must be between 8 and 15 characters long and must contain at least one uppercase letter, one lowercase letter, and one numeric digit.",
              'confirm_password.same' => 'The new password and confirm password must be the same.',
         ]);
 
-        $validator->after(function ($validator) use ($request) {
-            if (Hash::check($request->old_password, Hash::make($request->password))) {
-                $validator->errors()->add('password', 'The new password must be different from the current password.');
-            }
-        });
-        // dd($request->all(),Hash::make($request->password),Hash::make($request->old_password),(Hash::make($request->password)== Hash::make($request->old_password)));
         if ($validator->fails()) {
             // dd($validator);
             return redirect()->back()->withErrors($validator)->withInput();
         }
         // dd($confirm_password);
-        $user = User::where('password_reset_code', $token)->first();
-        if ($request->password == $request->confirm_password) {
-            $user->password = Hash::make($request->password);
-            // $user->password_reset_code = null;
-            $user->save();
-           // return redirect('/')->with('success', 'Password changed successfully.');
-            // Redirect based on user role
-            if ($user->user_role_id == 3) {
-                return redirect()->back()->with('pass', 'Password changed successfully.');
-            } elseif (in_array($user->user_role_id, [1, 2])) {
-                return redirect()->back()->with('pass', 'Password changed successfully.');
-            }
+        $user = User::where('password_reset_code', $token)
+            ->where('password_reset_expires_at', '>=', now())->first();
 
-        } else {
-            return back()->with('fail', "Passwords doesn't match.");
+        if (!$user) {
+            return back()->with('fail', 'Reset password link is invalid or has expired.');
         }
 
+        $user->update([
+            'password' => Hash::make($request->password),
+            'password_reset_code' => null,
+            'password_reset_expires_at' => null,
+        ]);
+
+        return redirect()->route('success');
     }
 
     public function logout()
@@ -269,7 +257,11 @@ class LoginController extends Controller
 
     public function reset(Request $request, $token){
         $user = User::where('password_reset_code', $token)->first();
+        if (!$user) {
+            return redirect()->route('success');
+        }
         $user->password_reset_code = null;
+        $user->password_reset_expires_at = null;
         $user->save();
         if ($user->user_role_id == 3) {
             return redirect()->away('https://empoweredhealth.asia/')->with('success', 'Password changed successfully.');

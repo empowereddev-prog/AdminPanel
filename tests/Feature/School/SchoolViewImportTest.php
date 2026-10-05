@@ -166,7 +166,7 @@ class SchoolViewImportTest extends TestCase
                     ['Daniel Tan', 'invalid-email'],
                 ]),
             ])
-            ->assertSessionHas('success', '0 teacher account(s) created. 0 skipped, 3 rejected.');
+            ->assertSessionHas('success', '0 teacher account(s) created. 0 linked, 0 already enrolled, 0 conflicts, 3 rejected.');
 
         $this->assertSame(0, User::where('school_id', $school->id)->where('user_role_id', 5)->count());
     }
@@ -187,6 +187,113 @@ class SchoolViewImportTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertDatabaseHas('users', ['email' => $email, 'username' => 'dt_greenwood_school', 'country_code' => null, 'phone_no' => null]);
+    }
+
+    public function test_teacher_import_allows_emails_used_by_other_roles(): void
+    {
+        $school = School::factory()->create(['name' => 'Greenwood School']);
+        $admin = $this->admin();
+
+        foreach ([1 => 'admin', 3 => 'parent', 4 => 'child'] as $role => $type) {
+            $existing = User::factory()->create(['user_role_id' => $role, 'user_type' => $type]);
+            $original = $existing->fresh()->getAttributes();
+
+            $this->actingAs($admin, 'admin')
+                ->post(route('school.import.staff', $school->id, false), [
+                    'staff_excel' => $this->sheet(['Name', 'Email'], [['Maneet Srivastav', $existing->email]]),
+                ])
+                ->assertSessionHas('success', '1 teacher account(s) created. 0 linked, 0 already enrolled, 0 conflicts, 0 rejected.')
+                ->assertSessionHas('teacher_import_rows', fn ($rows) => $rows[0]['result'] === 'Created');
+
+            $this->assertDatabaseHas('users', ['email' => $existing->email, 'user_role_id' => 5, 'school_id' => $school->id]);
+            $this->assertSame($original, $existing->fresh()->getAttributes());
+        }
+    }
+
+    public function test_existing_teacher_can_be_linked_without_changing_credentials(): void
+    {
+        $school = School::factory()->create();
+        $teacher = User::factory()->teacher()->create(['school_id' => null]);
+        $password = $teacher->password;
+        $username = $teacher->username;
+
+        $this->actingAs($this->admin(), 'admin')
+            ->post(route('school.import.staff', $school->id, false), [
+                'staff_excel' => $this->sheet(['Name', 'Email'], [['New Name', $teacher->email]]),
+            ])
+            ->assertSessionHas('success', '0 teacher account(s) created. 1 linked, 0 already enrolled, 0 conflicts, 0 rejected.');
+
+        $this->assertEquals($school->id, $teacher->fresh()->school_id);
+        $this->assertSame($password, $teacher->fresh()->password);
+        $this->assertSame($username, $teacher->fresh()->username);
+        Mail::assertNothingSent();
+    }
+
+    public function test_reimport_does_not_duplicate_or_reset_an_enrolled_teacher(): void
+    {
+        $school = School::factory()->create();
+        $teacher = User::factory()->teacher()->inSchool($school)->create();
+        $original = $teacher->fresh()->getAttributes();
+
+        $this->actingAs($this->admin(), 'admin')
+            ->post(route('school.import.staff', $school->id, false), [
+                'staff_excel' => $this->sheet(['Name', 'Email'], [[$teacher->name, $teacher->email], [$teacher->name, $teacher->email]]),
+            ])
+            ->assertSessionHas('success', '0 teacher account(s) created. 0 linked, 2 already enrolled, 0 conflicts, 0 rejected.');
+
+        $this->assertSame($original, $teacher->fresh()->getAttributes());
+        $this->assertSame(1, User::where('email', $teacher->email)->where('user_role_id', 5)->count());
+        Mail::assertNothingSent();
+    }
+
+    public function test_teacher_from_another_school_is_reported_as_a_conflict(): void
+    {
+        $school = School::factory()->create();
+        $other = School::factory()->create();
+        $teacher = User::factory()->teacher()->inSchool($other)->create();
+
+        $this->actingAs($this->admin(), 'admin')
+            ->post(route('school.import.staff', $school->id, false), [
+                'staff_excel' => $this->sheet(['Name', 'Email'], [[$teacher->name, $teacher->email]]),
+            ])
+            ->assertSessionHas('success', '0 teacher account(s) created. 0 linked, 0 already enrolled, 1 conflicts, 0 rejected.')
+            ->assertSessionHas('teacher_import_rows', fn ($rows) => $rows[0]['row'] === 2 && $rows[0]['result'] === 'Conflict');
+
+        $this->assertEquals($other->id, $teacher->fresh()->school_id);
+        Mail::assertNothingSent();
+
+        $this->get(route('school.show', $school->id, false))
+            ->assertSee('Teacher belongs to another school; no assignment changed.');
+    }
+
+    public function test_duplicate_rows_in_one_upload_create_only_one_teacher(): void
+    {
+        $school = School::factory()->create();
+        $email = 't' . uniqid() . '@example.test';
+
+        $this->actingAs($this->admin(), 'admin')
+            ->post(route('school.import.staff', $school->id, false), [
+                'staff_excel' => $this->sheet(['Name', 'Email'], [['Daniel Tan', $email], ['Daniel Tan', strtoupper($email)]]),
+            ])
+            ->assertSessionHas('success', '1 teacher account(s) created. 0 linked, 1 already enrolled, 0 conflicts, 0 rejected.');
+
+        $this->assertSame(1, User::where('email', $email)->where('user_role_id', 5)->count());
+    }
+
+    public function test_deleted_teacher_is_reported_without_recreating_or_restoring_it(): void
+    {
+        $school = School::factory()->create();
+        $teacher = User::factory()->teacher()->create();
+        $teacher->delete();
+
+        $this->actingAs($this->admin(), 'admin')
+            ->post(route('school.import.staff', $school->id, false), [
+                'staff_excel' => $this->sheet(['Name', 'Email'], [[$teacher->name, $teacher->email]]),
+            ])
+            ->assertSessionHas('teacher_import_rows', fn ($rows) => $rows[0]['result'] === 'Conflict');
+
+        $this->assertSame(1, User::withTrashed()->where('email', $teacher->email)->where('user_role_id', 5)->count());
+        $this->assertTrue($teacher->fresh()->trashed());
     }
 
     /** Teachers must not appear on the parent roster or eat parent places. */

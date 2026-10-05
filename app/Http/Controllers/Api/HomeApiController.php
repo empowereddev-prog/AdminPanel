@@ -942,9 +942,10 @@ class HomeApiController extends Controller
     }
     public function resetPassword(ResetPasswordRequest $request)
     {
-        $token = DB::table('password_reset_tokens')->where('token', $request->token)->first();
+        $user = User::where('password_reset_code', $request->token)
+            ->where('password_reset_expires_at', '>=', now())->first();
 
-        if (!$token) {
+        if (!$user) {
             return redirect('reset-password-message')->with('invalid', 'Reset Password link is invalid.');
         }
 
@@ -954,22 +955,47 @@ class HomeApiController extends Controller
             return redirect('reset-password-message')->with('invalid', 'The new password and confirm password must be the same.');
         }
 
-        User::where('email', $token->email)->update(['password' => Hash::make($request->password)]);
-        DB::table('password_reset_tokens')->where('token', $request->token)->delete();
+        $user->update([
+            'password' => Hash::make($request->password),
+            'password_reset_code' => null,
+            'password_reset_expires_at' => null,
+        ]);
 
         return redirect('reset-password-message')->with('success', 'Password updated successfully.');
     }
 
     public function forgotPassword(Request $request)
     {
-        $language = $request->language;
+        $language = $request->language ?? 'english';
         $request->validate([
-            'email' => 'required|regex:/(.+)@(.+)\.(.+)/i|',
+            'email' => 'required|email',
+            'type' => 'nullable|in:parent,teacher,child',
+            'username' => 'nullable|string',
         ]);
 
-        $mail = $request->email;
-        $user = User::where('email', $mail)->first();
-        $reset = md5(microtime());
+        $mail = trim($request->email);
+        $query = User::whereRaw('LOWER(email) = ?', [strtolower($mail)]);
+
+        if ($request->filled('type')) {
+            $role = ['parent' => 3, 'child' => 4, 'teacher' => 5][$request->type];
+            $query->where('user_role_id', $role);
+        }
+        if ($request->filled('username')) {
+            $query->where('username', $request->username);
+        }
+
+        $matches = $query->limit(2)->get();
+        if ($matches->count() > 1) {
+            return ApiResponse::error(
+                $language == 'english'
+                    ? 'Multiple accounts use this email. Provide your account type or username.'
+                    : '多个帐号使用此电子邮箱。请提供帐号类型或用户名。',
+                200
+            );
+        }
+
+        $user = $matches->first();
+        $reset = Str::random(64);
 
         if ($user) {
             $user->password_reset_code = $reset;
@@ -997,10 +1023,8 @@ class HomeApiController extends Controller
     {
         $user = User::where('password_reset_code', $token)->first();
 
-        if ($user && now() <= $user->password_reset_expires_at) {
-            $decryptedPassword = $user->password;
-            // dd($decryptedPassword);
-            return view('admin.resetPassword', compact('token', 'decryptedPassword'));
+        if ($user && $user->password_reset_expires_at && now() <= $user->password_reset_expires_at) {
+            return view('admin.resetPassword', compact('token'));
         } else {
             return view('admin.resetExpire', compact('token'));
         }
@@ -1015,7 +1039,6 @@ class HomeApiController extends Controller
         $validator = Validator::make($request->all(), [
             // 'password' => 'required|string|min:8|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{6,}$/',
             // 'confirm_password' => 'required|string|min:8|same:password|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{6,}$/',
-            'old_password' => 'required',
             'password' => 'required|min:8|max:15|regex:/^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9]).{8,15}$/',
             'confirm_password' => 'required|same:password',
         ], [
@@ -1024,25 +1047,19 @@ class HomeApiController extends Controller
             // 'password.regex' => 'The new password must contain 1 Upper Case,1 Lower Case, 1 Numeric and 1 Special Character.',
             // 'confirm_password.regex' => 'The confirm password must contain 1 Upper Case,1 Lower Case, 1 Numeric and 1 Special Character.',
             // 'confirm_password.same' => 'The new password and confirm Password should be same.',|
-            'old_password.required' => "Old Password is required.",
             'password.required' => "New Password is required.",
             'confirm_password.required' => "Confirm Password is required.",
             'password.regex' => "The password must be between 8 and 15 characters long and must contain at least one uppercase letter, one lowercase letter, and one numeric digit.",
             'confirm_password.same' => 'The new password and confirm password must be the same.',
         ]);
 
-        $validator->after(function ($validator) use ($request) {
-            if (Hash::check($request->old_password, Hash::make($request->password))) {
-                $validator->errors()->add('password', 'The new password must be different from the current password.');
-            }
-        });
-        // dd($request->all(),Hash::make($request->password),Hash::make($request->old_password),(Hash::make($request->password)== Hash::make($request->old_password)));
         if ($validator->fails()) {
             // dd($validator);
             return redirect()->back()->withErrors($validator)->withInput();
         }
         // dd($confirm_password);
-        $user = User::where('password_reset_code', $token)->first();
+        $user = User::where('password_reset_code', $token)
+            ->where('password_reset_expires_at', '>=', now())->first();
 
         if (!$user) {
             return ApiResponse::error(
@@ -1054,6 +1071,7 @@ class HomeApiController extends Controller
         if ($request->password == $request->confirm_password) {
             $user->password = Hash::make($request->password);
             $user->password_reset_code = null;
+            $user->password_reset_expires_at = null;
             $user->save();
             return ApiResponse::success(null, $language == 'english' ? ' Password changed successfully. Login again to continue using app' : '密码更改成功。请重新登录以继续使用应用程序', 200);
         } else {
