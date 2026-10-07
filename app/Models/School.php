@@ -17,6 +17,11 @@ class School extends Model implements AuditableContract
         return ($this->account_mode ?? self::MODE_PARENT) === self::MODE_PARENT;
     }
 
+    public function safetyFeatureEnabled(): bool
+    {
+        return ($this->needs_safety_feature ?? 'yes') === 'yes';
+    }
+
     use HasFactory, Auditable;
     protected $guarded = [];
 

@@ -49,6 +49,10 @@
                     <span class="fw-semibold text-muted">Account Mode:</span>
                     <span>{{ $school->account_mode === 'independent' ? 'Independent Child Accounts' : 'Parent-linked Child Accounts' }}</span>
                 </div>
+                <div class="mb-2">
+                    <span class="fw-semibold text-muted">Safety feature:</span>
+                    <span>{{ $school->safetyFeatureEnabled() ? 'Yes' : 'No' }}</span>
+                </div>
 
                 <div class="mb-2">
                     <span class="fw-semibold text-muted">🏫 School Code:</span>

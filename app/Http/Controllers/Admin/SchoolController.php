@@ -37,6 +37,18 @@ class SchoolController extends Controller
 {
     private $subadmin_menu_id = 3;
 
+    private function validateSafetyFeature(Request $request, string $current = 'yes'): string
+    {
+        $request->validate(['needs_safety_feature' => ['sometimes', 'required', Rule::in(['yes', 'no'])]]);
+        $value = $request->input('needs_safety_feature', $current);
+        if ($value !== $current) {
+            abort_unless((int) Auth::user()->user_role_id === 1, 403, 'Only Admin can change the school safety feature.');
+            $permission = PermissionUser::checkpermission(Auth::user()->id, $this->subadmin_menu_id);
+            abort_unless($permission && $permission->is_modify === 'yes', 403);
+        }
+        return $value;
+    }
+
     private function authorizeAccountMode($mode, $current): void
     {
         if ($mode !== $current) {
@@ -390,6 +402,7 @@ class SchoolController extends Controller
 
     public function store(Request $request)
     {
+        $safetyFeature = $this->validateSafetyFeature($request);
         $request->validate(['staff_excel' => 'nullable|file|mimes:xlsx,xls|max:5120']);
         if ($request->hasFile('staff_excel') && !config('scope.school_extras')) {
             abort(403, 'Teacher imports are disabled.');
@@ -429,6 +442,7 @@ class SchoolController extends Controller
         }
 
         $school = [
+            'needs_safety_feature' => $safetyFeature,
             'account_mode' => $mode,
             'name' => $request->school_name,
             'school_code' => $request->school_code,
@@ -937,6 +951,7 @@ class SchoolController extends Controller
     public function update(Request $request, string $id)
     {
         $existingSchool = School::findOrFail($id);
+        $safetyFeature = $this->validateSafetyFeature($request, $existingSchool->needs_safety_feature ?? 'yes');
         $mode = $request->input('account_mode', $existingSchool->account_mode);
         $this->authorizeAccountMode($mode, $existingSchool->account_mode);
         $this->validateAccountMode($request, $mode);
@@ -968,6 +983,7 @@ class SchoolController extends Controller
         $previousPrice = $school->price;
 
         $school->update([
+            'needs_safety_feature' => $safetyFeature,
             'account_mode' => $mode,
             'name' => $request->school_name,
             'school_code' => $request->school_code,

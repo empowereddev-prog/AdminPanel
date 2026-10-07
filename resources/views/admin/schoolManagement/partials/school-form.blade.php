@@ -109,6 +109,25 @@
                 </div></div>
             </div>
         </section>
+        <section class="school-form-section" aria-labelledby="school-safety-heading">
+            <div class="school-section-heading">
+                <span class="school-section-icon"><i class="mdi mdi-shield-check" aria-hidden="true"></i></span>
+                <div><h3 id="school-safety-heading">Safety feature</h3><p>Manage access to Help and safety features in the app.</p></div>
+            </div>
+            <div class="form-group mb-4">
+                <label for="needs_safety_feature">Does the school need the safety feature?</label>
+                @if ((int) auth()->user()->user_role_id === 1)
+                    <select id="needs_safety_feature" name="needs_safety_feature" class="form-control" required>
+                        <option value="yes" {{ $schoolValue('needs_safety_feature', 'yes') === 'yes' ? 'selected' : '' }}>Yes</option>
+                        <option value="no" {{ $schoolValue('needs_safety_feature', 'yes') === 'no' ? 'selected' : '' }}>No</option>
+                    </select>
+                @else
+                    <input id="needs_safety_feature" class="form-control" value="{{ $schoolValue('needs_safety_feature', 'yes') === 'yes' ? 'Yes' : 'No' }}" readonly>
+                @endif
+                <small class="text-muted">Controls visibility of Get Help and safety features in the app.</small>
+                @error('needs_safety_feature') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
+            </div>
+        </section>
         <section class="school-form-section" aria-labelledby="school-subscription-heading">
             <div class="school-section-heading">
                 <span class="school-section-icon"><i class="mdi mdi-credit-card-outline" aria-hidden="true"></i></span>

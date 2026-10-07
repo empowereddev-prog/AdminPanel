@@ -54,6 +54,7 @@ Route::post('resend-otp', [HomeApiController::class, 'resendOtp']);
 Route::post('student-login', [HomeApiController::class, 'studentLogin']);
 Route::post('individual-login', [HomeApiController::class, 'individualLogin']);
 Route::middleware('auth:api', 'apicheckstatus')->group(function () {
+  Route::get('school/safety-feature', \App\Http\Controllers\Api\SchoolSafetyFeatureController::class);
   Route::post('add-child', [ChildController::class, 'addChild']);
   Route::post('edit-child', [ChildController::class, 'editChild']);
   Route::post('logout', [HomeApiController::class, 'logout']);
