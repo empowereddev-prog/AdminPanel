@@ -39,6 +39,8 @@ Route::get('deeplink/resolve', \App\Http\Controllers\Api\DeepLinkResolveControll
   ->middleware('throttle:deeplink_resolve');
 
 Route::post('webhooks/google', [WebhookController::class, 'google']);
+Route::post('school/account-mode', \App\Http\Controllers\Api\SchoolAccountModeController::class)
+    ->middleware('throttle:30,1');
 Route::post('webhooks/apple', [WebhookController::class, 'apple']);
 
 Route::post('register', [HomeApiController::class, 'register']);

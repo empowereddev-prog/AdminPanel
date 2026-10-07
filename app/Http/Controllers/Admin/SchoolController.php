@@ -36,6 +36,25 @@ use Yajra\Datatables\datatables;
 class SchoolController extends Controller
 {
     private $subadmin_menu_id = 3;
+
+    private function authorizeAccountMode($mode, $current): void
+    {
+        if ($mode !== $current) {
+            abort_unless((int) Auth::user()->user_role_id === 1, 403, 'Only Admin can change the school account mode.');
+            $permission = PermissionUser::checkpermission(Auth::user()->id, $this->subadmin_menu_id);
+            abort_unless($permission && $permission->is_modify === 'yes', 403);
+        }
+    }
+
+    private function validateAccountMode(Request $request, $mode): void
+    {
+        $request->validate(['account_mode' => ['sometimes', 'required', Rule::in([School::MODE_PARENT, School::MODE_CHILD])]]);
+        if ($mode === School::MODE_CHILD && $request->hasFile('student_excel')) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'student_excel' => 'Parent import is unavailable in Child Accounts mode.',
+            ]);
+        }
+    }
     // Method to display the user table view
     public function index()
     {
@@ -371,6 +390,13 @@ class SchoolController extends Controller
 
     public function store(Request $request)
     {
+        $request->validate(['staff_excel' => 'nullable|file|mimes:xlsx,xls|max:5120']);
+        if ($request->hasFile('staff_excel') && !config('scope.school_extras')) {
+            abort(403, 'Teacher imports are disabled.');
+        }
+        $mode = $request->input('account_mode', School::MODE_PARENT);
+        $this->authorizeAccountMode($mode, School::MODE_PARENT);
+        $this->validateAccountMode($request, $mode);
         $validator = Validator::make($request->all(), [
             'school_name' => [
                 'required',
@@ -403,6 +429,7 @@ class SchoolController extends Controller
         }
 
         $school = [
+            'account_mode' => $mode,
             'name' => $request->school_name,
             'school_code' => $request->school_code,
             'status' => 'active',
@@ -605,8 +632,7 @@ class SchoolController extends Controller
                 (new SchoolSeatService())->remaining($school)
             );
 
-            return redirect('school')->with(
-                'success',
+            return $this->schoolCreatedResponse($request, $school,
                 $insertedCount . ' parent account(s) created successfully.'
                     . $this->onboardingMailSuffix($onboardingMail)
                     . $this->credentialMailSuffix($insertedCount)
@@ -617,10 +643,30 @@ class SchoolController extends Controller
         // fail - send the onboarding mail here instead.
         $onboardingMail = app(SchoolNotifier::class)->schoolOnboarded($school);
 
-        return redirect('school')->with(
-            'success',
+        return $this->schoolCreatedResponse($request, $school,
             'School added successfully.' . $this->onboardingMailSuffix($onboardingMail)
         );
+    }
+
+    private function schoolCreatedResponse(Request $request, School $school, string $message)
+    {
+        if (!$request->hasFile('staff_excel')) {
+            return redirect('school')->with('success', $message);
+        }
+        try {
+            $result = app(SchoolImportService::class)->importStaff($school, $request->file('staff_excel'));
+            if (!$result['status']) {
+                return redirect()->route('school.edit', $school->id)
+                    ->with('error', 'School was created. Teacher import: '.$result['message'])
+                    ->with('teacher_import_rows', $result['rows'] ?? []);
+            }
+            return redirect('school')->with('success', $message.' '.$result['message'])
+                ->with('teacher_import_rows', $result['rows'] ?? []);
+        } catch (\Throwable $e) {
+            Log::warning('Teacher import failed during school setup', ['school_id' => $school->id]);
+            return redirect()->route('school.edit', $school->id)
+                ->with('error', 'School was created, but teacher import could not be completed. Please retry from Edit School.');
+        }
     }
 
 
@@ -890,6 +936,10 @@ class SchoolController extends Controller
     // }
     public function update(Request $request, string $id)
     {
+        $existingSchool = School::findOrFail($id);
+        $mode = $request->input('account_mode', $existingSchool->account_mode);
+        $this->authorizeAccountMode($mode, $existingSchool->account_mode);
+        $this->validateAccountMode($request, $mode);
         $validator = Validator::make($request->all(), [
             'school_name' => [
                 'required',
@@ -918,15 +968,16 @@ class SchoolController extends Controller
         $previousPrice = $school->price;
 
         $school->update([
+            'account_mode' => $mode,
             'name' => $request->school_name,
             'school_code' => $request->school_code,
             'status' => $request->status,
-            'max_limit' => $request->filled('max_limit') ? (int) $request->max_limit : null,
+            'max_limit' => $mode === School::MODE_CHILD ? $school->max_limit : ($request->filled('max_limit') ? (int) $request->max_limit : null),
             // Lowering a limit below current usage is allowed on purpose:
             // existing children are grandfathered and never removed, only
             // further creation is blocked.
             'child_seat_limit' => $request->filled('child_seat_limit') ? (int) $request->child_seat_limit : null,
-            'per_parent_child_limit' => $request->filled('per_parent_child_limit') ? (int) $request->per_parent_child_limit : null,
+            'per_parent_child_limit' => $mode === School::MODE_CHILD ? $school->per_parent_child_limit : ($request->filled('per_parent_child_limit') ? (int) $request->per_parent_child_limit : null),
             'subscription_type' => $request->subscription_type,
             'price' => $request->filled('price') ? $request->price : null,
         ]);
@@ -1575,9 +1626,8 @@ class SchoolController extends Controller
     /**
      * Server-side feed for the Child Accounts table.
      *
-     * A child row carries no school_id of its own - it is only attached to a
-     * school through its parent - so this joins back through parent_id, the
-     * same derivation SchoolSeatService uses to count the school's places.
+     * Linked children belong through their parent; independent children carry
+     * school_id directly. Keep both visible after any school mode change.
      */
     public function children(Request $request, $id)
     {
@@ -1590,14 +1640,18 @@ class SchoolController extends Controller
         // `c`, which matches nothing. Both deleted_at predicates are explicit
         // below instead - same reason SchoolSeatService builds its count this way.
         $children = DB::table('users as c')
-            ->join('users as p', 'p.id', '=', 'c.parent_id')
-            ->where('p.school_id', $id)
-            ->where('p.user_role_id', 3)
+            ->leftJoin('users as p', 'p.id', '=', 'c.parent_id')
+            ->where(function ($query) use ($id) {
+                $query->where(function ($linked) use ($id) {
+                    $linked->where('p.school_id', $id)->where('p.user_role_id', 3)->whereNull('p.deleted_at');
+                })->orWhere(function ($independent) use ($id) {
+                    $independent->where('c.school_id', $id)->whereNull('c.parent_id');
+                });
+            })
             ->where('c.user_role_id', 4)
             ->whereNull('c.deleted_at')
-            ->whereNull('p.deleted_at')
             ->select([
-                'c.id', 'c.name', 'c.username', 'c.dob', 'c.status', 'c.created_at',
+                'c.id', 'c.name', 'c.username', 'c.dob', 'c.status', 'c.created_at', 'c.parent_id',
                 'p.name as parent_name', 'p.email as parent_email',
             ])
             ->orderByDesc('c.id');
@@ -1606,7 +1660,8 @@ class SchoolController extends Controller
             ->addIndexColumn()
             ->editColumn('name', fn ($row) => e($row->name ?: '-'))
             ->editColumn('username', fn ($row) => e($row->username ?: '-'))
-            ->addColumn('parent', fn ($row) => e($row->parent_name ?: '-') . '<br><small class="text-muted">'
+            ->addColumn('account_relationship', fn ($row) => $row->parent_id ? 'Parent-linked' : 'Independent')
+            ->addColumn('parent', fn ($row) => e($row->parent_name ?: 'No parent link') . '<br><small class="text-muted">'
                 . e($row->parent_email) . '</small>')
             ->addColumn('age', function ($row) {
                 if (empty($row->dob)) {

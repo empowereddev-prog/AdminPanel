@@ -9,6 +9,14 @@ use OwenIt\Auditing\Auditable;
 
 class School extends Model implements AuditableContract
 {
+    public const MODE_PARENT = 'linked';
+    public const MODE_CHILD = 'independent';
+
+    public function allowsParentCreation(): bool
+    {
+        return ($this->account_mode ?? self::MODE_PARENT) === self::MODE_PARENT;
+    }
+
     use HasFactory, Auditable;
     protected $guarded = [];
 

@@ -250,6 +250,10 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     // Management screen (menu 3) and authorise against it inside the controller.
     Route::get('school/{id}/roster', [SchoolController::class, 'roster'])->name('school.roster.data');
     Route::post('school/{id}/import/parents', [SchoolController::class, 'importParents'])->name('school.import.parents');
+    Route::post('school/{id}/import/students', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'import'])->name('school.import.students');
+    Route::get('school-students/sample', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'sample'])->name('school.students.sample');
+    Route::get('school/{id}/student-credentials/{file}', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'credentials'])
+        ->whereUuid('file')->name('school.students.credentials');
     Route::post('school/{id}/import/staff', [SchoolController::class, 'importStaff'])->name('school.import.staff')->middleware('school.extras');
     Route::get('school/{id}/teachers', [SchoolController::class, 'teachers'])->name('school.teachers.data')->middleware('school.extras');
     Route::get('school/{id}/children', [SchoolController::class, 'children'])->name('school.children.data');

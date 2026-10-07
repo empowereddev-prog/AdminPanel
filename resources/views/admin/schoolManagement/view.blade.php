@@ -45,6 +45,10 @@
                 </div>
 
                 <hr class="my-3">
+                <div class="mb-2">
+                    <span class="fw-semibold text-muted">Account Mode:</span>
+                    <span>{{ $school->account_mode === 'independent' ? 'Independent Child Accounts' : 'Parent-linked Child Accounts' }}</span>
+                </div>
 
                 <div class="mb-2">
                     <span class="fw-semibold text-muted">🏫 School Code:</span>
@@ -103,6 +107,7 @@
                 {{-- Parents are added by spreadsheet only, so the upload lives
                      next to the list it populates. Same file and same rules as
                      the Edit screen - one service behind both. --}}
+                @if ($school->allowsParentCreation())
                 <div style="border:1px solid #e6edf5;border-radius:8px;padding:18px;background:#fafbfd;margin:0 0 24px;">
                     <form action="{{ route('school.import.parents', $school->id, false) }}" method="POST"
                         enctype="multipart/form-data">
@@ -125,6 +130,7 @@
                     </form>
                 </div>
 
+                @endif
                 {{-- Settings sit in their own strip rather than on the heading row.
                      On the heading row they had to share horizontal space with the
                      title and collapsed into each other on anything but a wide
@@ -178,11 +184,65 @@
             </div>
 
             <div class="card shadow p-4 mt-4">
+                @if ($school->account_mode === 'independent')
+                    <style>
+                        .student-import { border:1px solid #dce5f0; border-radius:12px; background:#f8fafc; padding:24px; margin-bottom:28px; }
+                        .student-import-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:20px; }
+                        .student-import-heading h4 { color:#243b55; font-size:20px; font-weight:700; margin:0 0 6px; }
+                        .student-import-heading p { margin:0; color:#63758a; max-width:65ch; font-size:14px; }
+                        .student-import-heading .btn { flex-shrink:0; }
+                        .student-import-fields { padding:12px 16px; border-radius:8px; background:#edf3fa; color:#42566f; font-size:13px; margin-bottom:16px; line-height:1.7; }
+                        .student-import-upload { padding:20px; border:1px dashed #b8c9df; border-radius:8px; background:#fff; }
+                        .student-import-picker { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+                        .student-import-file { position:relative; margin:0; }
+                        .student-import-file:focus-within { outline:3px solid #9dc6f5; outline-offset:3px; }
+                        .student-import-filename { color:#52667d; font-size:14px; overflow-wrap:anywhere; min-width:0; }
+                        .student-import-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-top:18px; }
+                        .student-import-hint { font-size:13px; color:#63758a; margin:0; max-width:65ch; }
+                        @media (max-width:575px) { .student-import { padding:16px; } .student-import-upload { padding:16px; } .student-import-footer .btn { width:100%; } }
+                    </style>
+                    <form id="studentImportForm" action="{{ route('school.import.students', $school->id) }}" method="POST" enctype="multipart/form-data" class="student-import">
+                        @csrf
+                        <div class="student-import-heading">
+                            <div>
+                                <h4><i class="mdi mdi-account-multiple-plus mr-2" aria-hidden="true"></i>Import Students</h4>
+                                <p>Create independent student accounts for this school using an Excel spreadsheet.</p>
+                            </div>
+                            <a href="{{ route('school.students.sample') }}" class="btn btn-outline-primary">
+                                <i class="mdi mdi-download mr-1" aria-hidden="true"></i>Download student template
+                            </a>
+                        </div>
+                        <div class="student-import-fields">
+                            <strong>Required columns:</strong> Name · Email · Username · Date of Birth (YYYY-MM)
+                        </div>
+                        <div class="student-import-upload">
+                            <div class="font-weight-bold mb-2">Choose your completed spreadsheet</div>
+                            <div class="student-import-picker">
+                                <label for="students_excel" class="btn btn-outline-secondary student-import-file">
+                                    <i class="mdi mdi-folder-open mr-1" aria-hidden="true"></i>Choose File
+                                    <input type="file" id="students_excel" name="students_excel" accept=".xlsx,.xls" required class="sr-only" aria-describedby="student-import-file-help">
+                                </label>
+                                <span id="students_excel_name" class="student-import-filename" aria-live="polite">No file selected</span>
+                            </div>
+                            <div id="student-import-file-help" class="student-import-hint mt-2">Excel (.xlsx or .xls) · Maximum 5 MB · Up to 1,000 students</div>
+                            @error('students_excel') <div class="text-danger small mt-2" role="alert">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="student-import-footer">
+                            <p class="student-import-hint">After import, the school receives a spreadsheet with student login details. Invalid rows must be corrected before accounts are created.</p>
+                            <button type="submit" class="btn btn-primary px-4">
+                                <i class="mdi mdi-upload mr-1" aria-hidden="true"></i>Upload Students
+                            </button>
+                        </div>
+                    </form>
+                @endif
+                @if (session('student_credentials_file'))
+                    <a class="btn btn-outline-primary mb-3" href="{{ route('school.students.credentials', [$school->id, session('student_credentials_file')]) }}">Download student credentials</a>
+                @endif
                 <h4 class="fw-bold text-primary" style="margin:0 0 6px;">
                     <i class="mdi mdi-account-child"></i> Child Accounts
                 </h4>
                 <p class="text-muted" style="margin:0 0 20px;max-width:70ch;">
-                    Children created by this school's parents.
+                    Parent-linked and independently created students belonging to this school.
                     @if (config('scope.school_extras'))
                         Each one uses a child place:
                         <strong>{{ $seats['child_seats_used'] }} of {{ $seats['child_seat_limit'] ?? 'unlimited' }}</strong>
@@ -203,6 +263,7 @@
                                 <th>Username</th>
                                 <th>Age</th>
                                 <th>Parent</th>
+                                <th>Account Relationship</th>
                                 <th>Status</th>
                                 <th>Added</th>
                             </tr>
@@ -269,7 +330,7 @@
             $(document).ready(function() {
                 var csrfToken = $('meta[name="csrf-token"]').attr('content');
 
-                ['parent_excel', 'staff_excel'].forEach(function(id) {
+                ['parent_excel', 'staff_excel', 'students_excel'].forEach(function(id) {
                     var input = document.getElementById(id);
                     if (!input) { return; }
                     input.addEventListener('change', function() {
@@ -307,6 +368,7 @@
                         { data: 'username', name: 'c.username' },
                         { data: 'age', orderable: false, searchable: false },
                         { data: 'parent', name: 'p.name' },
+                        { data: 'account_relationship', orderable: false, searchable: false },
                         { data: 'status_badge', name: 'c.status' },
                         { data: 'added', orderable: false, searchable: false }
                     ]

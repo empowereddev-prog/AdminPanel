@@ -43,6 +43,16 @@ class RegisterService
                 ];
             }
 
+            if (!$school->allowsParentCreation()) {
+                return [
+                    'status' => false,
+                    'message' => $language === 'chinese'
+                        ? '此学校不允许家长注册。请联系学校获取学生帐号。'
+                        : 'Parent signup is unavailable for this school. Contact your school for a student account.',
+                    'user' => null,
+                ];
+            }
+
             // Knowing the code is no longer enough: the address has to be one
             // the school named. Returns allowed immediately - and without
             // touching the database - when the school has not opted in, so
