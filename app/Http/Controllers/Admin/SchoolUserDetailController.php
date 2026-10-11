@@ -106,7 +106,9 @@ class SchoolUserDetailController extends Controller
                 $child->categoryProgress = $categoryProgress;
                 $child->quizProgress = $quizProgress;
             }
-            // ================= Parent Video Progress =================
+            // Use the selected user's audience and watch history.
+            $isParent = $data->user_type === 'parent' || (int) $data->user_role_id === 3;
+            $videoAudience = $isParent ? 'parent' : 'child';
             $parentCategoryProgress = [];
 
             foreach ($categories as $category) {
@@ -115,7 +117,7 @@ class SchoolUserDetailController extends Controller
 
                 // Parent videos
                 $videos = VideoContent::where('category_id', $categoryId)
-                    ->whereIn('user_type', ['parent', 'both'])
+                    ->whereIn('user_type', [$videoAudience, 'both'])
                     ->get();
 
                 $videoIds = $videos->pluck('id')->toArray();
@@ -145,6 +147,7 @@ class SchoolUserDetailController extends Controller
             }
 
             $data->categoryProgress = $parentCategoryProgress;
+
 
             return view('admin.schoolManagement.school_user_detail', compact('data', 'children'));
         }

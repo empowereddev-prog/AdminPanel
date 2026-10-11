@@ -988,12 +988,12 @@ class SchoolController extends Controller
             'name' => $request->school_name,
             'school_code' => $request->school_code,
             'status' => $request->status,
-            'max_limit' => $mode === School::MODE_CHILD ? $school->max_limit : ($request->filled('max_limit') ? (int) $request->max_limit : null),
+            'max_limit' => ($mode === School::MODE_CHILD || !$request->has('max_limit')) ? $school->max_limit : ($request->filled('max_limit') ? (int) $request->max_limit : null),
             // Lowering a limit below current usage is allowed on purpose:
             // existing children are grandfathered and never removed, only
             // further creation is blocked.
             'child_seat_limit' => $request->filled('child_seat_limit') ? (int) $request->child_seat_limit : null,
-            'per_parent_child_limit' => $mode === School::MODE_CHILD ? $school->per_parent_child_limit : ($request->filled('per_parent_child_limit') ? (int) $request->per_parent_child_limit : null),
+            'per_parent_child_limit' => ($mode === School::MODE_CHILD || !$request->has('per_parent_child_limit')) ? $school->per_parent_child_limit : ($request->filled('per_parent_child_limit') ? (int) $request->per_parent_child_limit : null),
             'subscription_type' => $request->subscription_type,
             'price' => $request->filled('price') ? $request->price : null,
         ]);

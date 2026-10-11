@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const mode = document.getElementById('account_mode');
     function updateModeFields() {
         const child = (mode.dataset.mode || mode.value) === 'independent';
-        ['student_excel', 'max_limit', 'per_parent_child_limit'].forEach(function (name) {
+        ['student_excel'].forEach(function (name) {
             const field = document.querySelector('[name="' + name + '"]');
             if (!field) return;
             const group = field.closest('[class*="col-md-"]');

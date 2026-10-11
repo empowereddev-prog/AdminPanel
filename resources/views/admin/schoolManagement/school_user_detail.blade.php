@@ -9,7 +9,7 @@
     <div class="content-wrapper">
         <div class="content">
             <div class="title_left">
-                <h2>School User Child details</h2>
+                <h2>School User Details</h2>
 
             </div>
 
@@ -23,7 +23,7 @@
                             <a href="{{ route('school.show', $data->school_id ?? '') }}">View School User Details </a>
                         </li>
                         <li class="active">
-                            <a href="#">School User Child Details </a>
+                            <a href="#">School User Details </a>
                         </li>
                     </ul>
                 </div>
@@ -147,28 +147,8 @@
                                         </div>
                                         {{-- END Parent Policy Verification --}}
 
-                                        @if (!empty($data->categoryProgress))
-                                            <div class="card p-3 mt-3 mb-4 bg-light" style="border: 1px solid #7c7e80;">
-                                                <h5 class="mb-3 text-primary">Parent Video Progress</h5>
-
-                                                <div class="row">
-                                                    @foreach ($data->categoryProgress as $progress)
-                                                        <div class="col-md-6 mb-3">
-                                                            <strong>{{ $progress['category_name'] }}</strong>
-                                                            <div class="d-flex align-items-center justify-content-between">
-                                                                <span>{{ (int) $progress['percentage'] }}%</span>
-                                                                <div class="progress flex-grow-1 ml-2" style="height: 8px;">
-                                                                    <div class="progress-bar bg-primary"
-                                                                        style="width: {{ $progress['percentage'] }}%">
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    @endforeach
-                                                </div>
-                                            </div>
-                                        @endif
                                     @endif
+                                    @include('admin.schoolManagement.partials.user-progress', ['progressUser' => $data])
                                     @if($data->user_role_id != 5 && $data->user_type != 'teacher')
                                         @if ($children->isNotEmpty())
                                             @foreach ($children as $index => $child)

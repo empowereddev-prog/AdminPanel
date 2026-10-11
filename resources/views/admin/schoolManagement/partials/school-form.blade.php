@@ -90,22 +90,10 @@
             @include('admin.schoolManagement.partials.account-mode')
             <div class="row mt-3">
                 <div class="col-md-6"><div class="form-group">
-                    <label for="max_limit">Parent limit <span class="text-muted font-weight-normal">(optional)</span></label>
-                    <input type="number" min="1" max="100000000" id="max_limit" name="max_limit" class="form-control" value="{{ $schoolValue('max_limit') }}" placeholder="Unlimited">
-                    <small class="text-muted">Caps parent accounts only. Leave blank for unlimited.</small>
-                    @error('max_limit') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
-                </div></div>
-                <div class="col-md-6"><div class="form-group">
                     <label for="child_seat_limit">Child places <span class="text-muted font-weight-normal">(optional)</span></label>
                     <input type="number" min="1" max="100000000" id="child_seat_limit" name="child_seat_limit" class="form-control" value="{{ $schoolValue('child_seat_limit') }}" placeholder="Unlimited">
                     <small class="text-muted">{{ $editing ? 'Currently used: '.($childSeatsUsed ?? 0).'. Existing accounts are retained when reducing capacity.' : 'Total child places available to this school. Leave blank for unlimited.' }}</small>
                     @error('child_seat_limit') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
-                </div></div>
-                <div class="col-md-6"><div class="form-group">
-                    <label for="per_parent_child_limit">Children per parent <span class="text-muted font-weight-normal">(optional)</span></label>
-                    <input type="number" min="1" max="50" id="per_parent_child_limit" name="per_parent_child_limit" class="form-control" value="{{ $schoolValue('per_parent_child_limit', 3) }}" placeholder="Unlimited">
-                    <small class="text-muted">Leave blank for unlimited within the school's child places.</small>
-                    @error('per_parent_child_limit') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
                 </div></div>
             </div>
         </section>
