@@ -39,6 +39,8 @@ Route::get('deeplink/resolve', \App\Http\Controllers\Api\DeepLinkResolveControll
   ->middleware('throttle:deeplink_resolve');
 
 Route::post('webhooks/google', [WebhookController::class, 'google']);
+Route::post('school/account-mode', \App\Http\Controllers\Api\SchoolAccountModeController::class)
+    ->middleware('throttle:30,1');
 Route::post('webhooks/apple', [WebhookController::class, 'apple']);
 
 Route::post('register', [HomeApiController::class, 'register']);
@@ -52,6 +54,7 @@ Route::post('resend-otp', [HomeApiController::class, 'resendOtp']);
 Route::post('student-login', [HomeApiController::class, 'studentLogin']);
 Route::post('individual-login', [HomeApiController::class, 'individualLogin']);
 Route::middleware('auth:api', 'apicheckstatus')->group(function () {
+  Route::get('school/safety-feature', \App\Http\Controllers\Api\SchoolSafetyFeatureController::class);
   Route::post('add-child', [ChildController::class, 'addChild']);
   Route::post('edit-child', [ChildController::class, 'editChild']);
   Route::post('logout', [HomeApiController::class, 'logout']);

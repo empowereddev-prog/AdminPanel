@@ -1143,6 +1143,10 @@ class HomeApiController extends Controller
                         : '学校代码无效，请检查后再试。', 422);
             }
 
+            if ((int) $user->school_id !== (int) $school->id && !$school->allowsParentCreation()) {
+                return ApiResponse::error('Parent enrollment is unavailable for this school account mode.', 422);
+            }
+
             // A parent already attached to a school cannot hop to another one
             // by typing its code. This is the second door into a school, and it
             // had no check of any kind.

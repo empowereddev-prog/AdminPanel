@@ -135,6 +135,42 @@ class SchoolCreationMailTest extends TestCase
         ]);
     }
 
+    public function test_teacher_import_is_available_when_adding_school(): void
+    {
+        config(['scope.school_extras' => true]);
+        $this->actingAs($this->admin(), 'admin')->get(route('school.create'))
+            ->assertOk()->assertSee('Import staff / teachers')->assertSee('name="staff_excel"', false);
+        $email = 'teacher'.uniqid().'@example.test';
+        $response = $this->createSchool(['staff_excel' => $this->parentSheet([['Teacher Name', $email, '', '']])]);
+        $response->assertRedirect('school')->assertSessionHasNoErrors();
+        $school = School::latest('id')->first();
+        $teacher = User::where('email', $email)->firstOrFail();
+        $this->assertSame($school->id, (int) $teacher->school_id);
+        $this->assertSame(5, (int) $teacher->user_role_id);
+        $this->assertNotEmpty($teacher->username);
+    }
+
+    public function test_parent_and_teacher_files_are_both_processed_on_creation(): void
+    {
+        config(['scope.school_extras' => true]);
+        $parentEmail = 'parent'.uniqid().'@example.test';
+        $teacherEmail = 'teacher'.uniqid().'@example.test';
+        $this->createSchool(
+            ['staff_excel' => $this->parentSheet([['Teacher Name', $teacherEmail, '', '']])],
+            $this->parentSheet([['Parent Name', $parentEmail, '+65', '81110001']])
+        )->assertRedirect('school')->assertSessionHasNoErrors();
+        $school = School::latest('id')->first();
+        $this->assertDatabaseHas('users', ['email' => $parentEmail, 'school_id' => $school->id, 'user_role_id' => 3]);
+        $this->assertDatabaseHas('users', ['email' => $teacherEmail, 'school_id' => $school->id, 'user_role_id' => 5]);
+    }
+
+    public function test_teacher_upload_cannot_bypass_disabled_extras(): void
+    {
+        config(['scope.school_extras' => false]);
+        $this->createSchool(['staff_excel' => $this->parentSheet([['Teacher Name', 'teacher@example.test', '', '']])])
+            ->assertForbidden();
+    }
+
     public function test_creating_a_school_without_a_price_is_allowed(): void
     {
         $response = $this->createSchool(['price' => null, 'email' => 'office@noprice.test']);

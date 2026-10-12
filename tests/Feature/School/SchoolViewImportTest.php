@@ -437,7 +437,9 @@ class SchoolViewImportTest extends TestCase
             ->getContent();
 
         $this->assertStringContainsString('>Parents<', $html);
-        $this->assertStringNotContainsString('Parent Accounts', $html);
+        // Parent Accounts now also labels the school's account mode. The
+        // directory itself still has one Parents heading, verified above.
+        $this->assertStringContainsString('Account Mode:', $html);
         $this->assertStringContainsString('Teacher Roster', $html);
 
         $data = $this->actingAs($this->admin(), 'admin')

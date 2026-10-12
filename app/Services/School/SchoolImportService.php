@@ -31,6 +31,9 @@ class SchoolImportService
      */
     public function importParents(School $school, UploadedFile $file, ?int $maxLimit = null): array
     {
+        if (!$school->allowsParentCreation()) {
+            return $this->fail('Parent imports are unavailable in this school account mode.');
+        }
         $rows = $this->rows($school, $file, 'parents', self::PARENT_HEADER);
 
         if ($rows === null) {

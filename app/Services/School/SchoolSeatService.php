@@ -7,21 +7,15 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Counts and caps the child accounts a school's parents have created.
- *
- * A child is a users row with user_role_id = 4 and parent_id set, and its
- * school_id is always NULL - which is why max_limit has never counted one.
- * The count is derived through the parent rather than denormalised onto the
- * child, because writing school_id onto children would silently change
- * SchoolController's parent counts, HomeApiController::login's
- * whereNull('school_id'), the deactivation cascade and the admin user list all
- * at once.
+ * Counts linked and independent student accounts toward a school's child places.
+ * Linked children inherit school membership from their parent; independent
+ * students carry school_id directly. max_limit continues to cap parents only.
  */
 class SchoolSeatService
 {
     /**
-     * Children created by this school's parents. Soft-deleted rows on either
-     * side are excluded, which is what makes deleting a child free its seat.
+     * Both creation types count, including historical accounts after a mode
+     * change. Soft-deleted children and linked parents are excluded.
      */
     public function childCountForSchool(int $schoolId): int
     {
@@ -29,12 +23,16 @@ class SchoolSeatService
         // only one side of a self-join, so both deleted_at predicates are
         // spelled out here instead.
         return (int) DB::table('users as c')
-            ->join('users as p', 'p.id', '=', 'c.parent_id')
-            ->where('p.school_id', $schoolId)
-            ->where('p.user_role_id', 3)
+            ->leftJoin('users as p', 'p.id', '=', 'c.parent_id')
+            ->where(function ($query) use ($schoolId) {
+                $query->where(function ($linked) use ($schoolId) {
+                    $linked->where('p.school_id', $schoolId)->where('p.user_role_id', 3)->whereNull('p.deleted_at');
+                })->orWhere(function ($independent) use ($schoolId) {
+                    $independent->where('c.school_id', $schoolId)->whereNull('c.parent_id');
+                });
+            })
             ->where('c.user_role_id', 4)
             ->whereNull('c.deleted_at')
-            ->whereNull('p.deleted_at')
             ->count();
     }
 
