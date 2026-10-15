@@ -114,7 +114,7 @@ class SchoolStudentController extends Controller
                     || User::withTrashed()->where('user_role_id', 4)->where('email', $student['email'])->exists()) {
                     throw ValidationException::withMessages(['students_excel' => 'Student email or username already exists. No accounts were created.']);
                 }
-                $password = 'Stu@'.Str::random(16).'1';
+                $password = 'Stu@'.Str::random(3).'1';
                 $token = Str::random(64);
                 $user = User::create($student + [
                     'school_id' => $school->id, 'parent_id' => null, 'user_role_id' => 4, 'user_type' => 'child',
