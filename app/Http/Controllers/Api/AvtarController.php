@@ -390,13 +390,19 @@ class AvtarController extends Controller
     public function videoCategory(Request $request)
     {
         $language = $request->language;
-        $childId  = auth()->user()->id;
+        $authUser = auth()->user();
+        $childId  = $authUser->id;
+
+        // Progress is measured against the videos this user can watch: a
+        // parent sees parent + both videos, everyone else child + both.
+        $isParent = (int) $authUser->user_role_id === 3 || $authUser->user_type === 'parent';
+        $audience = $isParent ? ['parent', 'both'] : ['child', 'both'];
 
         $videoCategories = Category::where('status', 'active')
             ->orderBy(DB::raw('CAST(priority AS UNSIGNED)'), 'asc')
             ->get();
 
-        $filteredSessions = $videoCategories->map(function ($session) use ($language, $childId) {
+        $filteredSessions = $videoCategories->map(function ($session) use ($language, $childId, $audience) {
 
             // ✅ Category name (language wise)
             $session->category_name = $language === 'chinese'
@@ -407,7 +413,7 @@ class AvtarController extends Controller
 
             // ✅ Get all videos of this category
             $videos = VideoContent::where('category_id', $session->id)
-                ->whereIn('user_type', ['child', 'both'])
+                ->whereIn('user_type', $audience)
                 ->get();
 
             if ($videos->isEmpty()) {
