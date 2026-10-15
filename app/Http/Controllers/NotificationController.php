@@ -79,7 +79,7 @@ class NotificationController extends Controller
         ContactUs::create($emailData);
 
         if ($admin && $admin->email) {
-            sendContactEmail($admin->email, 'contact_support', $emailData, $lan);
+            ___mail_sender($admin->email, 'contact_support', $emailData, $lan);
         } else {
             \Log::error('contact-support: no admin user with an email address configured.');
         }

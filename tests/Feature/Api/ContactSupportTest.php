@@ -7,7 +7,6 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
-use Laravel\Passport\Passport;
 use Tests\TestCase;
 
 class ContactSupportTest extends TestCase
@@ -24,6 +23,8 @@ class ContactSupportTest extends TestCase
                 'prefix' => '',
             ],
             'mail.default' => 'array',
+            // Exercise endpoint authorization without requiring local OAuth keys.
+            'auth.guards.api.driver' => 'session',
         ]);
 
         Schema::create('users', function (Blueprint $table) {
@@ -43,8 +44,10 @@ class ContactSupportTest extends TestCase
             $table->string('email');
             $table->string('subject');
             $table->text('message');
+            $table->bigInteger('phone_no');
             $table->timestamps();
         });
+        (require database_path('migrations/2026_10_15_180000_make_contact_support_phone_optional.php'))->up();
         Schema::create('email_templates', function (Blueprint $table) {
             $table->id();
             $table->string('variable_name');
@@ -63,12 +66,12 @@ class ContactSupportTest extends TestCase
             ]);
         }
 
-        Passport::actingAs(new User([
+        $this->actingAs(new User([
             'id' => 100,
             'email' => 'parent@example.test',
             'user_type' => 'parent',
             'status' => 'active',
-        ]), [], 'api');
+        ]), 'api');
     }
 
     public function test_mobile_payload_without_subject_saves_and_sends_english_emails(): void
@@ -108,6 +111,35 @@ class ContactSupportTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('data.subject', 'Account help')
             ->assertJsonPath('message', 'Your message has been sent successfully!');
+    }
+
+    public function test_mobile_reported_payload_is_saved(): void
+    {
+        $this->postJson('/api/contact-support', [
+            'name' => 'Gurjinder ',
+            'email' => 'caller@example.test',
+            'message' => 'test message',
+            'laguage' => 'en',
+        ])->assertOk()->assertJsonPath('status', true);
+
+        $this->assertDatabaseHas('contact_us', [
+            'name' => 'Gurjinder',
+            'message' => 'test message',
+            'phone_no' => null,
+        ]);
+    }
+
+    public function test_mail_transport_failure_does_not_discard_saved_request(): void
+    {
+        Mail::shouldReceive('send')->twice()->andThrow(new \RuntimeException('SMTP unavailable'));
+
+        $this->postJson('/api/contact-support', [
+            'name' => 'Parent',
+            'message' => 'Please help',
+            'laguage' => 'en',
+        ])->assertOk()->assertJsonPath('status', true);
+
+        $this->assertDatabaseCount('contact_us', 1);
     }
 
     public function test_empty_subject_uses_default_and_invalid_subject_is_rejected(): void
