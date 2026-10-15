@@ -98,7 +98,8 @@ class SchoolChildDetailTest extends TestCase
         $child = $this->independent($school);
         $rows = $this->actingAs($this->admin(), 'admin')->getJson(route('school.children.data', $school->id))
             ->assertOk()->json('data');
-        $this->assertStringContainsString('View Details', $rows[0]['action']);
+        $this->assertStringContainsString('mdi-eye', $rows[0]['action']);
+        $this->assertStringNotContainsString('>View Details</a>', $rows[0]['action']);
         $this->assertStringContainsString(route('school.children.show', [$school->id, $child->id], false), $rows[0]['action']);
     }
 }

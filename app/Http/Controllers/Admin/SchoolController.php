@@ -1633,7 +1633,10 @@ class SchoolController extends Controller
                     . ($active ? 'Active' : 'Inactive') . '</span>';
             })
             ->addColumn('added', fn ($row) => optional($row->created_at)->format('d M Y') ?: '-')
-            ->addColumn('action', fn ($row) => '<a href="javascript:void(0)" class="teacher-delete" data-id="' . $row->id
+            ->addColumn('action', fn ($row) => '<a class="view mr-2" style="font-size:20px" title="View teacher details" href="'
+                . e(route('school.teachers.show', ['id' => $id, 'teacherId' => $row->id], false))
+                . '" aria-label="View details for '.e($row->name ?: 'teacher').'"><i class="mdi mdi-eye" aria-hidden="true"></i></a> '
+                . '<a href="javascript:void(0)" class="teacher-delete" data-id="' . $row->id
                 . '" title="Remove teacher" style="font-size:18px;color:#a63d38"><i class="mdi mdi-trash-can"></i></a>')
             ->rawColumns(['status_badge', 'action'])
             ->make(true);
@@ -1699,9 +1702,9 @@ class SchoolController extends Controller
                     . ($active ? 'Active' : 'Inactive') . '</span>';
             })
             ->addColumn('added', fn ($row) => $row->created_at ? \Carbon\Carbon::parse($row->created_at)->format('d M Y') : '-')
-            ->addColumn('action', fn ($row) => '<a class="btn btn-sm btn-primary" href="'
+            ->addColumn('action', fn ($row) => '<a class="view" style="font-size:20px" title="View child details" href="'
                 . e(route('school.children.show', ['id' => $id, 'childId' => $row->id], false))
-                . '" aria-label="View details for '.e($row->name ?: 'child').'">View Details</a>')
+                . '" aria-label="View details for '.e($row->name ?: 'child').'"><i class="mdi mdi-eye" aria-hidden="true"></i></a>')
             ->rawColumns(['parent', 'status_badge', 'action'])
             ->make(true);
     }

@@ -256,6 +256,7 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
         ->whereUuid('file')->name('school.students.credentials');
     Route::post('school/{id}/import/staff', [SchoolController::class, 'importStaff'])->name('school.import.staff')->middleware('school.extras');
     Route::get('school/{id}/teachers', [SchoolController::class, 'teachers'])->name('school.teachers.data')->middleware('school.extras');
+    Route::get('school/{id}/teachers/{teacherId}', [\App\Http\Controllers\Admin\SchoolTeacherDetailController::class, 'show'])->name('school.teachers.show')->middleware('school.extras');
     Route::get('school/{id}/children', [SchoolController::class, 'children'])->name('school.children.data');
     Route::get('school/{id}/children/{childId}', [\App\Http\Controllers\Admin\SchoolChildDetailController::class, 'show'])->name('school.children.show');
     Route::post('school/roster/{invite}/revoke', [SchoolController::class, 'revokeInvite'])->name('school.roster.revoke')->middleware('school.extras');
