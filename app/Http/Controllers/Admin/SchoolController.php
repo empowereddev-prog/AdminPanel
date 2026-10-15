@@ -1699,7 +1699,10 @@ class SchoolController extends Controller
                     . ($active ? 'Active' : 'Inactive') . '</span>';
             })
             ->addColumn('added', fn ($row) => $row->created_at ? \Carbon\Carbon::parse($row->created_at)->format('d M Y') : '-')
-            ->rawColumns(['parent', 'status_badge'])
+            ->addColumn('action', fn ($row) => '<a class="btn btn-sm btn-primary" href="'
+                . e(route('school.children.show', ['id' => $id, 'childId' => $row->id], false))
+                . '" aria-label="View details for '.e($row->name ?: 'child').'">View Details</a>')
+            ->rawColumns(['parent', 'status_badge', 'action'])
             ->make(true);
     }
 

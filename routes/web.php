@@ -257,6 +257,7 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::post('school/{id}/import/staff', [SchoolController::class, 'importStaff'])->name('school.import.staff')->middleware('school.extras');
     Route::get('school/{id}/teachers', [SchoolController::class, 'teachers'])->name('school.teachers.data')->middleware('school.extras');
     Route::get('school/{id}/children', [SchoolController::class, 'children'])->name('school.children.data');
+    Route::get('school/{id}/children/{childId}', [\App\Http\Controllers\Admin\SchoolChildDetailController::class, 'show'])->name('school.children.show');
     Route::post('school/roster/{invite}/revoke', [SchoolController::class, 'revokeInvite'])->name('school.roster.revoke')->middleware('school.extras');
     Route::post('school/roster/{invite}/restore', [SchoolController::class, 'restoreInvite'])->name('school.roster.restore')->middleware('school.extras');
     Route::post('school/roster/{invite}/resend', [SchoolController::class, 'resendInvite'])->name('school.roster.resend')->middleware('school.extras');

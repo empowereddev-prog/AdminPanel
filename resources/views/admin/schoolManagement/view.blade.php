@@ -270,6 +270,7 @@
                                 <th>Account Relationship</th>
                                 <th>Status</th>
                                 <th>Added</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                     </table>
@@ -374,7 +375,8 @@
                         { data: 'parent', name: 'p.name' },
                         { data: 'account_relationship', orderable: false, searchable: false },
                         { data: 'status_badge', name: 'c.status' },
-                        { data: 'added', orderable: false, searchable: false }
+                        { data: 'added', orderable: false, searchable: false },
+                        { data: 'action', orderable: false, searchable: false }
                     ]
                 });
 
