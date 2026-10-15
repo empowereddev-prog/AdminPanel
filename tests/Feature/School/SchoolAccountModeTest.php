@@ -5,7 +5,6 @@ namespace Tests\Feature\School;
 use App\Models\PermissionUser;
 use App\Models\School;
 use App\Models\User;
-use App\Services\RegisterService;
 use App\Services\School\SchoolImportService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Http\UploadedFile;
@@ -39,7 +38,7 @@ class SchoolAccountModeTest extends TestCase
             ->assertJsonPath('data.parent_signup_allowed', true);
         $school->update(['account_mode' => 'independent']);
         $this->postJson('/api/school/account-mode', ['school_code' => $school->school_code])
-            ->assertOk()->assertJsonPath('data.parent_signup_allowed', false);
+            ->assertOk()->assertJsonPath('data.parent_signup_allowed', true);
         $this->postJson('/api/school/account-mode', ['school_code' => 'does-not-exist'])->assertNotFound();
     }
 
@@ -76,13 +75,11 @@ class SchoolAccountModeTest extends TestCase
         $this->assertSame('linked', $school->fresh()->account_mode);
     }
 
-    public function test_child_school_blocks_parent_signup_and_import_without_sending_mail(): void
+    public function test_child_school_blocks_parent_import_without_sending_mail(): void
     {
         Mail::fake();
         $school = School::factory()->create(['account_mode' => 'independent']);
         $before = User::count();
-        $result = app(RegisterService::class)->register(['password' => 'Example@123', 'school_code' => $school->school_code]);
-        $this->assertFalse($result['status']);
         $file = UploadedFile::fake()->create('parents.xlsx');
         $this->assertFalse(app(SchoolImportService::class)->importParents($school, $file)['status']);
         $this->assertSame($before, User::count());
@@ -109,15 +106,15 @@ class SchoolAccountModeTest extends TestCase
             ->assertSessionHasErrors('student_excel');
     }
 
-    public function test_new_enrollment_is_blocked_but_existing_parent_profile_is_preserved(): void
+    public function test_new_enrollment_is_allowed_and_existing_parent_profile_is_preserved(): void
     {
         Mail::fake();
         $school = School::factory()->create(['account_mode' => 'independent']);
         $parent = User::factory()->parent()->create();
         \Laravel\Passport\Passport::actingAs($parent, [], 'api');
         $this->postJson('/api/update-parent-profile', ['school_code' => $school->school_code])
-            ->assertStatus(422);
-        $this->assertNull($parent->fresh()->school_id);
+            ->assertOk()->assertJsonPath('status', true);
+        $this->assertSame($school->id, (int) $parent->fresh()->school_id);
         $parent->update(['school_id' => $school->id]);
         $this->postJson('/api/update-parent-profile', ['school_code' => $school->school_code, 'name' => 'Existing Parent'])
             ->assertOk()->assertJsonPath('status', true);

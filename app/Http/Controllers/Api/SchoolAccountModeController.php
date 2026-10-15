@@ -20,8 +20,7 @@ class SchoolAccountModeController extends Controller
             'account_mode' => $school->account_mode,
             'needs_safety_feature' => $school->needs_safety_feature,
             'safety_feature_enabled' => $school->safetyFeatureEnabled(),
-            'parent_signup_allowed' => $school->allowsParentCreation()
-                && ($school->self_signup_enabled ?? 'yes') === 'yes',
+            'parent_signup_allowed' => ($school->self_signup_enabled ?? 'yes') === 'yes',
             'child_creation_mode' => $school->account_mode === School::MODE_CHILD ? 'school_import' : 'parent_linked',
         ], 'School account mode retrieved.');
     }

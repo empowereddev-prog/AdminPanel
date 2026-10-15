@@ -67,13 +67,13 @@ Example independent result:
 }
 ```
 
-Linked returns `account_mode=linked`, `child_creation_mode=parent_linked`.
+Linked returns `account_mode=linked`, `child_creation_mode=parent_linked`. Independent returns `account_mode=independent`, `child_creation_mode=school_import`. Both allow parent signup when the signup switch is on.
 `parent_signup_allowed` additionally respects the existing school signup switch.
 Roster/email validation still happens at signup; the lookup is not authorization.
 Invalid/inactive code returns HTTP 404. Validation uses HTTP 422; rate limit is
 30 requests/minute. Fetch again when the entered school code changes.
 
-Linked: retain parent signup and linked child workflows. Independent: display
+Both modes: parent signup by school code is allowed when `parent_signup_allowed` is true. Signup switches and roster/email checks still apply. Independent mode controls student creation, not whether a parent may register. Independent: display
 “Your school creates your student account. Use the credentials provided by your
 school.” Offer the existing child username/password login (`POST /api/login`,
 `type=child`). Do not use the legacy `student-login` endpoint for these new
