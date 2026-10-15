@@ -432,13 +432,22 @@ class HomeApiController extends Controller
                 return ApiResponse::error($language == 'english' ? 'This account has been deactivated. Please contact technical support.' : '该帐号已停用。请联系技术支持。', 200, null, (object) []);
             } elseif ($credentials) {
                 if (auth()->user()->is_mobile_verified == 'no') {
-                    $typeId = Role::where('name', $request->type)->value('id');
-                    $data = User::where('phone_no', $request->phone_no)->where('user_role_id', $typeId)->first();
+                    // The account that just authenticated, not a phone-number
+                    // lookup that could match a different user.
+                    $data = auth()->user();
                     $otp = ___otp_code();
                     $message = "Hello User, Your mobile verification code is $otp";
                     ___sms_sender($message, $data->country_code . $data->phone_no, $language);
-                    User::where('id', $data->id)->update(['mobile_otp' => $otp]);
-                    return ApiResponse::error($language == 'english' ? 'Please verify your mobile number ' : '请验证您的手机号码', 200, null, (object) []);
+                    // verify-otp compares users.otp, so the code must be stored
+                    // there (mobile_otp alone could never be verified).
+                    User::where('id', $data->id)->update([
+                        'otp' => $otp,
+                        'otp_expires_at' => Carbon::now()->addMinutes(5),
+                        'mobile_otp' => $otp,
+                    ]);
+                    // The flag lets the app open the OTP screen; the message is
+                    // unchanged for older app versions.
+                    return ApiResponse::error($language == 'english' ? 'Please verify your mobile number ' : '请验证您的手机号码', 200, null, ['requires_mobile_verification' => true]);
                 } elseif (empty(auth()->user()->email_verified_at)) {
                     $encryptedEmail = Crypt::encryptString(auth()->user()->email);
 
