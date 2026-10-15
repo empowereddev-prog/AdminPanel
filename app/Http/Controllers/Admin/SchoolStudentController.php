@@ -10,6 +10,7 @@ use App\Models\School;
 use App\Models\User;
 use App\Services\School\SchoolContractService;
 use App\Services\School\SchoolSeatService;
+use App\Services\School\StudentImportReader;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class SchoolStudentController extends Controller
 {
-    private const HEADER = ['Name', 'Email', 'Username', 'Date of Birth (YYYY-MM)'];
+    private const HEADER = StudentImportReader::HEADER;
 
     private function authorizeSchool(): void
     {
@@ -65,11 +66,12 @@ class SchoolStudentController extends Controller
         $request->validate(['students_excel' => 'required|file|mimes:xlsx,xls|max:5120']);
         $school = School::findOrFail($id);
         $book = IOFactory::load($request->file('students_excel')->getRealPath());
-        $rows = $book->getActiveSheet()->toArray();
-        $book->disconnectWorksheets();
-        $header = array_shift($rows);
-        if ($header !== self::HEADER || count($rows) > 1000) {
-            throw ValidationException::withMessages(['students_excel' => 'Use the student template with at most 1000 rows.']);
+        try {
+            $rows = (new StudentImportReader())->read($book->getActiveSheet());
+        } catch (\InvalidArgumentException $e) {
+            throw ValidationException::withMessages(['students_excel' => $e->getMessage()]);
+        } finally {
+            $book->disconnectWorksheets();
         }
         $valid = [];
         $names = [];
