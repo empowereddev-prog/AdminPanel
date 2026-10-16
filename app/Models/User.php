@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Laravel\Passport\HasApiTokens;
 use OwenIt\Auditing\Auditable;
 use OwenIt\Auditing\Contracts\Auditable as AuditableContract;
@@ -56,6 +57,27 @@ class User extends Authenticatable implements AuditableContract
     public function children()
     {
         return $this->hasMany(Child::class, 'parent_id', 'id');
+    }
+
+    /**
+     * Soft-delete this account together with the child accounts linked to it
+     * (users.parent_id). Their device tokens are removed and their API tokens
+     * revoked so they cannot keep a session. School-imported students have no
+     * parent_id and are never touched. Matches the "your child's profile
+     * information and data will also be deleted" wording in the app.
+     */
+    public function deleteWithLinkedChildren(): void
+    {
+        DB::transaction(function () {
+            foreach (self::where('parent_id', $this->id)->get() as $child) {
+                DeviceToken::where('user_id', $child->id)->delete();
+                $child->tokens()->update(['revoked' => true]);
+                $child->delete();
+            }
+
+            DeviceToken::where('user_id', $this->id)->delete();
+            $this->delete();
+        });
     }
 
     public function child()
