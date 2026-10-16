@@ -132,31 +132,7 @@
 
                                     <h5 class="mb-3 text-primary">Policy Verification Details</h5>
 
-                                    {{-- Popup 1 --}}
-                                    <div class="mb-3">
-                                        <strong>Parental consent policy Verified at:</strong>
-
-                                        @if($data->popup_1_updated_at)
-                                            <span class="text-success">
-                                                {{ $data->popup_1_updated_at->format('d M Y, h:i A') }}
-                                            </span>
-                                        @else
-                                            <span class="text-danger">Not Verified</span>
-                                        @endif
-                                    </div>
-
-                                    {{-- Popup 2 --}}
-                                    <div class="mb-2">
-                                        <strong>Your child’s privacy policy verified at:</strong>
-
-                                        @if($data->popup_2_updated_at)
-                                            <span class="text-success">
-                                                {{ $data->popup_2_updated_at->format('d M Y, h:i A') }}
-                                            </span>
-                                        @else
-                                            <span class="text-danger">Not Verified</span>
-                                        @endif
-                                    </div>
+                                    @include('admin.partials.safety-acknowledgement', ['ackUser' => $data])
 
                                 </div>
 
@@ -305,31 +281,7 @@
                                                                         Policy Verification Details
                                                                     </h6>
 
-                                                                    {{-- Popup 1 --}}
-                                                                    <div class="mb-3">
-                                                                        <strong>Parental consent policy Verified at:</strong>
-
-                                                                        @if($child->popup_1_updated_at)
-                                                                            <span class="text-success">
-                                                                                {{ $child->popup_1_updated_at->format('d M Y, h:i A') }}
-                                                                            </span>
-                                                                        @else
-                                                                            <span class="text-danger">Not Verified</span>
-                                                                        @endif
-                                                                    </div>
-
-                                                                    {{-- Popup 2 --}}
-                                                                    <div>
-                                                                        <strong>Your child’s privacy policy verified at:</strong>
-
-                                                                        @if($child->popup_2_updated_at)
-                                                                            <span class="text-success">
-                                                                                {{ $child->popup_2_updated_at->format('d M Y, h:i A') }}
-                                                                            </span>
-                                                                        @else
-                                                                            <span class="text-danger">Not Verified</span>
-                                                                        @endif
-                                                                    </div>
+                                                                    @include('admin.partials.safety-acknowledgement', ['ackUser' => $child])
 
                                                                 </div>
                                                             </div>

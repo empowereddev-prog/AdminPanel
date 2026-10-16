@@ -75,6 +75,11 @@ class User extends Authenticatable implements AuditableContract
                 $child->delete();
             }
 
+            // A school parent who deletes their own account must be able to
+            // register again, so give their roster entry back (a no-op for
+            // anyone not on a roster). The admin delete path already does this.
+            (new \App\Services\School\SchoolRosterService())->release($this);
+
             DeviceToken::where('user_id', $this->id)->delete();
             $this->delete();
         });

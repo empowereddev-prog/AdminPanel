@@ -28,7 +28,8 @@ class SchoolChildDetailTest extends TestCase
     {
         $school = School::factory()->create(['account_mode' => 'independent']);
         $child = $this->independent($school);
-        $child->update(['popup_1_updated_at' => '2026-10-15 12:44:00', 'popup_2_updated_at' => null]);
+        // The single safety notice stamps both; a half-set pair counts as not acknowledged.
+        $child->update(['popup_1_updated_at' => '2026-10-15 12:44:00', 'popup_2_updated_at' => '2026-10-15 12:45:00']);
         $category = Category::create(['category_name' => 'Child detail progress', 'status' => 'active']);
         $video = VideoContent::create(['category_id' => $category->id, 'title' => 'Child detail video',
             'description' => 'Test', 'user_type' => 'child', 'video_duration' => '10:00', 'status' => 'active']);
@@ -45,7 +46,7 @@ class SchoolChildDetailTest extends TestCase
             'last_watched_duration' => '10:00', 'total_video_duration' => '10:00', 'is_completed' => 'yes']);
         $this->actingAs($this->admin(), 'admin')->get(route('school.children.show', [$school->id, $child->id]))
             ->assertOk()->assertSee($child->name)->assertSee($child->username)->assertSee('Independent')
-            ->assertSee('Policy Verification Details')->assertSee('15 Oct 2026, 12:44 PM')->assertSee('Not Verified')
+            ->assertSee('Policy Verification Details')->assertSee('Safety information acknowledged at')->assertSee('15 Oct 2026, 12:45 PM')
             ->assertSee('Video Progress by Category')->assertSee('Quiz Progress by Category')->assertSee('Child detail progress')
             ->assertViewHas('child', fn ($data) => $data->categoryProgress[$category->id]['percentage'] == 50);
     }
