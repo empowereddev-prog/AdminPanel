@@ -74,7 +74,7 @@ if (!function_exists('___render_email_template')) {
             ->first()
             ?: EmailTemplate::where('variable_name', $template_code)->first();
 
-        $subject = 'EmpowerED Health';
+        $subject = \App\Support\Brand::NAME . ' Health';
         $body = '';
         if (!empty($template)) {
             $variables = explode(',', (string) $template->variables);
@@ -95,7 +95,13 @@ if (!function_exists('___render_email_template')) {
             }
         }
 
-        return ['subject' => $subject, 'body' => $body, 'found' => !empty($template)];
+        // Stored rows can carry hand-typed variants of the brand name, so it is
+        // normalised on the way out and no edit can put one in front of a user.
+        return [
+            'subject' => \App\Support\Brand::normalize($subject),
+            'body' => \App\Support\Brand::normalize($body),
+            'found' => !empty($template),
+        ];
     }
 }
 
@@ -133,7 +139,7 @@ if (!function_exists('___mail_sender')) {
         }
 
         $fromAddress = config('mail.from.address', 'hello@example.com');
-        $fromName = config('mail.from.name', 'EmpowerED');
+        $fromName = \App\Support\Brand::normalize((string) config('mail.from.name', \App\Support\Brand::NAME));
         $payload = array_merge($data, [
             'body' => $body,
             'otp' => $data['otp'] ?? $data['code'] ?? '',
@@ -183,7 +189,7 @@ function sendContactEmail($userEmail, $template_code, $data, $lan)
         // dd($variables);
         Config::set(['port' => env("MAIL_PORT"), 'host' => env("MAIL_HOST"), 'username' => env("MAIL_USERNAME"), 'password' => env("MAIL_PASSWORD")]);
 
-        $sender = ['subject' => $subject, 'email' => $userEmail, 'from' => ['address' => 'dummy@gmail.com', 'name' => 'Empower Ed']];
+        $sender = ['subject' => $subject, 'email' => $userEmail, 'from' => ['address' => 'dummy@gmail.com', 'name' => \App\Support\Brand::NAME]];
         if (!empty($body) && !empty($userEmail)) {
             Mail::send('emails.default', ['body' => $body], function ($message) use ($sender, $data) {
                 $message->to(

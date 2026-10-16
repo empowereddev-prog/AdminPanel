@@ -45,7 +45,8 @@ class AccountEmailTemplateSeeder extends Seeder
     /**
      * Every token listed in `variables` MUST be supplied by every call site -
      * see the note on SchoolEmailTemplateSeeder::templates(). Here that is
-     * HomeApiController::deleteUser(), pinned by
+     * HomeApiController::deleteUser() (and, for verification_email,
+     * RegisterService::register and HomeApiController::login), pinned by
      * SchoolEmailTemplateContractTest.
      *
      * @return array<string,array{subject:string,variables:string,description:string}>
@@ -53,6 +54,16 @@ class AccountEmailTemplateSeeder extends Seeder
     private function templates(): array
     {
         return [
+            // The link a parent must follow before the app lets them sign in.
+            // It had no row anywhere in this repo - only a hand-made production
+            // row in an older layout - so it is seeded here and replaced by
+            // 2026_10_17_100000_upsert_verification_email_template.
+            'verification_email' => [
+                'subject' => \Database\Seeders\Emails\VerificationEmailTemplate::SUBJECT,
+                'variables' => \Database\Seeders\Emails\VerificationEmailTemplate::VARIABLES,
+                'description' => \Database\Seeders\Emails\VerificationEmailTemplate::html(),
+            ],
+
             // Sent as the account is soft-deleted, so it is the last thing the
             // user hears from us - it has to name the address it acted on.
             'delete_account' => [
