@@ -286,7 +286,7 @@ class LoginController extends Controller
             return back()->with('error', 'Invalid email or password');
         }
 
-        $user->delete();
+        $user->deleteWithLinkedChildren();
 
         return redirect('/')->with('success', 'Account deleted successfully');
     }

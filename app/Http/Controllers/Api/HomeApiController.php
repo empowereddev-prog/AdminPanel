@@ -935,8 +935,8 @@ class HomeApiController extends Controller
                 'year' => (string) date('Y'),
             ];
             ___mail_sender($user->email, 'delete_account', $emailData, $language);
-            DeviceToken::where('user_id', $user->id)->delete();
-            $user->delete(); // Soft delete the parent account
+            // Soft delete the parent account and its linked child accounts.
+            $user->deleteWithLinkedChildren();
 
             return [
                 'status' => true,
