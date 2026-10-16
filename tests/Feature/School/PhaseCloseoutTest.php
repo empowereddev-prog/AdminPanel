@@ -308,6 +308,43 @@ class PhaseCloseoutTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    // ---- Account deletion -----------------------------------------------------
+
+    public function test_self_deleting_a_school_parent_gives_their_roster_entry_back(): void
+    {
+        $school = School::factory()->enforcingRoster()->create(['status' => 'active']);
+        $parent = User::factory()->parent()->inSchool($school)->create();
+        $invite = SchoolParentInvite::factory()->forEmail($parent->email)->claimedBy($parent)->create(['school_id' => $school->id]);
+
+        $parent->deleteWithLinkedChildren();
+
+        $invite->refresh();
+        $this->assertSame('invited', $invite->status);
+        $this->assertNull($invite->claimed_user_id);
+        $this->assertSoftDeleted('users', ['id' => $parent->id]);
+    }
+
+    public function test_web_delete_page_tells_the_parent_about_synced_children(): void
+    {
+        $this->get('/delete-account')->assertOk()
+            ->assertSee("If your child's account is synced to your account, your child's profile information and data will also be deleted.", false);
+    }
+
+    public function test_admin_shows_one_safety_acknowledgement_only_when_both_flags_are_stamped(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $stamped = $this->independentStudent($school);
+        $stamped->update(['popup_1_updated_at' => '2026-10-15 09:00:00', 'popup_2_updated_at' => '2026-10-15 09:05:00']);
+        $half = $this->independentStudent($school);
+        $half->update(['popup_1_updated_at' => '2026-10-15 09:00:00']);
+
+        $this->actingAs($this->admin(3), 'admin');
+        $this->get(route('school.children.show', [$school->id, $stamped->id]))->assertOk()
+            ->assertSee('Safety information acknowledged at')->assertSee('15 Oct 2026, 09:05 AM')
+            ->assertDontSee('Parental consent policy');
+        $this->get(route('school.children.show', [$school->id, $half->id]))->assertOk()->assertSee('Not Verified');
+    }
+
     // ---- Student credentials re-download -------------------------------------
 
     public function test_latest_student_credentials_stay_downloadable_from_school_details(): void
