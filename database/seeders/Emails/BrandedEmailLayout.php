@@ -2,6 +2,8 @@
 
 namespace Database\Seeders\Emails;
 
+use App\Support\Brand;
+
 /**
  * The shared chrome for EmpowerED transactional email.
  *
@@ -34,7 +36,8 @@ class BrandedEmailLayout
      */
     public static function wrap(string $heading, string $body, ?array $cta = null, ?string $strapline = null): string
     {
-        $strapline = $strapline ?? 'Teen Health &amp; Wellbeing App for Schools | EmpowerED';
+        $name = Brand::NAME;
+        $strapline = $strapline ?? "Teen Health &amp; Wellbeing App for Schools | {$name}";
         $brand = self::BRAND;
         $pageBg = self::PAGE_BG;
         $cardBg = self::CARD_BG;
@@ -51,7 +54,7 @@ class BrandedEmailLayout
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:{$cardBg};border-radius:12px;overflow:hidden;border:1px solid {$border};">
         <tr>
           <td style="background-color:{$brand};padding:28px 32px;text-align:center;">
-            <p style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">EmpowerED</p>
+            <p style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">{$name}</p>
             <p style="margin:8px 0 0;color:#d6e4ff;font-size:14px;">{$strapline}</p>
           </td>
         </tr>
@@ -64,7 +67,7 @@ class BrandedEmailLayout
         </tr>
         <tr>
           <td style="background-color:#f7f9fc;padding:16px 32px;text-align:center;border-top:1px solid #e6edf5;">
-            <p style="margin:0;color:{$muted};font-size:12px;">&copy; {year} Teen Health &amp; Wellbeing App for Schools | EmpowerED. All rights reserved.</p>
+            <p style="margin:0;color:{$muted};font-size:12px;">&copy; {year} Teen Health &amp; Wellbeing App for Schools | {$name}. All rights reserved.</p>
           </td>
         </tr>
       </table>
@@ -140,7 +143,8 @@ HTML;
 HTML;
     }
 
-    private static function button(string $label, string $url): string
+    /** A bulletproof CTA button; wrap() calls it too, but a body can place one mid-flow. */
+    public static function button(string $label, string $url): string
     {
         $brand = self::BRAND;
 

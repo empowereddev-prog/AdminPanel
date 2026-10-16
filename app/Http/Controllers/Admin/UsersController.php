@@ -452,28 +452,28 @@ class UsersController extends Controller
 
     public function verifyUser($user_id, $email)
     {
-        $decryptedEmail = Crypt::decryptString($email);
-        // dd($user_id);
+        try {
+            $decryptedEmail = Crypt::decryptString($email);
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            return view('verifySignUp')->with('error', 'Invalid verification link.');
+        }
+
         $user = User::find($user_id);
         if (!$user) {
             return view('verifySignUp')->with('error', 'Invalid verification link.');
-
-            // }
-            // if($user->send_mail_timestamp < now()) {
-            //     return view('verifySignUp')->with('message', 'This link has expired');
-
         }
         if ($user->email_verified_at) {
-            if ($user->email_verified_at < now()) {
-                return view('verifySignUp')->with('message', 'Your email is already verified.');
-            }
+            return view('verifySignUp')->with('message', 'Your email is already verified.');
         }
-        // dd($user);
-        $user->email = $decryptedEmail;
+        // The link carries the address it was issued for. If the account's
+        // email has since changed, that link must not rewrite it.
+        if (strcasecmp($decryptedEmail, (string) $user->email) !== 0) {
+            return view('verifySignUp')->with('error', 'This verification link is no longer valid. Please sign in to the app to receive a new one.');
+        }
+
         $user->email_verified_at = now();
         $user->save();
 
-        // dd($user);
         return view('verifySignUp')->with('success', 'Your email has been successfully verified!');
     }
 

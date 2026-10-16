@@ -171,7 +171,8 @@ class RegisterService
         $emailData = [
             'name' => $user->name,
             'email' => $user->email,
-            'link' => route('user.verify', ['user_id' => $user->id, 'email' => $encryptedEmail])
+            'link' => route('user.verify', ['user_id' => $user->id, 'email' => $encryptedEmail]),
+            'year' => (string) date('Y'),
         ];
         ___mail_sender($emailData['email'], 'verification_email', $emailData, $language);
         // Send OTP to user
