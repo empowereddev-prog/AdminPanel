@@ -9,7 +9,7 @@
     <div class="content-wrapper">
         <div class="content">
             <div class="title_left">
-                <h2>School User Details</h2>
+                <h2>{{ (int) $data->user_role_id === 3 ? 'Parent Details' : 'School User Details' }}</h2>
 
             </div>
 
@@ -20,10 +20,10 @@
                             <a href="{{ route('user.index') }}">School Management</a>
                         </li>
                         <li class="active">
-                            <a href="{{ route('school.show', $data->school_id ?? '') }}">View School User Details </a>
+                            <a href="{{ route('school.show', $data->school_id ?? '') }}">View {{ (int) $data->user_role_id === 3 ? 'Parent' : 'School User' }} Details </a>
                         </li>
                         <li class="active">
-                            <a href="#">School User Details </a>
+                            <a href="#">{{ (int) $data->user_role_id === 3 ? 'Parent' : 'School User' }} Details </a>
                         </li>
                     </ul>
                 </div>

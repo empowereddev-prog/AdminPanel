@@ -22,6 +22,31 @@ class School extends Model implements AuditableContract
         return ($this->needs_safety_feature ?? 'yes') === 'yes';
     }
 
+    /**
+     * The school a user belongs to. Linked children inherit it from their
+     * parent; independent students, school parents and teachers carry their own
+     * school_id. Individual (non-school) accounts have none.
+     */
+    public static function forUser(?User $user): ?self
+    {
+        if (!$user) {
+            return null;
+        }
+
+        $schoolId = $user->school_id ?: $user->parent?->school_id;
+
+        return $schoolId ? static::find($schoolId) : null;
+    }
+
+    /**
+     * Whether the Get Help / safety alerts apply to this user. Accounts outside
+     * a school keep the feature, matching the API default.
+     */
+    public static function safetyFeatureEnabledFor(?User $user): bool
+    {
+        return static::forUser($user)?->safetyFeatureEnabled() ?? true;
+    }
+
     use HasFactory, Auditable;
     protected $guarded = [];
 

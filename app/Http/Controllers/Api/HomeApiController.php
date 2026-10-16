@@ -81,6 +81,7 @@ class HomeApiController extends Controller
             'email' => 'required|regex:/\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})/',
             'phone_no' => ['required', 'min:8', 'max:15', new PhoneValidation($request, $request->language)],
             'password' => [
+                'required',
                 'min:8',
                 'max:15',
                 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/'
@@ -89,6 +90,7 @@ class HomeApiController extends Controller
             'name.required' => $language == 'english' ? 'Please enter your name' : '请输入您的姓名',
             'name.min' => $language == 'english' ? 'Your name must contain at least 3 characters.' : '您的姓名必须包含至少 3 个字符。.',
             'name.max' => $language == 'english' ? 'Name must not be greater than 30 characters.' : '名称不得超过 30 个字符。',
+            'password.required' => $language == 'english' ? 'Please enter a password.' : '请输入密码。',
             'password.regex' => $language == 'english' ? 'Password must contain at least one uppercase letter, one lowercase letter, one number and one special character.' : '密码必须至少包含1个大写字母、1个小写字母、1个数字和1个特殊字符。',
             'email.required' => $language == 'english' ? 'The email field is required.' : '电子邮件字段是必需的。',
             'email.regex' => $language == 'english' ? 'Invalid email format' : '电子邮件格式无效',
@@ -674,6 +676,11 @@ class HomeApiController extends Controller
         }
 
         $otp = $user->otp;
+        // The code is valid for five minutes (register, resend and login all set
+        // otp_expires_at). It used to stay valid forever.
+        if ($otp !== null && $user->otp_expires_at && now()->greaterThan($user->otp_expires_at)) {
+            return ApiResponse::error($language == 'english' ? 'OTP has expired. Please request a new one.' : 'OTP 已过期。请重新获取。', 200);
+        }
         if ($otp !== null && (string) $otp === (string) $userOtp) {
             if ($request->phone_no && $request->country_code) {
                 User::where('country_code', $request->country_code)->where('phone_no', $userPhone)->where('user_role_id', 3)->update([

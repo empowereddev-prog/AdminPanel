@@ -66,7 +66,11 @@ class IndependentStudentImportTest extends TestCase
         $path = "student-credentials/{$school->id}/{$file}.xlsx";
         Storage::disk('local')->assertExists($path);
         $credentials = IOFactory::load(Storage::disk('local')->path($path))->getActiveSheet()->toArray();
-        $this->assertSame(8, strlen($credentials[1][3]));
+        // 11 characters, satisfying the reset-page policy (upper, lower, digit, symbol).
+        $this->assertSame(11, strlen($credentials[1][3]));
+        $this->assertMatchesRegularExpression('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,15}$/', $credentials[1][3]);
+        // The reset link now lasts seven days so a weekend/half-term import still works on Monday.
+        $this->assertTrue(\Carbon\Carbon::parse($child->fresh()->password_reset_expires_at)->greaterThan(now()->addDays(6)));
         $this->assertTrue(Hash::check($credentials[1][3], $child->password));
         $this->assertStringContainsString($child->password_reset_code, $credentials[1][4]);
         $this->get(route('school.students.credentials', [$school->id, $file]))->assertOk();

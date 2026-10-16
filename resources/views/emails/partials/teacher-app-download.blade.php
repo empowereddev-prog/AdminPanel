@@ -6,7 +6,7 @@
             <table role="presentation" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border:1px solid #d9e2ef;border-radius:12px;">
                 <tr>
                     <td style="padding:12px;">
-                        <img src="{{ $message->embed(resource_path('images/email/teacher-app-download-qr.jpeg')) }}" width="220" height="220" alt="Scan to download the EmpowerED app" style="display:block;width:220px;height:220px;max-width:100%;border:0;">
+                        <img src="{{ $qrSrc ?? $message->embed(resource_path('images/email/teacher-app-download-qr.jpeg')) }}" width="220" height="220" alt="Scan to download the EmpowerED app" style="display:block;width:220px;height:220px;max-width:100%;border:0;">
                     </td>
                 </tr>
             </table>

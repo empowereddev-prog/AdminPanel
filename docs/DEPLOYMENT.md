@@ -362,3 +362,18 @@ Not blockers, and none is made worse by deploying. Each deserves its own ticket.
 - The direct-upload path skips the `mimes:` validation the in-form path applies.
 - `child_seat_allocation` is stored on the roster but never enforced.
 - The admin login page is the site root and is indexable; `public/robots.txt` allows everything.
+
+## Close-out additions (Oct 2026)
+
+- **New email templates** `school_student_credentials` and `school_parent_code` are added by migrations
+  (insert-only, never overwrite edits). Run `php artisan migrate --force`. Do not re-run `SchoolEmailTemplateSeeder`
+  in production: it resets admin edits.
+- **Email preview / test send:** Admin > Email Template > eye icon. Use it to send yourself a copy of the teacher,
+  student and parent emails before they go out.
+- **"Send the school code to parents"** (School Details > Parents) queues mail in chunks of 20 and supports an
+  optional send time. It needs the queue worker (`QUEUE_CONNECTION=database`); an unscheduled or scheduled send
+  does nothing until a worker is running.
+- **Webhook secret (optional):** set `WEBHOOK_SHARED_SECRET` and configure the stores to call
+  `/api/webhooks/google?token=<secret>` and `/api/webhooks/apple?token=<secret>`. Unset = endpoints stay open.
+- The student credentials email uses the admin Settings mail details (it used to bypass them).
+

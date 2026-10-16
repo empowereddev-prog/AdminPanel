@@ -104,6 +104,23 @@ class SchoolEmailTemplateSeeder extends Seeder
                 'description' => \Database\Seeders\Emails\TeacherSignupTemplate::html(),
             ],
 
+            // Sent to the school contact after the student import: the credentials
+            // spreadsheet arrives as an attachment and the QR block is injected by
+            // ___mail_sender (see TeacherSignupEmail::TEMPLATES).
+            'school_student_credentials' => [
+                'subject' => \Database\Seeders\Emails\StudentCredentialsTemplate::SUBJECT,
+                'variables' => \Database\Seeders\Emails\StudentCredentialsTemplate::VARIABLES,
+                'description' => \Database\Seeders\Emails\StudentCredentialsTemplate::html(),
+            ],
+
+            // Bulk "send the school code to parents" from School Details; carries
+            // the app QR block (see TeacherSignupEmail::TEMPLATES).
+            'school_parent_code' => [
+                'subject' => \Database\Seeders\Emails\ParentSchoolCodeTemplate::SUBJECT,
+                'variables' => \Database\Seeders\Emails\ParentSchoolCodeTemplate::VARIABLES,
+                'description' => \Database\Seeders\Emails\ParentSchoolCodeTemplate::html(),
+            ],
+
             'school_parent_invited' => [
                 'subject' => '{school_name} has invited you to EmpowerED',
                 'variables' => '{name},{school_name},{school_code},{app_link},{year}',

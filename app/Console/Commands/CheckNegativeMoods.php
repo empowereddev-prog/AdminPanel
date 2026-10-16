@@ -45,6 +45,11 @@ class CheckNegativeMoods extends Command
         foreach ($childMoodEntries as $childId => $moods) {
             $child = $moods->first()->child;
 
+            // Schools that switched the safety feature off get no alerts at all.
+            if ($child && !\App\Models\School::safetyFeatureEnabledFor($child)) {
+                continue;
+            }
+
             // Notify child (if applicable)
             if ($child) {
                 Notification::route('mail', $child->email)

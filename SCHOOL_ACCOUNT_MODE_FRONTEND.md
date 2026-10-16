@@ -35,7 +35,7 @@ and 5 MB per upload. Invalid or duplicate rows reject the entire upload; no part
 accounts. Existing credentials are never reset by uploading an existing student.
 
 The school receives a spreadsheet with temporary passwords and web reset links
-valid for 24 hours. An authorized download is also offered after import. Files
+valid for 7 days. An authorized download is also offered after import, and the newest spreadsheet stays downloadable from School Details ("Download latest student credentials"). Files
 are stored on the private local disk, not in public uploads. If SMTP fails,
 accounts remain created and the download is still available.
 
@@ -90,3 +90,22 @@ account UI. Individual accounts retain their current workflows.
 
 The mobile frontend is outside this repository; these instructions describe the
 API integration its developer should implement.
+
+## Add Child, parent progress and free access (app integration)
+
+- **Add Child.** `GET /api/get-profile` now returns `can_add_child` for parents. It is `false` for parents of an
+  `independent` school (the school creates every student account), `true` for linked-school and individual parents.
+  Hide the "Add Child" button when it is `false`. `POST /api/add-child` also refuses these parents (HTTP 201 envelope
+  with `status:false` on v1, 403 on v2).
+- **Parent individual progress.** `POST /api/parent-dashboard` keeps `data` as the list of linked children (empty for a
+  parent with no children) and adds a top-level `individual_progress` list:
+  `[{category_id, category, watched_percentage}]` in category priority order. It is the same calculation as
+  `POST /api/get-category` and the admin *Parent Details* page, so the three always agree.
+- **Free access.** For school members `get-profile.subscription` is never `null`: a lapsed school grant is re-issued on
+  read. Individual (non-school) accounts keep their real subscription state. Do not show a paywall to school members.
+- **Get Help.** Besides hiding the button, the server now refuses `POST /api/child-support` when the school's safety
+  feature is off, and `getAllMood.negativeStatus` / `storeChildMood.negative_mood` are never set for those schools.
+- **Sign-in throttles.** `login`, `student-login` and `individual-login` allow 10 attempts per minute *per account*
+  (`type` + username/email/phone); `verify-otp` allows 5 per minute per phone+IP. Over the limit returns HTTP 429.
+  `verify-otp` now also rejects codes older than 5 minutes.
+

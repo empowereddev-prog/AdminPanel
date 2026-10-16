@@ -11,11 +11,9 @@ class SchoolSafetyFeatureController extends Controller
 {
     public function __invoke(Request $request)
     {
-        $user = $request->user();
         // Linked children inherit the school from their parent. Independent
         // students, teachers and school parents carry school_id themselves.
-        $schoolId = $user->school_id ?: $user->parent?->school_id;
-        $school = $schoolId ? School::find($schoolId) : null;
+        $school = School::forUser($request->user());
         $enabled = $school?->safetyFeatureEnabled() ?? true;
         return ApiResponse::success([
             'school_id' => $school?->id,

@@ -25,6 +25,7 @@
                     <div class="card-header py-0">
                             <div class="title_left mb-2">
                               <h2>{{convertInCamelCase($var_name ? $var_name : '')}}</h2>
+                              <a href="{{ route('email-template.preview', $var_name) }}" class="btn btn-outline-primary btn-sm mt-1"><i class="mdi mdi-eye"></i> Preview / send test</a>
                             </div>
                         </div>
                         <div class="card-body">

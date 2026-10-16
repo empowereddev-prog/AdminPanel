@@ -68,8 +68,8 @@ class RegisterService
             'password' => $data['password'],
             'otp' => $data['otp'],
             'otp_expires_at' => $data['otp_expires_at'],
-            'terms_n_conditions_accepted' => $data['terms_n_conditions_accepted'],
-            'user_type' => $data['user_type'],
+            'terms_n_conditions_accepted' => $data['terms_n_conditions_accepted'] ?? 'no',
+            'user_type' => $data['user_type'] ?? 'parent',
             'status' => 'active',
             'user_role_id' => 3,
             'school_id' => $school?->id
@@ -106,6 +106,22 @@ class RegisterService
                 return [
                     'status' => false,
                     'message' => $language == 'english' ? 'The phone number or email is already registered.' : '该电话号码或电子邮件已经注册。',
+                    'user' => null,
+                ];
+            }
+        }
+
+        // A school may cap its parent accounts (max_limit). The admin import
+        // already enforces it; self-registration with the code has to as well.
+        if ($school && !$existingUser && $school->max_limit !== null) {
+            $parents = User::where('school_id', $school->id)->where('user_role_id', 3)->count();
+
+            if ($parents >= (int) $school->max_limit) {
+                return [
+                    'status' => false,
+                    'message' => $language == 'english'
+                        ? 'This school has reached its limit for parent accounts. Please contact your school.'
+                        : '该学校的家长账户数量已达上限，请联系您的学校。',
                     'user' => null,
                 ];
             }
@@ -352,7 +368,7 @@ class RegisterService
         ]);
 
         // 8️⃣ Send OTP via SMS
-        $message = "Your EmpowerED OTP is: " . $otp . "Do not share this code with anyone.";
+        $message = "Your EmpowerED OTP is: " . $otp . " Do not share this code with anyone.";
         ___sms_sender($message, $user->country_code . $user->phone_no, $language);
 
         return [

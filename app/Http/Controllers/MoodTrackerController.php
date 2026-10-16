@@ -563,6 +563,12 @@ public function getAllMood(Request $request)
         }
     }
 
+    // The "get help" prompt that follows a run of negative moods is part of the
+    // school safety feature; a school that switched it off never shows it.
+    if (!School::safetyFeatureEnabledFor(auth()->user())) {
+        $negativeStatus = false;
+    }
+
     return ApiResponse::success(
         Mood::with('activity')->where('status', 'active')->get(),
         'Data fetched successfully!',
@@ -649,7 +655,8 @@ public function getAllMood(Request $request)
                     ->filter()
                     ->unique();
 
-                if ($requiredDates->diff($datesWithNegativeMood)->isEmpty()) {
+                if ($requiredDates->diff($datesWithNegativeMood)->isEmpty()
+                    && School::safetyFeatureEnabledFor(auth()->user())) {
                     $payload['negative_mood'] = 'yes';
                 }
 
@@ -1634,9 +1641,26 @@ $moodRing = collect($groupedByColor)
         $type = $request->type;
         $language = $request->language ?? 'english';
 
+        // Get Help is a per-school setting. The app hides the button, but the
+        // endpoint must refuse too, or a stale client could still raise a request.
+        if (!School::safetyFeatureEnabledFor(auth()->user())) {
+            return ApiResponse::error(
+                $language == 'english' ? 'Get Help is not enabled for your school.' : '您的学校未启用求助功能。',
+                200
+            );
+        }
+
         if ($type == 'parent') {
             $user_details =  User::where('id', auth()->user()->id)->first();
             $parent_details =  User::where('id', $user_details->parent_id)->where('status', 'active')->latest()->first();
+
+            // An independent student has no parent to notify.
+            if (!$parent_details) {
+                return ApiResponse::error(
+                    $language == 'english' ? 'No parent is linked to this account.' : '此账户未关联家长。',
+                    200
+                );
+            }
 
             $title = 'Child Support';
             $message = $user_details->name . ' has requested support. Please check your dashboard for details.';
@@ -1661,10 +1685,11 @@ $moodRing = collect($groupedByColor)
             $user =  User::where('id', auth()->user()->id)->first();
             $user_details = User::where('id', $user->parent_id)->first();
 
-            // A caller with no parent_id (a parent or teacher hitting this
-            // branch) left $user_details null and 500'd on ->school_id.
-            $school_details = $user_details
-                ? School::where('id', $user_details->school_id)->where('status', 'active')->latest()->first()
+            // A linked child resolves the school through the parent; an
+            // independent student (no parent_id) carries school_id itself.
+            $schoolId = $user_details?->school_id ?: $user->school_id;
+            $school_details = $schoolId
+                ? School::where('id', $schoolId)->where('status', 'active')->latest()->first()
                 : null;
             if (!$school_details) {
                 return ApiResponse::error(
@@ -1673,8 +1698,8 @@ $moodRing = collect($groupedByColor)
                 );
             }
             $emailData = [
-                'parent_name' => $user_details->name,
-                'parent_email' => $user_details->email,
+                'parent_name' => $user_details?->name ?? '',
+                'parent_email' => $user_details?->email ?? '',
                 'user_name' => $user->name,
                 'school_name' => $school_details->name,
             ];

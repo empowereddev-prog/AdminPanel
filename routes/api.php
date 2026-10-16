@@ -44,15 +44,15 @@ Route::post('school/account-mode', \App\Http\Controllers\Api\SchoolAccountModeCo
 Route::post('webhooks/apple', [WebhookController::class, 'apple']);
 
 Route::post('register', [HomeApiController::class, 'register']);
-Route::post('login', [HomeApiController::class, 'login']);
+Route::post('login', [HomeApiController::class, 'login'])->middleware('throttle:account_login');
 Route::post('forgot-password', [HomeApiController::class, 'forgotPassword']);
 Route::get('reset-password/{token}', [HomeApiController::class, 'resetPasswordPage'])->name('api.reset.password.page');
 Route::post('reset-password/{token}', [HomeApiController::class, 'passwordReset'])->name('api.password-reset');
 // Route::post('reset-password', [HomeApiController::class, 'resetPassword']);
-Route::post('verify-otp', [HomeApiController::class, 'verifyOtp']);
+Route::post('verify-otp', [HomeApiController::class, 'verifyOtp'])->middleware('throttle:otp_verify');
 Route::post('resend-otp', [HomeApiController::class, 'resendOtp']);
-Route::post('student-login', [HomeApiController::class, 'studentLogin']);
-Route::post('individual-login', [HomeApiController::class, 'individualLogin']);
+Route::post('student-login', [HomeApiController::class, 'studentLogin'])->middleware('throttle:account_login');
+Route::post('individual-login', [HomeApiController::class, 'individualLogin'])->middleware('throttle:account_login');
 Route::middleware('auth:api', 'apicheckstatus')->group(function () {
   Route::get('school/safety-feature', \App\Http\Controllers\Api\SchoolSafetyFeatureController::class);
   Route::post('add-child', [ChildController::class, 'addChild']);

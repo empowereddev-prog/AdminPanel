@@ -30,6 +30,28 @@ class RouteServiceProvider extends ServiceProvider
         RateLimiter::for('contact_form', function (Request $request) {
             return Limit::perMinute(5)->by($request->ip());
         });
+        // Keyed on the account being attacked, not the IP: a whole class logs in
+        // from one school network, so a per-IP cap would lock the room out.
+        RateLimiter::for('account_login', function (Request $request) {
+            $identity = strtolower(trim((string) ($request->input('username') ?: $request->input('email') ?: $request->input('phone_no'))));
+
+            return Limit::perMinute(10)->by('login|' . $request->input('type') . '|' . $identity)
+                ->response(function (Request $request, array $headers) {
+                    return \App\Support\ApiResponse::error(
+                        'Too many sign-in attempts. Please wait a minute and try again.',
+                        429
+                    )->withHeaders($headers);
+                });
+        });
+        RateLimiter::for('otp_verify', function (Request $request) {
+            return Limit::perMinute(5)->by('otp|' . $request->input('phone_no') . '|' . $request->ip())
+                ->response(function (Request $request, array $headers) {
+                    return \App\Support\ApiResponse::error(
+                        'Too many attempts. Please wait a minute and request a new code.',
+                        429
+                    )->withHeaders($headers);
+                });
+        });
         RateLimiter::for('deeplink_resolve', function (Request $request) {
             return Limit::perMinute(30)->by($request->ip());
         });

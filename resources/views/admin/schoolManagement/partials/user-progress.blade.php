@@ -1,4 +1,11 @@
-@foreach (['Video' => $progressUser->categoryProgress ?? []] as $kind => $items)
+@php
+    // Quiz progress is only set for student accounts.
+    $progressSections = ['Video' => $progressUser->categoryProgress ?? []];
+    if (isset($progressUser->quizProgress)) {
+        $progressSections['Quiz'] = $progressUser->quizProgress;
+    }
+@endphp
+@foreach ($progressSections as $kind => $items)
     <div class="card p-3 mt-3 mb-4 bg-light" style="border: 1px solid #7c7e80;">
         <h5 class="mb-3 text-primary">{{ $kind }} Progress by Category</h5>
         <div class="row">
@@ -9,7 +16,7 @@
                     <div class="d-flex align-items-center justify-content-between">
                         <span>{{ round($percentage, 2) }}%</span>
                         <div class="progress flex-grow-1 ml-2" style="height: 8px;">
-                            <div class="progress-bar bg-primary"
+                            <div class="progress-bar {{ $kind === 'Quiz' ? 'bg-success' : 'bg-primary' }}"
                                 role="progressbar" style="width: {{ $percentage }}%;"
                                 aria-valuenow="{{ $percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>

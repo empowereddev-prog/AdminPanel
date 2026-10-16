@@ -37,6 +37,12 @@ return [
 
     ],
 
+    // Optional shared secret for the Google Play / App Store notification
+    // webhooks. See WebhookController. Empty = endpoints stay open (legacy).
+    'webhooks' => [
+        'shared_secret' => env('WEBHOOK_SHARED_SECRET', ''),
+    ],
+
     'twilio' => [
         'sid'   => env('TWILIO_SID'),
         'token' => env('TWILIO_AUTH_TOKEN'),

@@ -106,47 +106,8 @@ class SchoolUserDetailController extends Controller
                 $child->categoryProgress = $categoryProgress;
                 $child->quizProgress = $quizProgress;
             }
-            // Use the selected user's audience and watch history.
-            $isParent = $data->user_type === 'parent' || (int) $data->user_role_id === 3;
-            $videoAudience = $isParent ? 'parent' : 'child';
-            $parentCategoryProgress = [];
-
-            foreach ($categories as $category) {
-                $categoryId = $category->id;
-                $categoryName = $category->category_name;
-
-                // Parent videos
-                $videos = VideoContent::where('category_id', $categoryId)
-                    ->whereIn('user_type', [$videoAudience, 'both'])
-                    ->get();
-
-                $videoIds = $videos->pluck('id')->toArray();
-
-                $totalVideoSeconds = $videos->sum(function ($video) {
-                    return $this->convertTimeToSeconds($video->video_duration);
-                });
-
-                $watchedDurations = UserContentWatchHistory::where('child_id', $data->id)
-                    ->whereIn('video_content_id', $videoIds)
-                    ->pluck('last_watched_duration')
-                    ->toArray();
-
-                $watchedSeconds = array_sum(
-                    array_map([$this, 'convertTimeToSeconds'], $watchedDurations)
-                );
-
-                $percentage = $totalVideoSeconds > 0
-                    ? min(100, round(($watchedSeconds / $totalVideoSeconds) * 100, 2))
-                    : 0;
-
-                $parentCategoryProgress[$categoryId] = [
-                    'category_name' => $categoryName,
-                    'percentage' => $percentage,
-                    'total_video_duration' => gmdate('H:i:s', $totalVideoSeconds),
-                ];
-            }
-
-            $data->categoryProgress = $parentCategoryProgress;
+            // Same calculation as the app's get-category, so the figures match.
+            $data->categoryProgress = app(\App\Services\School\SchoolUserVideoProgress::class)->forUser($data);
 
 
             return view('admin.schoolManagement.school_user_detail', compact('data', 'children'));

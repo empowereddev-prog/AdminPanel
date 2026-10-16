@@ -163,14 +163,6 @@
                                     <!-- child details  -->
                                     @if ($children->isNotEmpty())
                                         @foreach ($children as $index => $child)
-                                            @php
-                                                $progressItems = $child->categoryProgress ?? [];
-                                                $chunks =
-                                                    count($progressItems) > 0
-                                                        ? array_chunk($progressItems, ceil(count($progressItems) / 2))
-                                                        : [];
-                                            @endphp
-
                                             <div class="card p-3 mt-3 mb-4"
                                                 style="width: 100%; max-width: 931px; border: 1px solid gray;">
                                                 {{-- <h5 class="mb-3">Child {{ $index + 1 }}</h5> --}}
@@ -304,81 +296,7 @@
                                                             </div> --}}
                                                         </div>
 
-                                                        <div class="row mt-3">
-                                                            <div class="col-md-12">
-                                                                <div class="p-4 border rounded bg-light shadow-sm w-100">
-                                                                    <h6 class="mb-3 text-primary"
-                                                                        style="font-weight: 600;">Category Progress</h6>
-
-                                                                    @if (!empty($chunks))
-                                                                        <div class="row">
-                                                                            @foreach ($chunks as $chunk)
-                                                                                <div class="col-md-6">
-                                                                                    @foreach ($chunk as $progress)
-                                                                                        <div class="mb-4">
-                                                                                            <strong>{{ $progress['category_name'] }}</strong>
-                                                                                            <div
-                                                                                                class="d-flex align-items-center justify-content-between">
-                                                                                                <span>{{ (int) $progress['percentage'] }}%</span>
-                                                                                                <div class="progress flex-grow-1 ml-2"
-                                                                                                    style="height: 8px;">
-                                                                                                    <div class="progress-bar bg-primary"
-                                                                                                        role="progressbar"
-                                                                                                        style="width: {{ $progress['percentage'] }}%;"
-                                                                                                        aria-valuenow="{{ $progress['percentage'] }}"
-                                                                                                        aria-valuemin="0"
-                                                                                                        aria-valuemax="100">
-                                                                                                    </div>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    @endforeach
-                                                                                </div>
-                                                                            @endforeach
-                                                                        </div>
-                                                                    @else
-                                                                        <p class="text-muted mb-0">No progress data
-                                                                            available.</p>
-                                                                    @endif
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div class="row mt-3">
-                                                            <div class="col-md-12">
-                                                                <div class="p-4 border rounded bg-light shadow-sm w-100">
-                                                                    <h6 class="mb-3 text-primary"
-                                                                        style="font-weight: 600;">Quiz Progress</h6>
-
-                                                                    @if (!empty($child->quizProgress))
-                                                                        <div class="row">
-                                                                            @foreach ($child->quizProgress as $quiz)
-                                                                                <div class="col-md-6 mb-4">
-                                                                                    <strong>{{ $quiz['category_name'] }}</strong>
-                                                                                    <div
-                                                                                        class="d-flex align-items-center justify-content-between">
-                                                                                        <span>{{ round($quiz['percentage']) }}%</span>
-                                                                                        <div class="progress flex-grow-1 ml-2"
-                                                                                            style="height: 8px;">
-                                                                                            <div class="progress-bar bg-success"
-                                                                                                role="progressbar"
-                                                                                                style="width: {{ $quiz['percentage'] }}%;"
-                                                                                                aria-valuenow="{{ $quiz['percentage'] }}"
-                                                                                                aria-valuemin="0"
-                                                                                                aria-valuemax="100">
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            @endforeach
-                                                                        </div>
-                                                                    @else
-                                                                        <p class="text-muted mb-0">No quiz progress data
-                                                                            available.</p>
-                                                                    @endif
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
+                                                        {{-- Child video and quiz progress now live on the school's Child Accounts > View Details page. --}}
                                                         <div class="row mt-3">
                                                             <div class="col-md-12">
                                                                 <div class="p-4 border rounded bg-light shadow-sm w-100">

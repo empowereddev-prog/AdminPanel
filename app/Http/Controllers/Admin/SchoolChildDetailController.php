@@ -23,7 +23,9 @@ class SchoolChildDetailController extends Controller
                 });
             })->findOrFail($childId);
 
-        $child->categoryProgress = app(\App\Services\School\SchoolUserVideoProgress::class)->forUser($child);
+        $progress = app(\App\Services\School\SchoolUserVideoProgress::class);
+        $child->categoryProgress = $progress->forUser($child);
+        $child->quizProgress = $progress->quizForUser($child);
 
         return view('admin.schoolManagement.child-detail', compact('school', 'child'));
     }

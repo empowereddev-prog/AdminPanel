@@ -693,7 +693,11 @@ class SchoolController extends Controller
             $school = School::findOrFail($id);
             $seats = (new SchoolSeatService())->summaryForSchool($school);
 
-            return view('admin.schoolManagement.view', compact('school', 'seats'));
+            // The credentials spreadsheet used to be reachable only through a
+            // one-shot session flash, so it was lost on the next page load.
+            $latestStudentFile = \App\Http\Controllers\Admin\SchoolStudentController::latestCredentialsFile($school->id);
+
+            return view('admin.schoolManagement.view', compact('school', 'seats', 'latestStudentFile'));
         }
         return redirect('dashboard');
     }

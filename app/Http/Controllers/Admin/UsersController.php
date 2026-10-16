@@ -311,126 +311,15 @@ class UsersController extends Controller
                 $children = User::where('parent_id', $id)->get();
                 $categories = Category::all();
 
+                // Child video and quiz progress is no longer shown on this page;
+                // it moved to the school's Child Accounts > View Details screen.
                 foreach ($children as $child) {
                     $child->age = now()->year - date('Y', strtotime($child->dob));
-                    $categoryProgress = [];
-
-                    foreach ($categories as $category) {
-                        $categoryId = $category->id;
-                        $categoryName = $category->category_name;
-
-                        // Get all videos in this category for child
-                        $videos = VideoContent::where('category_id', $categoryId)
-                            ->whereIn('user_type', ['child', 'both']) // ✅ instead of just 'child'
-                            ->get();
-
-                        $videoIds = $videos->pluck('id')->toArray();
-
-                        $totalVideoSeconds = $videos->sum(function ($video) {
-                            return $this->convertTimeToSeconds($video->video_duration);
-                        });
-
-                        $watchedDurations = UserContentWatchHistory::where('child_id', $child->id)
-                            ->whereIn('video_content_id', $videoIds)
-                            ->pluck('last_watched_duration')
-                            ->toArray();
-
-                        $watchedSeconds = array_sum(array_map([$this, 'convertTimeToSeconds'], $watchedDurations));
-
-                        // $percentage = $totalVideoSeconds > 0
-                        //     ? round(($watchedSeconds / $totalVideoSeconds) * 100, 2)
-                        //     : 0;
-                        $percentage = $totalVideoSeconds > 0
-                            ? min(100, round(($watchedSeconds / $totalVideoSeconds) * 100, 2))
-                            : 0;
-
-                        $categoryProgress[$categoryId] = [
-                            'category_name' => $categoryName,
-                            'total_video_seconds' => $totalVideoSeconds,
-                            'watched_seconds' => $watchedSeconds,
-                            'percentage' => $percentage,
-                            'total_video_duration' => gmdate("H:i:s", $totalVideoSeconds),
-                        ];
-                    }
-
-                    // ---------- Quiz Category Progress ----------
-                    $quizCategories = QuizCategory::where('status', 'active')
-                        ->orderBy(DB::raw('CAST(priority AS UNSIGNED)'), 'asc')
-                        ->get();
-
-                    $quizProgress = [];
-                    foreach ($quizCategories as $quizCategory) {
-                        $quizIds = Quiz::where('quiz_category_id', $quizCategory->id)->pluck('id');
-
-                        $totalMarks = QuizQuestion::whereIn('quiz_id', $quizIds)
-                            ->where('status', 'active')
-                            ->sum('marks');
-
-                        $obtainedMarks = UserAttemptQuiz::where('user_id', $child->id)
-                            ->whereIn('quiz_id', $quizIds)
-                            ->sum('marks_obtained');
-
-                        $quizPercentage = $totalMarks > 0
-                            ? round(($obtainedMarks / $totalMarks) * 100, 2)
-                            : 0;
-
-                        $quizProgress[$quizCategory->id] = [
-                            'category_name' => $quizCategory->category_name,
-                            'percentage' => $quizPercentage,
-                            'obtained_marks' => $obtainedMarks,
-                            'total_marks' => $totalMarks,
-                        ];
-                    }
-                    $child->quizProgress = $quizProgress;
-
-                    $child->categoryProgress = $categoryProgress;
                 }
             }
 
-            // ================= Parent Video Progress =================
-            $parentCategoryProgress = [];
-
-            $categories = Category::all();
-
-            foreach ($categories as $category) {
-                $categoryId = $category->id;
-                $categoryName = $category->category_name;
-
-                // Parent can watch videos marked as 'parent' or 'both'
-                $videos = VideoContent::where('category_id', $categoryId)
-                    ->whereIn('user_type', ['parent', 'both'])
-                    ->get();
-
-                $videoIds = $videos->pluck('id')->toArray();
-
-                $totalVideoSeconds = $videos->sum(function ($video) {
-                    return $this->convertTimeToSeconds($video->video_duration);
-                });
-
-                $watchedDurations = UserContentWatchHistory::where('child_id', $data->id)
-                    ->whereIn('video_content_id', $videoIds)
-                    ->pluck('last_watched_duration')
-                    ->toArray();
-
-
-                $watchedSeconds = array_sum(
-                    array_map([$this, 'convertTimeToSeconds'], $watchedDurations)
-                );
-
-                $percentage = $totalVideoSeconds > 0
-                    ? min(100, round(($watchedSeconds / $totalVideoSeconds) * 100, 2))
-                    : 0;
-
-                $parentCategoryProgress[$categoryId] = [
-                    'category_name' => $categoryName,
-                    'total_video_seconds' => $totalVideoSeconds,
-                    'watched_seconds' => $watchedSeconds,
-                    'percentage' => $percentage,
-                    'total_video_duration' => gmdate("H:i:s", $totalVideoSeconds),
-                ];
-            }
-
-            $data->categoryProgress = $parentCategoryProgress;
+            // Parent video progress: same calculation as the app's get-category.
+            $data->categoryProgress = app(\App\Services\School\SchoolUserVideoProgress::class)->forUser($data);
 
 
             return view('admin.planManagement.edit', compact('data', 'children'));

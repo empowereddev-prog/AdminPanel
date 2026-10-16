@@ -46,7 +46,7 @@ class SchoolChildDetailTest extends TestCase
         $this->actingAs($this->admin(), 'admin')->get(route('school.children.show', [$school->id, $child->id]))
             ->assertOk()->assertSee($child->name)->assertSee($child->username)->assertSee('Independent')
             ->assertSee('Policy Verification Details')->assertSee('15 Oct 2026, 12:44 PM')->assertSee('Not Verified')
-            ->assertSee('Video Progress by Category')->assertSee('Child detail progress')
+            ->assertSee('Video Progress by Category')->assertSee('Quiz Progress by Category')->assertSee('Child detail progress')
             ->assertViewHas('child', fn ($data) => $data->categoryProgress[$category->id]['percentage'] == 50);
     }
 

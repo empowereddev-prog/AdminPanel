@@ -74,7 +74,7 @@ class SchoolContractService
      * App entitlement only. Price is 0 so a raw query on `subscriptions`
      * cannot be mistaken for school revenue.
      */
-    public function grantParentEntitlement(School $school, User $user): void
+    public function grantParentEntitlement(School $school, User $user): Subscription
     {
         $type = $school->subscription_type ?: 'monthly';
         [$start, $end] = $this->termDates($type);
@@ -83,16 +83,17 @@ class SchoolContractService
         // historical row meant a parent whose own plan lapsed months ago got
         // nothing when their school imported them - a seat the school paid for
         // and the parent never received.
-        $exists = Subscription::where('user_id', $user->id)
+        $live = Subscription::where('user_id', $user->id)
             ->where('user_type', 'parent')
             ->where('end_date', '>=', now()->toDateString())
-            ->exists();
+            ->latest('end_date')
+            ->first();
 
-        if ($exists) {
-            return;
+        if ($live) {
+            return $live;
         }
 
-        Subscription::create([
+        return Subscription::create([
             'user_id' => $user->id,
             'subscription_type_id' => match ($type) {
                 'quarterly' => 'com.empowered.quarterly',
@@ -110,6 +111,17 @@ class SchoolContractService
             'source' => 'school_grant',
             'price' => '0',
         ]);
+    }
+
+    /**
+     * The app is free for school-code users, so a school member must never see a
+     * lapsed entitlement. Called when the profile is read: if the member has no
+     * live row (the one-term grant expired, or an independent student was keyed
+     * to a different id) a fresh school grant is issued instead of returning null.
+     */
+    public function ensureEntitlement(School $school, User $owner): Subscription
+    {
+        return $this->grantParentEntitlement($school, $owner);
     }
 
     /**

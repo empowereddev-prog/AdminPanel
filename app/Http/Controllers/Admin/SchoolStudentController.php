@@ -8,6 +8,7 @@ use App\Models\BatteryEvent;
 use App\Models\PermissionUser;
 use App\Models\School;
 use App\Models\User;
+use App\Services\School\CredentialsWorkbook;
 use App\Services\School\SchoolContractService;
 use App\Services\School\SchoolSeatService;
 use App\Services\School\StudentImportReader;
@@ -19,14 +20,18 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class SchoolStudentController extends Controller
 {
     private const HEADER = StudentImportReader::HEADER;
+
+    /**
+     * How long a student's password-reset link stays valid. The school may import
+     * a few days before the students first log in (half-term, weekends), so the
+     * old 24 hours left dead links in the spreadsheet.
+     */
+    public const RESET_LINK_DAYS = 7;
 
     private function authorizeSchool(): void
     {
@@ -36,20 +41,7 @@ class SchoolStudentController extends Controller
 
     private function workbook(array $rows): string
     {
-        $book = new Spreadsheet();
-        foreach ($rows as $r => $row) {
-            foreach ($row as $c => $value) {
-                $book->getActiveSheet()->setCellValueExplicit([$c + 1, $r + 1], (string) $value, DataType::TYPE_STRING);
-            }
-        }
-        ob_start();
-        try {
-            (new Xlsx($book))->save('php://output');
-            return ob_get_contents();
-        } finally {
-            ob_end_clean();
-            $book->disconnectWorksheets();
-        }
+        return CredentialsWorkbook::build($rows);
     }
 
     public function sample()
@@ -116,13 +108,13 @@ class SchoolStudentController extends Controller
                     || User::withTrashed()->where('user_role_id', 4)->where('email', $student['email'])->exists()) {
                     throw ValidationException::withMessages(['students_excel' => 'Student email or username already exists. No accounts were created.']);
                 }
-                $password = 'Stu@'.Str::random(3).'1';
+                $password = $this->temporaryPassword();
                 $token = Str::random(64);
                 $user = User::create($student + [
                     'school_id' => $school->id, 'parent_id' => null, 'user_role_id' => 4, 'user_type' => 'child',
                     'password' => $password, 'status' => 'active', 'is_first_login' => 'yes',
                     'battery_points' => 100, 'is_avatar_primary' => 'no',
-                    'password_reset_code' => $token, 'password_reset_expires_at' => now()->addDay(),
+                    'password_reset_code' => $token, 'password_reset_expires_at' => now()->addDays(self::RESET_LINK_DAYS),
                 ]);
                 BatteryEvent::create(['user_id' => $user->id, 'direction' => 'credit', 'points' => 100,
                     'reason' => 'Initial default battery points', 'effective_date' => now()]);
@@ -137,9 +129,12 @@ class SchoolStudentController extends Controller
         Storage::disk('local')->put("student-credentials/{$school->id}/{$file}.xlsx", $content);
         $message = count($valid).' independent student account(s) created. Credentials emailed to the school.';
         try {
-            Mail::to($school->email)->send(new SchoolStudentCredentials($school->name, $content));
+            // Mail::to() bypasses ___mail_sender, so the SMTP details an admin
+            // saved under Settings would be ignored without this.
+            ___apply_admin_mail_settings();
+            Mail::to($school->email)->send(new SchoolStudentCredentials($school->name, $content, count($valid), self::RESET_LINK_DAYS));
         } catch (\Throwable $e) {
-            Log::warning('Student credential email failed', ['school_id' => $school->id]);
+            Log::warning('Student credential email failed', ['school_id' => $school->id, 'error' => $e->getMessage()]);
             $message = count($valid).' independent student account(s) created. Email delivery failed; download the credentials below.';
         }
         return back()->with('success', $message)->with('student_credentials_file', $file);
@@ -150,6 +145,45 @@ class SchoolStudentController extends Controller
         $this->authorizeSchool();
         School::findOrFail($id);
         abort_unless(Storage::disk('local')->exists("student-credentials/{$id}/{$file}.xlsx"), 404);
+        return Storage::disk('local')->download("student-credentials/{$id}/{$file}.xlsx", 'student-credentials.xlsx');
+    }
+
+    /**
+     * 11 characters with upper, lower, digit and symbol so it satisfies the
+     * reset-page policy; ~36 bits of randomness instead of the old ~18.
+     */
+    private function temporaryPassword(): string
+    {
+        return 'Stu@'.Str::random(6).random_int(1, 9);
+    }
+
+    /** Newest stored credentials file for a school (uuid), or null. */
+    public static function latestCredentialsFile(int|string $schoolId): ?string
+    {
+        $disk = Storage::disk('local');
+        $newest = null;
+        $newestTime = 0;
+        foreach ($disk->files("student-credentials/{$schoolId}") as $path) {
+            if (!str_ends_with($path, '.xlsx')) {
+                continue;
+            }
+            $time = $disk->lastModified($path);
+            if ($time >= $newestTime) {
+                $newestTime = $time;
+                $newest = basename($path, '.xlsx');
+            }
+        }
+
+        return $newest;
+    }
+
+    public function latestCredentials($id)
+    {
+        $this->authorizeSchool();
+        School::findOrFail($id);
+        $file = self::latestCredentialsFile($id);
+        abort_unless($file, 404);
+
         return Storage::disk('local')->download("student-credentials/{$id}/{$file}.xlsx", 'student-credentials.xlsx');
     }
 }

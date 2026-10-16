@@ -125,6 +125,8 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     // and update() redirects to `admin/features`, which was never a route.
     // Nothing links to them. FeaturesController is left in place - restore the
     // routes together with the views.
+    Route::get('email-template/{var_name}/preview', [EmailTemplateController::class, 'preview'])->name('email-template.preview');
+    Route::post('email-template/{var_name}/test-send', [EmailTemplateController::class, 'testSend'])->name('email-template.test-send')->middleware('throttle:10,1');
     Route::resource('email-template', EmailTemplateController::class);
     Route::controller(NotificationTemplateController::class)->group(function () {
         Route::get('notification-template', 'index')->name('notification-template.index');
@@ -254,6 +256,10 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::get('school-students/sample', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'sample'])->name('school.students.sample');
     Route::get('school/{id}/student-credentials/{file}', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'credentials'])
         ->whereUuid('file')->name('school.students.credentials');
+    Route::get('school/{id}/student-credentials-latest', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'latestCredentials'])
+        ->name('school.students.credentials.latest');
+    Route::post('school/{id}/send-parent-code', [\App\Http\Controllers\Admin\SchoolParentCodeController::class, 'send'])->name('school.parent-code.send')->middleware('throttle:10,1');
+    Route::get('school/{id}/parent-letter', [\App\Http\Controllers\Admin\SchoolParentCodeController::class, 'letter'])->name('school.parent-letter');
     Route::post('school/{id}/import/staff', [SchoolController::class, 'importStaff'])->name('school.import.staff')->middleware('school.extras');
     Route::get('school/{id}/teachers', [SchoolController::class, 'teachers'])->name('school.teachers.data')->middleware('school.extras');
     Route::get('school/{id}/teachers/{teacherId}', [\App\Http\Controllers\Admin\SchoolTeacherDetailController::class, 'show'])->name('school.teachers.show')->middleware('school.extras');

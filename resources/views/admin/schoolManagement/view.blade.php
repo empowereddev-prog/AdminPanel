@@ -135,6 +135,29 @@
                 </div>
 
                 @endif
+                {{-- Get the school code to parents: bulk email (optionally scheduled)
+                     and a printable letter. No account is created; parents register
+                     themselves in the app with the code. --}}
+                <div style="border:1px solid #e6edf5;border-radius:8px;padding:18px;background:#fafbfd;margin:0 0 24px;">
+                    <div class="fw-semibold" style="margin-bottom:4px;">Send the school code to parents</div>
+                    <div class="text-muted" style="font-size:13px;margin-bottom:12px;max-width:70ch;">
+                        Paste parent email addresses (one per line, or separated by commas). Each parent gets the school code
+                        <strong>{{ $school->school_code }}</strong>, the app QR code and sign-up steps. Leave the time empty to send now.
+                    </div>
+                    <form action="{{ route('school.parent-code.send', $school->id) }}" method="POST">
+                        @csrf
+                        <textarea name="parent_emails" rows="5" class="form-control mb-2" placeholder="parent1@example.com&#10;parent2@example.com" required>{{ old('parent_emails') }}</textarea>
+                        @error('parent_emails') <div class="text-danger small mb-2">{{ $message }}</div> @enderror
+                        <div style="display:flex;flex-wrap:wrap;align-items:center;">
+                            <label for="send_at" class="mr-2 mb-2 text-muted" style="font-size:13px;">Send at (optional)</label>
+                            <input type="datetime-local" id="send_at" name="send_at" class="form-control mr-3 mb-2" style="width:auto;" value="{{ old('send_at') }}">
+                            <button type="submit" class="btn btn-primary mr-2 mb-2">Send school code</button>
+                            <a href="{{ route('school.parent-letter', $school->id) }}" class="btn btn-outline-primary mb-2"><i class="mdi mdi-file-pdf-box mr-1" aria-hidden="true"></i>Download parent letter (PDF)</a>
+                        </div>
+                        @error('send_at') <div class="text-danger small">{{ $message }}</div> @enderror
+                    </form>
+                </div>
+
                 {{-- Settings sit in their own strip rather than on the heading row.
                      On the heading row they had to share horizontal space with the
                      title and collapsed into each other on anything but a wide
@@ -241,6 +264,8 @@
                 @endif
                 @if (session('student_credentials_file'))
                     <a class="btn btn-outline-primary mb-3" href="{{ route('school.students.credentials', [$school->id, session('student_credentials_file')]) }}">Download student credentials</a>
+                @elseif (!empty($latestStudentFile))
+                    <a class="btn btn-outline-primary mb-3" href="{{ route('school.students.credentials.latest', $school->id) }}"><i class="mdi mdi-download mr-1" aria-hidden="true"></i>Download latest student credentials</a>
                 @endif
                 <h4 class="fw-bold text-primary" style="margin:0 0 6px;">
                     <i class="mdi mdi-account-child"></i> Child Accounts

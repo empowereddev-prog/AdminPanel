@@ -37,11 +37,34 @@ class ChildController extends Controller
 {
     use \App\Http\Controllers\Concerns\ResolvesApiUser;
 
+    /** False only for parents of an independent-mode school. */
+    private function parentMayAddChild(?User $parent): bool
+    {
+        $school = School::forUser($parent);
+
+        return !$school || $school->allowsParentCreation();
+    }
+
     public function addChild(Request $request)
     {
         // try {
         $user = User::where('id', Auth::id())->first();
         $language = $request->language;
+
+        // In an independent school the school creates every student account, so
+        // its parents cannot add children. Linked schools and individual
+        // parents keep the feature.
+        if (!$this->parentMayAddChild($user)) {
+            return ApiResponse::error(
+                $language == 'english'
+                    ? 'Your school creates your child\'s account. Please use the login details your school provided.'
+                    : '您孩子的账户由学校创建。请使用学校提供的登录信息。',
+                ApiVersion::isV2($request) ? 403 : 201,
+                null,
+                (object) [],
+                ['child' => []]
+            );
+        }
 
         $messages = $language == 'english' ? [
             'name.required' => 'The name field is required.',
@@ -636,19 +659,29 @@ class ChildController extends Controller
 
         if ($user->user_role_id === '3') {
             $user->is_child_added = User::where('parent_id', $user->id)->exists() ? 'yes' : 'no';
-
-            $user->subscription = Subscription::where('user_id', $user->id)
-                ->whereIn('status', ['successful', 'cancelled'])
-                ->whereDate('end_date', '>=', now())
-                ->orderBy('end_date', 'desc')
-                ->first();
+            // The app hides "Add Child" when this is false.
+            $user->can_add_child = $this->parentMayAddChild($user);
+            $subscriptionOwnerId = $user->id;
         } else {
-            $parentId = $user->parent_id;
-            $user->subscription = Subscription::where('user_id', $parentId)
-                ->whereIn('status', ['successful', 'cancelled'])
-                ->whereDate('end_date', '>=', now())
-                ->orderBy('end_date', 'desc')
-                ->first();
+            // A linked child inherits the parent's entitlement; an independent
+            // school student (no parent) holds their own.
+            $subscriptionOwnerId = $user->parent_id ?: $user->id;
+        }
+
+        $user->subscription = Subscription::where('user_id', $subscriptionOwnerId)
+            ->whereIn('status', ['successful', 'cancelled'])
+            ->whereDate('end_date', '>=', now())
+            ->orderBy('end_date', 'desc')
+            ->first();
+
+        // School members use the app free of charge, so never hand them a null
+        // or lapsed subscription - the app treats that as "show the paywall".
+        // Individual (non-school) accounts keep their real subscription state.
+        if (!$user->subscription && ($school = School::forUser($user)) && $school->status === 'active') {
+            $owner = $subscriptionOwnerId === $user->id ? $user : User::find($subscriptionOwnerId);
+            if ($owner) {
+                $user->subscription = app(\App\Services\School\SchoolContractService::class)->ensureEntitlement($school, $owner);
+            }
         }
 
         $batteryBalance = BatteryEvent::where('user_id', $user->id)
@@ -935,9 +968,25 @@ class ChildController extends Controller
             ];
         }
 
+        // The parent's own progress, category by category. Sent as a top-level
+        // key beside `data` so the shipped app, which reads `data` as a list of
+        // children, is unaffected; `data` stays [] for a parent with no children.
+        $own = app(\App\Services\School\SchoolUserVideoProgress::class)->forUser(auth()->user());
+        $names = Category::whereIn('id', array_keys($own))->get()->keyBy('id');
+        $individualProgress = array_values(array_map(fn ($row) => [
+            'category_id' => $row['category_id'],
+            'category' => isset($names[$row['category_id']])
+                ? getLocalizedCategoryName($names[$row['category_id']], $language)
+                : $row['category_name'],
+            'watched_percentage' => $row['percentage'],
+        ], $own));
+
         return ApiResponse::success(
             $dashboardData,
-            $language === 'chinese' ? '视频内容获取成功！' : 'Data fetched successfully!'
+            $language === 'chinese' ? '视频内容获取成功！' : 'Data fetched successfully!',
+            200,
+            [],
+            ['individual_progress' => $individualProgress]
         );
     }
 

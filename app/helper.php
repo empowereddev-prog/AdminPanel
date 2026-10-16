@@ -61,11 +61,14 @@ if (!function_exists('___apply_admin_mail_settings')) {
     }
 }
 
-if (!function_exists('___mail_sender')) {
-    function ___mail_sender($email, $template_code, $data, $lan)
+if (!function_exists('___render_email_template')) {
+    /**
+     * Resolve an editable email template and substitute its {tokens}.
+     *
+     * @return array{subject:string,body:string,found:bool}
+     */
+    function ___render_email_template($template_code, $data, $lan = 'english'): array
     {
-        ___apply_admin_mail_settings();
-
         $template = EmailTemplate::where('variable_name', $template_code)
             ->when($lan, fn ($q) => $q->where('language', $lan))
             ->first()
@@ -91,6 +94,19 @@ if (!function_exists('___mail_sender')) {
                 $body = str_replace($item, (string) $value, stripslashes(html_entity_decode((string) $body)));
             }
         }
+
+        return ['subject' => $subject, 'body' => $body, 'found' => !empty($template)];
+    }
+}
+
+if (!function_exists('___mail_sender')) {
+    function ___mail_sender($email, $template_code, $data, $lan)
+    {
+        ___apply_admin_mail_settings();
+
+        $rendered = ___render_email_template($template_code, $data, $lan);
+        $subject = $rendered['subject'];
+        $body = $rendered['body'];
 
         $recipients = array_values(array_unique(array_filter(array_map(
             static fn ($address) => strtolower(trim((string) $address)),
@@ -126,7 +142,7 @@ if (!function_exists('___mail_sender')) {
 
         try {
             Mail::send($useView ? $view : 'emails.default', $payload, function ($message) use ($recipients, $subject, $fromAddress, $fromName, $data, $template_code) {
-                if ($template_code === 'signup_teacher') {
+                if (\App\Services\TeacherSignupEmail::appliesTo($template_code)) {
                     app(\App\Services\TeacherSignupEmail::class)->addDownloadBlock($message);
                 }
                 $message->to($recipients)
@@ -134,6 +150,10 @@ if (!function_exists('___mail_sender')) {
                     ->from($fromAddress, $fromName);
                 if (isset($data['pdf'])) {
                     $message->attachData($data['pdf']->output(), 'invoice.pdf');
+                }
+                // [['name' => 'file.xlsx', 'content' => <bytes>, 'mime' => '...'], ...]
+                foreach ((array) ($data['attachments'] ?? []) as $attachment) {
+                    $message->attachData($attachment['content'], $attachment['name'], array_filter(['mime' => $attachment['mime'] ?? null]));
                 }
             });
         } catch (\Throwable $e) {

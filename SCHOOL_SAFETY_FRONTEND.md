@@ -50,3 +50,16 @@ onboarding if needed; use the authenticated GET for the current account's settin
 
 Frontend app code is outside this repository; the dropdown, persistence and API
 are implemented here, while actual app visibility needs this integration.
+
+## Server-side enforcement
+
+The flag is no longer UI-only. When `needs_safety_feature` is `no`:
+
+- `POST /api/child-support` returns `status:false`, "Get Help is not enabled for your school.".
+- `GET`/`POST` mood endpoints never report a negative-mood alert (`negativeStatus` stays `false`,
+  `negative_mood` is not set) and the scheduled negative-mood email command skips those schools' students.
+- "Contact Us" (`POST /api/contact-support`) is unaffected: it goes to the EmpowerED team, not the school.
+
+Independent students can now use `type=school` on `child-support` (the school is resolved from their own
+`school_id`); `type=parent` returns a clean error for them because they have no parent.
+
