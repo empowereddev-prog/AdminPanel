@@ -456,10 +456,20 @@ class HomeApiController extends Controller
                     $emailData = [
                         'name' => auth()->user()->name,
                         'email' => auth()->user()->email,
-                        'link' => route('user.verify', ['user_id' => auth()->user()->id, 'email' => $encryptedEmail])
+                        'link' => route('user.verify', ['user_id' => auth()->user()->id, 'email' => $encryptedEmail]),
+                        'year' => (string) date('Y'),
                     ];
                     ___mail_sender($emailData['email'], 'verification_email', $emailData, $language);
-                    return ApiResponse::error($language == 'english' ? 'Please verify your email ' : '请验证您的电子邮件 ', 200, null, (object) []);
+                    // The flag lets the app show a "check your inbox" state; the
+                    // message is what older app versions display as-is.
+                    return ApiResponse::error(
+                        $language == 'english'
+                            ? 'Your email is not verified. Please verify your email to continue using the app. We have sent you a new verification email.'
+                            : '您的电子邮件尚未验证。请验证您的电子邮件以继续使用该应用。我们已向您重新发送了验证邮件。',
+                        200,
+                        null,
+                        ['requires_email_verification' => true]
+                    );
                 }
                 $token = $this->issueToken(auth()->user(), $request->device_token, $language);
                 return ApiResponse::success(auth()->user(), $language == 'english' ? "User logged in successfully." : "用户登录成功。", 200, [], ['token' => $token]);

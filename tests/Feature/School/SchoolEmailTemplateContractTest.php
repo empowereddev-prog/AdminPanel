@@ -35,6 +35,8 @@ class SchoolEmailTemplateContractTest extends TestCase
 
     private const TEMPLATES = [
         'delete_account',
+        'verification_email',
+        'school_onboarded',
         'signup_school_user',
         'signup_teacher',
         'school_parent_invited',
@@ -155,6 +157,18 @@ class SchoolEmailTemplateContractTest extends TestCase
         $this->assertStringContainsString('Priya Menon', $body);
         $this->assertStringContainsString((string) date('Y'), $body, 'The footer year must render, not collapse to blank.');
         $this->assertStringNotContainsString('has been delete ', $body);
+    }
+
+    public function test_school_registration_email_renders_completely(): void
+    {
+        $school = School::factory()->create(['email' => 'office@school.test', 'name' => 'Riverside Primary']);
+
+        $this->assertTrue(app(SchoolNotifier::class)->schoolOnboarded($school)['sent']);
+
+        $this->assertFullyRendered('school_onboarded');
+        $body = $this->lastMessage()['body'];
+        $this->assertStringContainsString((string) $school->school_code, $body, 'The school must be told its own code.');
+        $this->assertStringContainsString('Riverside Primary', $body);
     }
 
     public function test_off_roster_notice_renders_completely(): void
