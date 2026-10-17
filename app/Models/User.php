@@ -70,12 +70,23 @@ class User extends Authenticatable implements AuditableContract
     {
         DB::transaction(function () {
             foreach (self::where('parent_id', $this->id)->get() as $child) {
-                DeviceToken::where('user_id', $child->id)->delete();
-                $child->tokens()->update(['revoked' => true]);
-                $child->delete();
+                $child->deleteChildAccount();
             }
 
             DeviceToken::where('user_id', $this->id)->delete();
+            $this->delete();
+        });
+    }
+
+    /**
+     * Soft-delete a single child account: remove its device tokens and revoke
+     * its API tokens so it cannot keep a session. The parent is not touched.
+     */
+    public function deleteChildAccount(): void
+    {
+        DB::transaction(function () {
+            DeviceToken::where('user_id', $this->id)->delete();
+            $this->tokens()->update(['revoked' => true]);
             $this->delete();
         });
     }
