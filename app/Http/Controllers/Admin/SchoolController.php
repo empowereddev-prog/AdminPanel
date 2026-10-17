@@ -1708,7 +1708,9 @@ class SchoolController extends Controller
             ->addColumn('added', fn ($row) => $row->created_at ? \Carbon\Carbon::parse($row->created_at)->format('d M Y') : '-')
             ->addColumn('action', fn ($row) => '<a class="view" style="font-size:20px" title="View child details" href="'
                 . e(route('school.children.show', ['id' => $id, 'childId' => $row->id], false))
-                . '" aria-label="View details for '.e($row->name ?: 'child').'"><i class="mdi mdi-eye" aria-hidden="true"></i></a>')
+                . '" aria-label="View details for '.e($row->name ?: 'child').'"><i class="mdi mdi-eye" aria-hidden="true"></i></a>'
+                . ' <a href="javascript:void(0)" class="child-delete text-danger" style="font-size:20px" title="Delete child account" data-id="'
+                . e($row->id) . '" aria-label="Delete ' . e($row->name ?: 'child') . '"><i class="mdi mdi-delete" aria-hidden="true"></i></a>')
             ->rawColumns(['parent', 'status_badge', 'action'])
             ->make(true);
     }

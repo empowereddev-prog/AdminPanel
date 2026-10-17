@@ -387,7 +387,7 @@
                     ]
                 });
 
-                $('#childTable').DataTable({
+                var childTable = $('#childTable').DataTable({
                     processing: true,
                     serverSide: true,
                     ajax: '{{ route('school.children.data', $school->id, false) }}',
@@ -403,6 +403,36 @@
                         { data: 'added', orderable: false, searchable: false },
                         { data: 'action', orderable: false, searchable: false }
                     ]
+                });
+
+                $('#childTable').on('click', '.child-delete', function() {
+                    var id = $(this).data('id');
+
+                    swal({
+                        title: 'Delete this child account?',
+                        text: 'Their profile and data will be removed. This cannot be undone from here.',
+                        icon: 'warning',
+                        buttons: ['Cancel', 'Delete'],
+                        dangerMode: true
+                    }).then(function(confirmed) {
+                        if (!confirmed) {
+                            return;
+                        }
+
+                        $.ajax({
+                            type: 'POST',
+                            url: '/school/{{ $school->id }}/children/' + id,
+                            headers: { 'X-CSRF-TOKEN': csrfToken },
+                            data: { _token: csrfToken, _method: 'DELETE' },
+                            success: function() {
+                                childTable.ajax.reload(null, false);
+                                swal('', 'Child account deleted.', 'success');
+                            },
+                            error: function(xhr) {
+                                swal('', (xhr.responseJSON && xhr.responseJSON.message) || 'Could not delete that child account.', 'error');
+                            }
+                        });
+                    });
                 });
 
                 @if (config('scope.school_extras'))
