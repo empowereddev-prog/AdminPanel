@@ -158,9 +158,9 @@ class SchoolNotifier
             'name' => (string) ($invite->name ?: 'there'),
             'school_name' => (string) $school->name,
             'school_code' => (string) $school->school_code,
-            // The deeplink web fallback resolves to the right store for
-            // whichever device opens it, so one link serves iOS and Android.
-            'app_link' => (string) config('deeplink.web_fallback_url', config('app.url')),
+            // The self-hosted download page sends each phone to its own store,
+            // so one "Get the app" link serves iOS and Android.
+            'app_link' => (string) config('deeplink.app_download_url'),
             'year' => (string) date('Y'),
         ], 'english');
     }

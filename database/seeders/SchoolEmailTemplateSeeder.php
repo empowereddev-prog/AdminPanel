@@ -95,18 +95,11 @@ class SchoolEmailTemplateSeeder extends Seeder
                 'description' => \Database\Seeders\Emails\ParentSchoolCodeTemplate::html(),
             ],
 
+            // Carries the app QR block (see TeacherSignupEmail::TEMPLATES).
             'school_parent_invited' => [
-                'subject' => '{school_name} has invited you to EmpowerED',
-                'variables' => '{name},{school_name},{school_code},{app_link},{year}',
-                'description' => L::wrap(
-                    '{school_name} has invited you to EmpowerED',
-                    L::p('Hello {name}, your school has added you to its EmpowerED programme. Download the app and register using the school code below.')
-                    . L::rows(['School code' => '{school_code}'])
-                    . L::p('Register with <strong>the email address this invitation was sent to</strong>. Your school registered that address for you, and it is the only one that will be recognised for {school_name}.', true)
-                    . L::note('This invitation is for you alone and cannot be used by anyone else.'),
-                    ['label' => 'Get the app', 'url' => '{app_link}'],
-                    'You have been invited'
-                ),
+                'subject' => \Database\Seeders\Emails\ParentInvitedTemplate::SUBJECT,
+                'variables' => \Database\Seeders\Emails\ParentInvitedTemplate::VARIABLES,
+                'description' => \Database\Seeders\Emails\ParentInvitedTemplate::html(),
             ],
 
             'school_offroster_attempt' => [

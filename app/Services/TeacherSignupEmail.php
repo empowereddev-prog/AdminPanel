@@ -20,6 +20,7 @@ class TeacherSignupEmail
         'signup_teacher',
         'school_student_credentials',
         'school_parent_code',
+        'school_parent_invited',
     ];
 
     public static function appliesTo(string $templateCode): bool
