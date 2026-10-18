@@ -205,6 +205,12 @@ class EmailTemplateController extends Controller
             }
         }
 
+        // The invitation's "Get the app" button opens the download page; the
+        // other templates use {app_link} for the website.
+        if ($var_name === 'school_parent_invited') {
+            $data['app_link'] = (string) config('deeplink.app_download_url');
+        }
+
         if ($var_name === 'school_student_credentials') {
             $data['attachments'] = [[
                 'name' => 'student-credentials.xlsx',

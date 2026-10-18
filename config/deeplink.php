@@ -38,6 +38,16 @@ return [
 
     'web_fallback_url' => rtrim(env('DEEPLINK_WEB_FALLBACK_URL', 'https://empoweredhealth.asia'), '/'),
 
+    /*
+     * The self-hosted "get the app" page (DeepLinkController::appDownload):
+     * phones are sent to their store, anything else sees both store badges.
+     * The app-download QR image encodes this URL, so keep the path stable.
+     */
+    'app_download_url' => env(
+        'DEEPLINK_APP_DOWNLOAD_URL',
+        rtrim(env('DEEPLINK_PUBLIC_BASE_URL', 'https://admin.empoweredhealth.asia'), '/') . '/app'
+    ),
+
     'types' => ['article', 'podcast'],
 
 ];
