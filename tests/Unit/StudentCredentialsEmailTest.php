@@ -119,6 +119,7 @@ class StudentCredentialsEmailTest extends TestCase
     {
         $this->assertTrue(TeacherSignupEmail::appliesTo('signup_teacher'));
         $this->assertTrue(TeacherSignupEmail::appliesTo('school_student_credentials'));
+        $this->assertTrue(TeacherSignupEmail::appliesTo('school_parent_invited'));
         $this->assertFalse(TeacherSignupEmail::appliesTo('signup_school_user'));
     }
 

@@ -76,6 +76,39 @@ class DeepLinkController extends Controller
             ->header('Cache-Control', 'no-store');
     }
 
+    /**
+     * Target of the app-download QR code. Phones go straight to their store;
+     * everything else (and ?show) gets a landing page with both store badges.
+     * no-store so a proxy never hands one platform's redirect to another.
+     */
+    public function appDownload(Request $request)
+    {
+        $ios = (string) config('deeplink.ios_store_url');
+        $android = (string) config('deeplink.android_store_url');
+
+        if (! $request->has('show')) {
+            $ua = (string) $request->userAgent();
+
+            if (preg_match('/iPhone|iPad|iPod/i', $ua)) {
+                return redirect()->away($ios)->header('Cache-Control', 'no-store');
+            }
+
+            if (preg_match('/Android/i', $ua)) {
+                return redirect()->away($android)->header('Cache-Control', 'no-store');
+            }
+        }
+
+        return response()
+            ->view('deeplink.app-download', [
+                'iosStoreUrl' => $ios,
+                'androidStoreUrl' => $android,
+                'webFallbackUrl' => $this->webFallbackUrl(),
+                'appIcon' => (string) config('deeplink.app_icon'),
+                'autoRedirect' => ! $request->has('show'),
+            ])
+            ->header('Cache-Control', 'no-store');
+    }
+
     protected function webFallbackUrl(): string
     {
         $url = rtrim((string) config('deeplink.web_fallback_url'), '/');

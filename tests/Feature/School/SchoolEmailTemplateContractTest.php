@@ -210,6 +210,23 @@ class SchoolEmailTemplateContractTest extends TestCase
         $this->assertFullyRendered('school_parent_invited');
     }
 
+    public function test_parent_invitation_carries_the_qr_inside_the_card_and_links_to_the_download_page(): void
+    {
+        $school = School::factory()->create();
+        $invite = SchoolParentInvite::factory()->for($school)->create();
+
+        app(SchoolNotifier::class)->parentInvited($school, $invite);
+
+        $sent = collect($this->transport()->messages())->last()->getOriginalMessage();
+        $body = $sent->getHtmlBody();
+
+        $this->assertStringContainsString('Get the EmpowerED app', $body);
+        $this->assertStringContainsString('src="cid:', $body);
+        $this->assertCount(1, $sent->getAttachments());
+        $this->assertStringContainsString('href="' . config('deeplink.app_download_url') . '"', $body);
+        $this->assertLessThan(strpos($body, 'All rights reserved'), strpos($body, 'src="cid:'), 'The QR block must sit inside the branded card, not after it.');
+    }
+
     /**
      * The school's code is circulating, so attempts arrive in bursts. One notice
      * an hour, or the send - which runs inline on the register request - becomes
