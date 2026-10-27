@@ -1002,19 +1002,9 @@ function sendNotificationSender($user_id, $title, $message, $notification_type, 
                 // ],
 
 
-                'data' => [
-                    'title' => $title,
-                    'body' => $message,
-                    'type' => $notification_type,
-                    'user_id' => $user_id,
-                    'name' => $data['category'] ?? null,
-                    'id' => $data['id'] ?? null,
-                    'color' => $data['color'] ?? null,
-                    'title_color' => $data['title_color'] ?? null,
-                    // 'badge' => $badge,  
-                    'data' => json_encode($data),
-                    'sound' => 'default',
-                ],
+                'data' => \App\Support\PushNotificationData::build(
+                    $user_id, $title, $message, $notification_type, $data
+                ),
                 // 'data' => array_merge($data, [
                 //     'title' => $title,
                 //     'body'  => $message,
@@ -1045,8 +1035,18 @@ function sendNotificationSender($user_id, $title, $message, $notification_type, 
             // return response()->json(['message' => 'Push notification sent successfully']);
         }
     } catch (MessagingException $e) {
+        \Illuminate\Support\Facades\Log::warning('Push notification failed', [
+            'user_id' => $user_id,
+            'notification_type' => $notification_type,
+            'exception' => get_class($e),
+        ]);
         return response()->json(['error' => 'Failed to send notification: ' . $e->getMessage()], 500);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
+        \Illuminate\Support\Facades\Log::warning('Push notification failed', [
+            'user_id' => $user_id,
+            'notification_type' => $notification_type,
+            'exception' => get_class($e),
+        ]);
         return response()->json(['error' => 'An error occurred: ' . $e->getMessage()], 500);
     }
 }
