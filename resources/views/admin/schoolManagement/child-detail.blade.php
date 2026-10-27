@@ -37,19 +37,7 @@
             </div>
             <section class="card p-3 mt-3 mb-4 bg-light" style="border:2px solid #afb2b5;" aria-labelledby="child-policy-heading">
                 <h5 id="child-policy-heading" class="mb-3 text-primary">Policy Verification Details</h5>
-                @foreach ([
-                    'Parental consent policy verified at' => $child->popup_1_updated_at,
-                    "Your child's privacy policy verified at" => $child->popup_2_updated_at,
-                ] as $label => $verifiedAt)
-                    <div class="mb-3">
-                        <strong>{{ $label }}:</strong>
-                        @if ($verifiedAt)
-                            <span class="text-success">{{ $verifiedAt->format('d M Y, h:i A') }}</span>
-                        @else
-                            <span class="text-danger">Not Verified</span>
-                        @endif
-                    </div>
-                @endforeach
+                @include('admin.partials.safety-acknowledgement', ['ackUser' => $child])
             </section>
             @include('admin.schoolManagement.partials.user-progress', ['progressUser' => $child])
         </div>

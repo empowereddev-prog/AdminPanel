@@ -17,8 +17,11 @@
                 <div class="card-body p-4">
 
                     <h4 class="text-center text-danger mb-3">Delete Account</h4>
-                    <p class="text-center text-muted small">
+                    <p class="text-center text-muted small mb-1">
                         This action is permanent and cannot be undone.
+                    </p>
+                    <p class="text-center text-muted small">
+                        If your child's account is synced to your account, your child's profile information and data will also be deleted.
                     </p>
 
                     @if(session('error'))
