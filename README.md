@@ -12,17 +12,28 @@ This repository is the **admin panel** (Blade) and the **mobile API** (`/api`). 
 | Mobile API | Passport (`auth:api`): auth, children, knowledge sessions, video content, quizzes, mood, subscriptions/webhooks |
 | Deep links | HTTPS `/d/article/{id}` and `/d/podcast/{id}`, plus Apple AASA and Android `assetlinks.json` (see `DEEP_LINKING.md`) |
 
-Audience types on content: `parent`, `child`, `both` (all). Stack: PHP 8.2+, Laravel 11, MySQL, Passport, Stripe Cashier, S3 (optional).
+Audience types on content: `parent`, `child`, `both` (all). Stack: PHP 8.4.27+, Laravel 11, MySQL, Passport, Stripe Cashier, S3 (optional).
 
 ## Requirements
 
-- PHP **8.2** or **8.3** with extensions: `bcmath`, `ctype`, `curl`, `fileinfo`, `json`, `mbstring`, `openssl`, `pdo_mysql`, `tokenizer`, `xml`, `gd` (or `imagick`)
+- PHP **8.4.27 or later in the 8.4 series** with extensions: `bcmath`, `ctype`, `curl`, `fileinfo`, `json`, `mbstring`, `openssl`, `pdo_mysql`, `tokenizer`, `xml`, `gd` (or `imagick`)
 - **Composer** 2 — only needed to install or change dependencies. If `vendor/` is already present you can run the app without it.
 - **MySQL** 8 (local or RDS)
 - **FFmpeg** on the PATH if you upload/transcode video (`pbmedia/laravel-ffmpeg`)
 - Node 18+ only if you run Vite (`npm run dev` / `npm run build`); the admin UI mostly uses Blade + `public/assets`
 
 ## Configure
+
+### PHP security upgrade
+
+PHP 8.4.27 fixes CVE-2026-109618 and CVE-2026-109619. See the [official advisory](https://www.php.net/archive/2026.php#2026-10-21-5).
+Composer requires `~8.4.27` to reject older runtimes and untested PHP 8.5 upgrades.
+Upgrade the actual web runtime, CLI, queue workers, and scheduled jobs; changing Composer requirements alone does not patch PHP.
+Restart the web server/PHP workers and long-running queue processes after upgrading, then verify both web and CLI versions.
+Set `session.upload_progress.enabled=0` in the server's `php.ini` or FPM pool configuration before request parsing, following the [23 October advisory](https://www.php.net/archive/2026.php#2026-10-23-1).
+
+On this Windows workspace, run `. ..\use-php84.ps1` from the project directory to select the adjacent PHP 8.4.27 runtime for the current PowerShell session.
+Then run `php -v`, `composer check-platform-reqs --lock`, and the application test suite against a dedicated test database before deployment.
 
 ```bash
 cp .env.example .env
