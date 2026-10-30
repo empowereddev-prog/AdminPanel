@@ -447,3 +447,8 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::post('video-requests/{id}', [VideoRequestController::class, 'destroy']);
 
 });
+
+Route::middleware(['auth:admin', 'checkActive'])->group(function () {
+    Route::get('individual-subscription-waitlist', [\App\Http\Controllers\Admin\IndividualSubscriptionWaitlistController::class, 'index'])
+        ->name('individual-waitlist.index');
+});

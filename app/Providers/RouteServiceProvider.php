@@ -56,6 +56,13 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perMinute(30)->by($request->ip());
         });
 
+        RateLimiter::for('individual_waitlist', function (Request $request) {
+            return [
+                Limit::perMinute(5)->by('waitlist-minute|' . $request->ip()),
+                Limit::perHour(30)->by('waitlist-hour|' . $request->ip()),
+            ];
+        });
+
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')
