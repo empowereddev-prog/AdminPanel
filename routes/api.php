@@ -135,3 +135,7 @@ Route::middleware('auth:api', 'apicheckstatus')->group(function () {
   Route::post('request-video', [VideoRequestController::class, 'requestVideo']);
 });
 Route::get('get-child-support', [FaqController::class, 'getSupport']);
+
+// Public marketing signup; intentionally independent of app accounts.
+Route::post('individual-subscription-waitlist', [\App\Http\Controllers\Api\IndividualSubscriptionWaitlistController::class, 'store'])
+    ->middleware('throttle:individual_waitlist')->name('api.individual-waitlist.store');

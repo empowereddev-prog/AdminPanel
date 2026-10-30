@@ -485,6 +485,14 @@
                             </li>
                         @endif
 
+                        @if (\App\Models\IndividualSubscriptionWaitlist::canView(auth('admin')->user()))
+                            <li class="{{ request()->routeIs('individual-waitlist.index') ? 'active' : '' }}">
+                                <a class="sidenav-item-link" href="{{ route('individual-waitlist.index') }}">
+                                    <i class="mdi mdi-email-outline mr-2" aria-hidden="true"></i>
+                                    <span class="nav-text">Subscription Waitlist</span>
+                                </a>
+                            </li>
+                        @endif
                         @if (hasPermission(11))
                             <li class="{{ request()->routeIs(['contact-us.index']) ? 'active' : '' }}">
                                 <a class="sidenav-item-link" href="{{ route('contact-us.index') }}">
