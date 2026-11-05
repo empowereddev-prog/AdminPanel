@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\School;
 
+use App\Jobs\SendStudentLoginMail;
 use App\Mail\SchoolStudentCredentials;
 use App\Models\PermissionUser;
 use App\Models\School;
@@ -10,8 +11,10 @@ use App\Services\School\SchoolSeatService;
 use App\Services\School\StudentImportReader;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
@@ -121,6 +124,89 @@ class IndependentStudentImportTest extends TestCase
             $child = $children->firstWhere('username', $credentials[$line][2]);
             $this->assertTrue(Hash::check($credentials[$line][3], $child->password));
         }
+    }
+
+    /** Every student row across the SendStudentLoginMail jobs that were queued. */
+    private function queuedLogins(): array
+    {
+        return Queue::pushed(SendStudentLoginMail::class)
+            ->flatMap(fn ($job) => (new \ReflectionProperty($job, 'students'))->getValue($job))
+            ->all();
+    }
+
+    public function test_import_can_email_each_student_their_login(): void
+    {
+        Queue::fake();
+        $school = School::factory()->create(['account_mode' => 'independent', 'child_seat_limit' => null]);
+        $prefix = uniqid('e');
+        $rows = array_map(fn ($n) => ['Student Name', "{$prefix}_{$n}@example.test", '2013-05'], range(1, 45));
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet($rows), 'email_students' => '1'])
+            ->assertSessionHasNoErrors();
+        // 45 students at CHUNK=20 is three jobs.
+        Queue::assertPushed(SendStudentLoginMail::class, 3);
+        $credentials = array_slice($this->credentials($school), 1);
+        $queued = $this->queuedLogins();
+        $this->assertSame(array_column($credentials, 2), array_column($queued, 'username'));
+        $this->assertSame(array_column($credentials, 3), array_column($queued, 'password'), 'Students must be emailed the password the school was given.');
+    }
+
+    public function test_import_without_the_option_emails_only_the_school(): void
+    {
+        Queue::fake();
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$this->row()])])
+            ->assertSessionHasNoErrors();
+        Queue::assertNotPushed(SendStudentLoginMail::class);
+        Mail::assertSent(SchoolStudentCredentials::class, 1);
+    }
+
+    public function test_students_who_have_not_signed_in_get_new_login_details(): void
+    {
+        Queue::fake();
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $student = fn () => User::factory()->create(['user_role_id' => 4, 'school_id' => $school->id, 'parent_id' => null,
+            'status' => 'active', 'username' => uniqid('u'), 'email' => uniqid('m').'@example.test']);
+        $waiting = $student();
+        $signedIn = $student();
+        // Logout only revokes the token, so a revoked one still means "has signed in".
+        DB::table('oauth_access_tokens')->insert(['id' => Str::random(80), 'user_id' => $signedIn->id, 'client_id' => 1,
+            'revoked' => true, 'created_at' => now(), 'updated_at' => now()]);
+        $parent = User::factory()->parent()->inSchool($school)->create();
+        $linked = User::factory()->create(['user_role_id' => 4, 'parent_id' => $parent->id, 'school_id' => null]);
+        $untouched = [$signedIn->id => $signedIn->password, $linked->id => $linked->password];
+
+        $this->get(route('school.show', $school->id))->assertOk()->assertSee("1 student hasn't signed in to the app yet.");
+        $this->post(route('school.students.login-details', $school->id))
+            ->assertSessionHasNoErrors()->assertSessionHas('student_credentials_file');
+
+        $credentials = $this->credentials($school);
+        $this->assertCount(2, $credentials);
+        $this->assertSame([$waiting->email, $waiting->username], [$credentials[1][1], $credentials[1][2]]);
+        $this->assertTrue(Hash::check($credentials[1][3], $waiting->fresh()->password));
+        foreach ($untouched as $id => $hash) {
+            $this->assertSame($hash, User::find($id)->password);
+        }
+        Mail::assertSent(SchoolStudentCredentials::class, fn ($mail) => $mail->hasTo($school->email));
+        $queued = $this->queuedLogins();
+        $this->assertSame([$waiting->email], array_column($queued, 'email'));
+        $this->assertSame($credentials[1][3], $queued[0]['password']);
+    }
+
+    public function test_emailing_login_details_when_everyone_has_signed_in_sends_nothing(): void
+    {
+        Queue::fake();
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $this->post(route('school.students.login-details', $school->id))
+            ->assertSessionHasErrors(['login_details' => 'Every student has already signed in.']);
+        Queue::assertNothingPushed();
+        Mail::assertNothingSent();
+    }
+
+    public function test_emailing_login_details_requires_school_modify_permission(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $user = User::factory()->create(['user_role_id' => 2, 'status' => 'active']);
+        $this->actingAs($user, 'admin')->post(route('school.students.login-details', $school->id))->assertForbidden();
     }
 
     public function test_linked_school_rejects_independent_import(): void

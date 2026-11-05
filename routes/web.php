@@ -253,6 +253,8 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::get('school/{id}/roster', [SchoolController::class, 'roster'])->name('school.roster.data');
     Route::post('school/{id}/import/parents', [SchoolController::class, 'importParents'])->name('school.import.parents');
     Route::post('school/{id}/import/students', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'import'])->name('school.import.students');
+    Route::post('school/{id}/students/login-details', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'emailLoginDetails'])
+        ->name('school.students.login-details')->middleware('throttle:10,1');
     Route::get('school-students/sample', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'sample'])->name('school.students.sample');
     Route::get('school/{id}/student-credentials/{file}', [\App\Http\Controllers\Admin\SchoolStudentController::class, 'credentials'])
         ->whereUuid('file')->name('school.students.credentials');

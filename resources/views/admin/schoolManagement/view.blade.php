@@ -254,6 +254,10 @@
                             </div>
                             <div id="student-import-file-help" class="student-import-hint mt-2">Excel (.xlsx or .xls) · Maximum 5 MB · Up to 1,000 students</div>
                             @error('students_excel') <div class="text-danger small mt-2" role="alert">{{ $message }}</div> @enderror
+                            <div class="custom-control custom-checkbox mt-3">
+                                <input type="checkbox" class="custom-control-input" id="email_students" name="email_students" value="1" checked>
+                                <label class="custom-control-label" for="email_students">Email each student their username and temporary password</label>
+                            </div>
                         </div>
                         <div class="student-import-footer">
                             <p class="student-import-hint">After import, the school receives a spreadsheet with student login details. Invalid rows must be corrected before accounts are created.</p>
@@ -262,6 +266,24 @@
                             </button>
                         </div>
                     </form>
+                    @if ($studentsAwaitingLogin > 0 || $errors->has('login_details'))
+                        <form action="{{ route('school.students.login-details', $school->id) }}" method="POST" class="student-import"
+                              onsubmit="return confirm('Each of these {{ $studentsAwaitingLogin }} students gets a new temporary password by email, and the school receives an updated spreadsheet. Passwords in earlier spreadsheets stop working for them.');">
+                            @csrf
+                            <div class="student-import-heading" style="margin-bottom:0;">
+                                <div>
+                                    <h4><i class="mdi mdi-email-send-outline mr-2" aria-hidden="true"></i>Student login emails</h4>
+                                    <p>{{ $studentsAwaitingLogin === 1 ? "1 student hasn't" : "{$studentsAwaitingLogin} students haven't" }} signed in to the app yet. Email each of them a new temporary password with their username.</p>
+                                </div>
+                                @if ($studentsAwaitingLogin > 0)
+                                    <button type="submit" class="btn btn-outline-primary">
+                                        <i class="mdi mdi-send mr-1" aria-hidden="true"></i>Email login details to these students
+                                    </button>
+                                @endif
+                            </div>
+                            @error('login_details') <div class="text-danger small mt-2" role="alert">{{ $message }}</div> @enderror
+                        </form>
+                    @endif
                 @endif
                 @if (session('student_credentials_file'))
                     <a class="btn btn-outline-primary mb-3" href="{{ route('school.students.credentials', [$school->id, session('student_credentials_file')]) }}">Download student credentials</a>

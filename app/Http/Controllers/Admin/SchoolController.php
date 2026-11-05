@@ -696,8 +696,11 @@ class SchoolController extends Controller
             // The credentials spreadsheet used to be reachable only through a
             // one-shot session flash, so it was lost on the next page load.
             $latestStudentFile = \App\Http\Controllers\Admin\SchoolStudentController::latestCredentialsFile($school->id);
+            $studentsAwaitingLogin = $school->account_mode === School::MODE_CHILD
+                ? \App\Http\Controllers\Admin\SchoolStudentController::awaitingLogin($school)->count()
+                : 0;
 
-            return view('admin.schoolManagement.view', compact('school', 'seats', 'latestStudentFile'));
+            return view('admin.schoolManagement.view', compact('school', 'seats', 'latestStudentFile', 'studentsAwaitingLogin'));
         }
         return redirect('dashboard');
     }
