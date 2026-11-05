@@ -7,13 +7,16 @@ use App\Models\PermissionUser;
 use App\Models\School;
 use App\Models\User;
 use App\Services\School\SchoolSeatService;
+use App\Services\School\StudentImportReader;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
@@ -32,11 +35,20 @@ class IndependentStudentImportTest extends TestCase
         $this->actingAs($admin, 'admin');
     }
 
-    private function sheet(array $rows): UploadedFile
+    /** A DateTime value is written as a real Excel date cell in US display format. */
+    private function sheet(array $rows, array $header = StudentImportReader::HEADER): UploadedFile
     {
         $book = new Spreadsheet();
-        foreach (array_merge([['Name', 'Email', 'Username', 'Date of Birth (YYYY-MM)']], $rows) as $r => $row) {
-            foreach ($row as $c => $value) $book->getActiveSheet()->setCellValueExplicit([$c + 1, $r + 1], $value, DataType::TYPE_STRING);
+        $sheet = $book->getActiveSheet();
+        foreach (array_merge([$header], $rows) as $r => $row) {
+            foreach ($row as $c => $value) {
+                if ($value instanceof \DateTimeInterface) {
+                    $sheet->setCellValue([$c + 1, $r + 1], ExcelDate::PHPToExcel($value));
+                    $sheet->getStyle([$c + 1, $r + 1])->getNumberFormat()->setFormatCode('m/d/yyyy');
+                } else {
+                    $sheet->setCellValueExplicit([$c + 1, $r + 1], $value, DataType::TYPE_STRING);
+                }
+            }
         }
         $path = tempnam(sys_get_temp_dir(), 'students').'.xlsx';
         (new Xlsx($book))->save($path);
@@ -46,8 +58,18 @@ class IndependentStudentImportTest extends TestCase
 
     private function row(): array
     {
-        $id = uniqid();
-        return ['Student Name', $id.'@example.test', 'student_'.$id, '2013-05'];
+        return ['Student Name', uniqid('s').'@example.test', '2013-05'];
+    }
+
+    private function student(array $row): User
+    {
+        return User::where('user_role_id', 4)->where('email', $row[1])->firstOrFail();
+    }
+
+    private function credentials(School $school): array
+    {
+        $path = "student-credentials/{$school->id}/".session('student_credentials_file').'.xlsx';
+        return IOFactory::load(Storage::disk('local')->path($path))->getActiveSheet()->toArray();
     }
 
     public function test_import_creates_independent_children_and_sends_school_credentials(): void
@@ -56,7 +78,9 @@ class IndependentStudentImportTest extends TestCase
         $row = $this->row();
         $response = $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$row])]);
         $response->assertSessionHasNoErrors()->assertSessionHas('student_credentials_file');
-        $child = User::where('username', $row[2])->firstOrFail();
+        $child = $this->student($row);
+        $this->assertSame(Str::before($row[1], '@'), $child->username);
+        $this->assertSame('2013-05', $child->dob);
         $this->assertNull($child->parent_id);
         $this->assertSame($school->id, (int) $child->school_id);
         $this->assertSame(4, (int) $child->user_role_id);
@@ -83,15 +107,14 @@ class IndependentStudentImportTest extends TestCase
         $school = School::factory()->create(['account_mode' => 'independent', 'child_seat_limit' => null]);
         // A counter, not uniqid(): uniqid can repeat inside a tight loop.
         $prefix = uniqid();
-        $rows = array_map(fn ($n) => ["Student $n", "{$prefix}_{$n}@example.test", "student_{$prefix}_{$n}", '2013-05'], range(1, 200));
+        $rows = array_map(fn ($n) => ["Student $n", "{$prefix}_{$n}@example.test", '2013-05'], range(1, 200));
         $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet($rows)])
             ->assertSessionHasNoErrors()->assertSessionHas('student_credentials_file');
         $children = User::where('school_id', $school->id)->where('user_role_id', 4)->whereNull('parent_id')->get();
         $this->assertCount(200, $children);
         $this->assertSame(200, \App\Models\Subscription::whereIn('user_id', $children->pluck('id'))->where('source', 'school_grant')->count());
         Mail::assertSent(SchoolStudentCredentials::class, 1);
-        $path = "student-credentials/{$school->id}/".session('student_credentials_file').'.xlsx';
-        $credentials = IOFactory::load(Storage::disk('local')->path($path))->getActiveSheet()->toArray();
+        $credentials = $this->credentials($school);
         $this->assertCount(201, $credentials);
         // Passwords are hashed before the transaction; each one must still match its own row.
         foreach ([1, 100, 200] as $line) {
@@ -106,7 +129,7 @@ class IndependentStudentImportTest extends TestCase
         $row = $this->row();
         $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$row])])
             ->assertSessionHasErrors('students_excel');
-        $this->assertDatabaseMissing('users', ['username' => $row[2]]);
+        $this->assertDatabaseMissing('users', ['email' => $row[1]]);
         Mail::assertNothingSent();
     }
 
@@ -115,11 +138,93 @@ class IndependentStudentImportTest extends TestCase
         $school = School::factory()->create(['account_mode' => 'independent']);
         $row = $this->row();
         $bad = $this->row();
-        $bad[3] = '1990-01';
+        $bad[2] = '1990-01';
         $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$row, $bad])])
-            ->assertSessionHasErrors('students_excel');
-        $this->assertDatabaseMissing('users', ['username' => $row[2]]);
+            ->assertSessionHasErrors(['students_excel' => 'Row 3: Student must be under 18. No accounts were created.']);
+        $this->assertDatabaseMissing('users', ['email' => $row[1]]);
         Mail::assertNothingSent();
+    }
+
+    public function test_username_is_the_email_prefix_with_a_suffix_on_clashes(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $p = uniqid('u');
+        User::factory()->create(['username' => "$p.tan"]);
+        // The unique index still covers deleted users, so their usernames stay taken.
+        User::factory()->create(['username' => "$p.x"])->delete();
+        $rows = [
+            ['First Student', "$p.tan@a.test", '2013-05'],
+            ['Second Student', "$p.tan@b.test", '2013-05'],
+            ['Third Student', "$p+x@c.test", '2013-05'],
+            ['Fourth Student', "$p.new@d.test", '2013-05'],
+        ];
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet($rows)])
+            ->assertSessionHasNoErrors();
+        $expected = ["$p.tan_2", "$p.tan_3", "$p.x_2", "$p.new"];
+        $this->assertSame($expected, array_map(fn ($row) => $this->student($row)->username, $rows));
+        $this->assertSame($expected, array_column(array_slice($this->credentials($school), 1), 2));
+    }
+
+    public function test_students_may_share_a_name(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $rows = [$this->row(), $this->row()];
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet($rows)])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(['Student Name', 'Student Name'], array_map(fn ($row) => $this->student($row)->name, $rows));
+    }
+
+    public function test_an_email_repeated_in_the_file_rejects_the_upload(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $row = $this->row();
+        $copy = ['Other Name', strtoupper($row[1]), '2012-01'];
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$row, $copy])])
+            ->assertSessionHasErrors(['students_excel' => 'Row 3: Duplicate email in the file. No accounts were created.']);
+        $this->assertDatabaseMissing('users', ['email' => $row[1]]);
+    }
+
+    public function test_an_active_students_email_is_rejected_but_a_deleted_ones_is_not(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $row = $this->row();
+        $existing = User::factory()->create(['user_role_id' => 4, 'email' => $row[1], 'school_id' => $school->id]);
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$row])])
+            ->assertSessionHasErrors(['students_excel' => 'Row 2: Student email already exists. No accounts were created.']);
+        $existing->delete();
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$row])])
+            ->assertSessionHasNoErrors();
+        $this->assertNotSame($existing->id, $this->student($row)->id);
+    }
+
+    public function test_the_old_template_still_imports_and_its_username_is_ignored(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $row = $this->row();
+        $legacy = ['Name', 'Email', 'Username', 'Date of Birth (YYYY-MM)'];
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([[$row[0], $row[1], 'typed_by_school', $row[2]]], $legacy)])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(Str::before($row[1], '@'), $this->student($row)->username);
+    }
+
+    public function test_dates_of_birth_in_common_formats_are_stored_as_year_and_month(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $cell = ['Date Cell', uniqid('d').'@example.test', new \DateTime('2013-04-05')];
+        $typed = ['Typed Date', uniqid('t').'@example.test', '14/05/2013'];
+        $named = ['Month Name', uniqid('m').'@example.test', 'Sep 2012'];
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$cell, $typed, $named])])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(['2013-04', '2013-05', '2012-09'], array_map(fn ($row) => $this->student($row)->dob, [$cell, $typed, $named]));
+    }
+
+    public function test_an_unrecognised_date_of_birth_names_the_row(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent']);
+        $row = $this->row();
+        $row[2] = 'sometime in 2013';
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$row])])
+            ->assertSessionHasErrors(['students_excel' => 'Row 2: Date of birth not recognised (e.g. 2013-05 or 14/05/2013). No accounts were created.']);
     }
 
     public function test_children_remain_visible_after_switching_school_mode(): void
@@ -151,7 +256,7 @@ class IndependentStudentImportTest extends TestCase
         $row = $this->row();
         $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet([$row])])
             ->assertSessionHasErrors('students_excel');
-        $this->assertDatabaseMissing('users', ['username' => $row[2]]);
+        $this->assertDatabaseMissing('users', ['email' => $row[1]]);
         Mail::assertNothingSent();
     }
 

@@ -48,7 +48,7 @@ class SchoolStudentController extends Controller
     public function sample()
     {
         $this->authorizeSchool();
-        return response($this->workbook([self::HEADER, ['Student Name', 'student@example.com', 'student_school', '2013-05']]))
+        return response($this->workbook([self::HEADER, ['Student Name', 'student@example.com', '2013-05']]))
             ->header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             ->header('Content-Disposition', 'attachment; filename="student-import-template.xlsx"');
     }
@@ -70,30 +70,27 @@ class SchoolStudentController extends Controller
             $book->disconnectWorksheets();
         }
         $valid = [];
-        $names = [];
         $emails = [];
         foreach ($rows as $index => $row) {
             if (!array_filter($row, fn ($value) => trim((string) $value) !== '')) continue;
-            [$name, $email, $username, $dob] = array_map(fn ($value) => trim((string) $value), $row);
+            // Names may repeat; only the email has to be unique.
+            [$name, $email, $dob] = array_map(fn ($value) => trim((string) $value), $row);
             $email = strtolower($email);
-            $error = null;
-            try {
-                $birth = Carbon::createFromFormat('!Y-m', $dob);
-                $dateValid = $birth && $birth->format('Y-m') === $dob && $birth->lessThanOrEqualTo(now()) && $birth->age < 18;
-            } catch (\Throwable $e) {
-                $dateValid = false;
-            }
-            if (mb_strlen($name) < 3 || mb_strlen($name) > 50 || !filter_var($email, FILTER_VALIDATE_EMAIL)
-                || strlen($email) > 255 || !preg_match('/^[a-zA-Z0-9_.-]{3,100}$/', $username) || !$dateValid) {
-                $error = 'Invalid name, email, username, or date of birth (student must be under 18).';
-            }
-            if (isset($names[strtolower($username)]) || isset($emails[$email])) $error = 'Duplicate email or username in the file.';
-            if (User::withTrashed()->where('username', $username)->exists()
-                || User::withTrashed()->where('user_role_id', 4)->where('email', $email)->exists()) $error = 'Student email or username already exists.';
+            $dob = StudentImportReader::dob($dob);
+            $birth = $dob ? Carbon::createFromFormat('!Y-m', $dob) : null;
+            $error = match (true) {
+                mb_strlen($name) < 3 || mb_strlen($name) > 50 => 'Name must be 3–50 characters.',
+                !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 255 => 'Invalid email.',
+                !$birth => 'Date of birth not recognised (e.g. 2013-05 or 14/05/2013).',
+                $birth->greaterThan(now()) => 'Date of birth is in the future.',
+                $birth->age >= 18 => 'Student must be under 18.',
+                isset($emails[$email]) => 'Duplicate email in the file.',
+                $this->studentEmailTaken($email) => 'Student email already exists.',
+                default => null,
+            };
             if ($error) throw ValidationException::withMessages(['students_excel' => 'Row '.($index + 2).': '.$error.' No accounts were created.']);
-            $names[strtolower($username)] = true;
             $emails[$email] = true;
-            $valid[] = compact('name', 'email', 'username', 'dob');
+            $valid[] = compact('name', 'email', 'dob');
         }
         if (!$valid) throw ValidationException::withMessages(['students_excel' => 'No student rows found.']);
 
@@ -112,13 +109,15 @@ class SchoolStudentController extends Controller
                 throw ValidationException::withMessages(['students_excel' => 'Not enough child places. No accounts were created.']);
             }
             $output = [['Name', 'Email', 'Username', 'Temporary Password', 'Password Reset Link']];
+            $taken = [];
             foreach ($valid as $i => $student) {
-                if (User::withTrashed()->where('username', $student['username'])->exists()
-                    || User::withTrashed()->where('user_role_id', 4)->where('email', $student['email'])->exists()) {
-                    throw ValidationException::withMessages(['students_excel' => 'Student email or username already exists. No accounts were created.']);
+                if ($this->studentEmailTaken($student['email'])) {
+                    throw ValidationException::withMessages(['students_excel' => 'Student email already exists. No accounts were created.']);
                 }
+                $username = $this->username($student['email'], $taken);
                 $token = Str::random(64);
                 $user = User::create($student + [
+                    'username' => $username,
                     'school_id' => $school->id, 'parent_id' => null, 'user_role_id' => 4, 'user_type' => 'child',
                     'password' => $hashes[$i], 'status' => 'active', 'is_first_login' => 'yes',
                     'battery_points' => 100, 'is_avatar_primary' => 'no',
@@ -127,7 +126,7 @@ class SchoolStudentController extends Controller
                 BatteryEvent::create(['user_id' => $user->id, 'direction' => 'credit', 'points' => 100,
                     'reason' => 'Initial default battery points', 'effective_date' => now()]);
                 app(SchoolContractService::class)->grantParentEntitlement($school, $user);
-                $output[] = [$student['name'], $student['email'], $student['username'], $passwords[$i],
+                $output[] = [$student['name'], $student['email'], $username, $passwords[$i],
                     route('reset.password.page', ['token' => $token])];
             }
             return $output;
@@ -154,6 +153,29 @@ class SchoolStudentController extends Controller
         School::findOrFail($id);
         abort_unless(Storage::disk('local')->exists("student-credentials/{$id}/{$file}.xlsx"), 404);
         return Storage::disk('local')->download("student-credentials/{$id}/{$file}.xlsx", 'student-credentials.xlsx');
+    }
+
+    /** Deleted students don't count, so a removed student can be imported again. */
+    private function studentEmailTaken(string $email): bool
+    {
+        return User::where('user_role_id', 4)->where('email', $email)->exists();
+    }
+
+    /**
+     * The student's login name: their email prefix (mary+test@x.sg → mary.test),
+     * with _2, _3… on a clash. Deleted users count because the unique index does.
+     */
+    private function username(string $email, array &$taken): string
+    {
+        $base = preg_replace(['/[^a-z0-9_.-]+/', '/\.{2,}/'], '.', strtolower(Str::ascii(Str::before($email, '@'))));
+        $base = substr(trim($base, '._-'), 0, 90);
+        if ($base === '') $base = 'student';
+        $username = $base;
+        for ($n = 2; isset($taken[$username]) || User::withTrashed()->where('username', $username)->exists(); $n++) {
+            $username = $base.'_'.$n;
+        }
+        $taken[$username] = true;
+        return $username;
     }
 
     /**
