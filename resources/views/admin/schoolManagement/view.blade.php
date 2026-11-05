@@ -240,7 +240,8 @@
                             </a>
                         </div>
                         <div class="student-import-fields">
-                            <strong>Required columns:</strong> Name · Email · Username · Date of Birth (YYYY-MM)
+                            <strong>Required columns:</strong> Name · Email · Date of Birth<br>
+                            Usernames are created from each student's email (daniel.tan@school.sg → daniel.tan). Date of birth can be any common format, e.g. 2013-05, 14/05/2013 or May 2013. Students must be under 18.
                         </div>
                         <div class="student-import-upload">
                             <div class="font-weight-bold mb-2">Choose your completed spreadsheet</div>

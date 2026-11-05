@@ -27,12 +27,22 @@ open School Details → Import Students → Download student template → Upload
 
 Required spreadsheet columns (exact order):
 
-`Name | Email | Username | Date of Birth (YYYY-MM)`
+`Name | Email | Date of Birth`
 
-Use unique usernames (3–100 characters, letters/digits/underscore/dot/hyphen),
-valid emails, names of 3–50 characters, and students under 18. Maximum 1000 rows
-and 5 MB per upload. Invalid or duplicate rows reject the entire upload; no partial
-accounts. Existing credentials are never reset by uploading an existing student.
+The older `Name | Email | Username | Date of Birth (YYYY-MM)` file is still
+accepted; its Username column is ignored.
+
+The username is generated from the email prefix (`daniel.tan@school.sg` →
+`daniel.tan`, `mary+test@…` → `mary.test`), with `_2`, `_3`… added on a clash,
+and is listed in the credentials spreadsheet. Children log in with it.
+
+Date of birth may be any common format — an Excel date, `2013-05`,
+`2013-05-14`, `14/05/2013` (day first), `05/2013`, `May 2013`, `14 May 2013` —
+and is stored as `YYYY-MM`. Students must be under 18. Emails must be valid and
+unique among active students and within the file; names (3–50 characters) may
+repeat. Maximum 1000 rows and 5 MB per upload. Invalid or duplicate rows reject
+the entire upload; no partial accounts. Existing credentials are never reset by
+uploading an existing student.
 
 The school receives a spreadsheet with temporary passwords and web reset links
 valid for 7 days. An authorized download is also offered after import, and the newest spreadsheet stays downloadable from School Details ("Download latest student credentials"). Files
