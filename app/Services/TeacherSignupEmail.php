@@ -19,6 +19,7 @@ class TeacherSignupEmail
     public const TEMPLATES = [
         'signup_teacher',
         'school_student_credentials',
+        'school_student_login',
         'school_parent_code',
         'school_parent_invited',
     ];

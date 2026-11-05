@@ -44,6 +44,13 @@ repeat. Maximum 1000 rows and 5 MB per upload. Invalid or duplicate rows reject
 the entire upload; no partial accounts. Existing credentials are never reset by
 uploading an existing student.
 
+With "Email each student their username and temporary password" ticked (the
+default), each student is also emailed their own login (`school_student_login`
+template, queued 20 per job). For students already imported, School Details →
+"Email login details to these students" gives every student who has never
+signed in a new temporary password, emails it to them, and sends the school an
+updated spreadsheet; passwords in earlier spreadsheets stop working for them.
+
 The school receives a spreadsheet with temporary passwords and web reset links
 valid for 7 days. An authorized download is also offered after import, and the newest spreadsheet stays downloadable from School Details ("Download latest student credentials"). Files
 are stored on the private local disk, not in public uploads. If SMTP fails,

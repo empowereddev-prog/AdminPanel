@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Mail\SchoolStudentCredentials;
 use App\Http\Controllers\Controller;
+use App\Jobs\SendStudentLoginMail;
 use App\Models\BatteryEvent;
 use App\Models\PermissionUser;
 use App\Models\School;
@@ -12,6 +13,7 @@ use App\Services\School\CredentialsWorkbook;
 use App\Services\School\SchoolContractService;
 use App\Services\School\SchoolSeatService;
 use App\Services\School\StudentImportReader;
+use App\Services\School\TemporaryPassword;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +28,8 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 class SchoolStudentController extends Controller
 {
     private const HEADER = StudentImportReader::HEADER;
+
+    private const CREDENTIALS_HEADER = ['Name', 'Email', 'Username', 'Temporary Password', 'Password Reset Link'];
 
     /**
      * How long a student's password-reset link stays valid. The school may import
@@ -96,7 +100,7 @@ class SchoolStudentController extends Controller
 
         // Hash before the transaction so the school row is locked only for the
         // inserts, not for the whole hashing time.
-        $passwords = array_map(fn () => $this->temporaryPassword(), $valid);
+        $passwords = array_map(fn () => TemporaryPassword::generate(), $valid);
         $hashes = array_map(fn ($password) => Hash::make($password), $passwords);
 
         $credentials = DB::transaction(function () use ($school, $valid, $passwords, $hashes) {
@@ -108,7 +112,7 @@ class SchoolStudentController extends Controller
             if ($remaining !== null && count($valid) > $remaining) {
                 throw ValidationException::withMessages(['students_excel' => 'Not enough child places. No accounts were created.']);
             }
-            $output = [['Name', 'Email', 'Username', 'Temporary Password', 'Password Reset Link']];
+            $output = [self::CREDENTIALS_HEADER];
             $taken = [];
             foreach ($valid as $i => $student) {
                 if ($this->studentEmailTaken($student['email'])) {
@@ -131,20 +135,92 @@ class SchoolStudentController extends Controller
             }
             return $output;
         });
+        [$file, $message] = $this->deliverCredentials($school, $credentials, count($valid).' independent student account(s) created.');
+        if ($request->boolean('email_students')) {
+            SendStudentLoginMail::dispatchInChunks($this->loginMailRows($school, $credentials));
+            $message .= ' Login details are being emailed to each student.';
+        }
+        return back()->with('success', $message)->with('student_credentials_file', $file);
+    }
+
+    /**
+     * The school's independent students who have never signed in to the app.
+     * Every login issues a Passport access token and none are ever deleted
+     * (logout only revokes), so a missing token means a missing first login.
+     */
+    public static function awaitingLogin(School $school)
+    {
+        return User::where('user_role_id', 4)->where('school_id', $school->id)->whereNull('parent_id')->where('status', 'active')
+            ->whereNotExists(fn ($query) => $query->select(DB::raw(1))->from('oauth_access_tokens')->whereColumn('oauth_access_tokens.user_id', 'users.id'));
+    }
+
+    /**
+     * Gives each student who hasn't signed in yet a new temporary password,
+     * sends the school an updated spreadsheet and emails every student their
+     * own login. Passwords from earlier spreadsheets stop working for them.
+     */
+    public function emailLoginDetails($id)
+    {
+        $this->authorizeSchool();
+        // One bcrypt hash per student, as in the import.
+        set_time_limit(300);
+        $school = School::findOrFail($id);
+        if ($school->account_mode !== School::MODE_CHILD || $school->status !== 'active') {
+            throw ValidationException::withMessages(['login_details' => 'Login details can only be emailed for an active school in Independent Child Accounts mode.']);
+        }
+        $students = self::awaitingLogin($school)->orderBy('id')->get();
+        if ($students->isEmpty()) {
+            throw ValidationException::withMessages(['login_details' => 'Every student has already signed in.']);
+        }
+        $passwords = $students->map(fn () => TemporaryPassword::generate())->all();
+        $hashes = array_map(fn ($password) => Hash::make($password), $passwords);
+
+        $credentials = DB::transaction(function () use ($students, $passwords, $hashes) {
+            $output = [self::CREDENTIALS_HEADER];
+            foreach ($students as $i => $student) {
+                $token = Str::random(64);
+                $student->update([
+                    'password' => $hashes[$i], 'is_first_login' => 'yes',
+                    'password_reset_code' => $token, 'password_reset_expires_at' => now()->addDays(self::RESET_LINK_DAYS),
+                ]);
+                $output[] = [$student->name, $student->email, $student->username, $passwords[$i],
+                    route('reset.password.page', ['token' => $token])];
+            }
+            return $output;
+        });
+        [$file, $message] = $this->deliverCredentials($school, $credentials, count($students).' student(s) who hadn\'t signed in yet were given a new temporary password.');
+        SendStudentLoginMail::dispatchInChunks($this->loginMailRows($school, $credentials));
+        return back()->with('success', $message.' Each student is being emailed their login.')->with('student_credentials_file', $file);
+    }
+
+    /**
+     * Stores the credentials spreadsheet and emails it to the school.
+     *
+     * @return array{0:string,1:string} the stored file id and the flash message
+     */
+    private function deliverCredentials(School $school, array $credentials, string $summary): array
+    {
         $file = (string) Str::uuid();
         $content = $this->workbook($credentials);
         Storage::disk('local')->put("student-credentials/{$school->id}/{$file}.xlsx", $content);
-        $message = count($valid).' independent student account(s) created. Credentials emailed to the school.';
         try {
             // Mail::to() bypasses ___mail_sender, so the SMTP details an admin
             // saved under Settings would be ignored without this.
             ___apply_admin_mail_settings();
-            Mail::to($school->email)->send(new SchoolStudentCredentials($school->name, $content, count($valid), self::RESET_LINK_DAYS));
+            Mail::to($school->email)->send(new SchoolStudentCredentials($school->name, $content, count($credentials) - 1, self::RESET_LINK_DAYS));
+            return [$file, $summary.' Credentials emailed to the school.'];
         } catch (\Throwable $e) {
             Log::warning('Student credential email failed', ['school_id' => $school->id, 'error' => $e->getMessage()]);
-            $message = count($valid).' independent student account(s) created. Email delivery failed; download the credentials below.';
+            return [$file, $summary.' Email delivery failed; download the credentials below.'];
         }
-        return back()->with('success', $message)->with('student_credentials_file', $file);
+    }
+
+    /** One SendStudentLoginMail row per student in a credentials spreadsheet. */
+    private function loginMailRows(School $school, array $credentials): array
+    {
+        return array_map(fn ($row) => [
+            'name' => $row[0], 'email' => $row[1], 'username' => $row[2], 'password' => $row[3], 'school_name' => $school->name,
+        ], array_slice($credentials, 1));
     }
 
     public function credentials($id, $file)
@@ -176,15 +252,6 @@ class SchoolStudentController extends Controller
         }
         $taken[$username] = true;
         return $username;
-    }
-
-    /**
-     * 11 characters with upper, lower, digit and symbol so it satisfies the
-     * reset-page policy; ~36 bits of randomness instead of the old ~18.
-     */
-    private function temporaryPassword(): string
-    {
-        return 'Stu@'.Str::random(6).random_int(1, 9);
     }
 
     /** Newest stored credentials file for a school (uuid), or null. */

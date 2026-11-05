@@ -87,6 +87,14 @@ class SchoolEmailTemplateSeeder extends Seeder
                 'description' => \Database\Seeders\Emails\StudentCredentialsTemplate::html(),
             ],
 
+            // Sent to each independent student with their own login; carries the
+            // app QR block (see TeacherSignupEmail::TEMPLATES).
+            'school_student_login' => [
+                'subject' => \Database\Seeders\Emails\StudentLoginTemplate::SUBJECT,
+                'variables' => \Database\Seeders\Emails\StudentLoginTemplate::VARIABLES,
+                'description' => \Database\Seeders\Emails\StudentLoginTemplate::html(),
+            ],
+
             // Bulk "send the school code to parents" from School Details; carries
             // the app QR block (see TeacherSignupEmail::TEMPLATES).
             'school_parent_code' => [

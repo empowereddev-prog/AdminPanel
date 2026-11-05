@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\School;
 
+use App\Jobs\SendStudentLoginMail;
 use App\Jobs\SendStudentSignupMail;
 use App\Models\EmailTemplate;
 use App\Models\School;
@@ -39,6 +40,7 @@ class SchoolEmailTemplateContractTest extends TestCase
         'school_onboarded',
         'signup_school_user',
         'signup_teacher',
+        'school_student_login',
         'school_parent_invited',
         'school_offroster_attempt',
         'school_seat_threshold',
@@ -132,6 +134,25 @@ class SchoolEmailTemplateContractTest extends TestCase
         $body = $this->lastMessage()['body'];
         $this->assertStringContainsString('SchKp7Q@1', $body, 'The password must reach the parent - it is their only way in.');
         $this->assertStringContainsString('Riverside Primary', $body);
+    }
+
+    public function test_student_login_email_renders_completely_with_the_app_qr(): void
+    {
+        (new SendStudentLoginMail([[
+            'email' => 'student@example.test',
+            'name' => 'Wei Ling',
+            'username' => 'wei.ling',
+            'password' => 'Stu@Kp7Qx29',
+            'school_name' => 'Riverside Primary',
+        ]]))->handle();
+
+        $this->assertFullyRendered('school_student_login');
+
+        $body = $this->lastMessage()['body'];
+        $this->assertStringContainsString('wei.ling', $body);
+        $this->assertStringContainsString('Stu@Kp7Qx29', $body, 'The password must reach the student - it is their only way in.');
+        $this->assertStringContainsString('Scan to download the EmpowerED app', $body);
+        $this->assertInstanceOf(\Illuminate\Contracts\Queue\ShouldBeEncrypted::class, new SendStudentLoginMail([]), 'The payload holds plaintext passwords.');
     }
 
     /**
