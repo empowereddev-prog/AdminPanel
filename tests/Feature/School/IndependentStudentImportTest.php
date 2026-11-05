@@ -78,6 +78,28 @@ class IndependentStudentImportTest extends TestCase
             ->assertJsonPath('data.0.account_relationship', 'Independent');
     }
 
+    public function test_import_creates_a_class_of_two_hundred_students(): void
+    {
+        $school = School::factory()->create(['account_mode' => 'independent', 'child_seat_limit' => null]);
+        // A counter, not uniqid(): uniqid can repeat inside a tight loop.
+        $prefix = uniqid();
+        $rows = array_map(fn ($n) => ["Student $n", "{$prefix}_{$n}@example.test", "student_{$prefix}_{$n}", '2013-05'], range(1, 200));
+        $this->post(route('school.import.students', $school->id), ['students_excel' => $this->sheet($rows)])
+            ->assertSessionHasNoErrors()->assertSessionHas('student_credentials_file');
+        $children = User::where('school_id', $school->id)->where('user_role_id', 4)->whereNull('parent_id')->get();
+        $this->assertCount(200, $children);
+        $this->assertSame(200, \App\Models\Subscription::whereIn('user_id', $children->pluck('id'))->where('source', 'school_grant')->count());
+        Mail::assertSent(SchoolStudentCredentials::class, 1);
+        $path = "student-credentials/{$school->id}/".session('student_credentials_file').'.xlsx';
+        $credentials = IOFactory::load(Storage::disk('local')->path($path))->getActiveSheet()->toArray();
+        $this->assertCount(201, $credentials);
+        // Passwords are hashed before the transaction; each one must still match its own row.
+        foreach ([1, 100, 200] as $line) {
+            $child = $children->firstWhere('username', $credentials[$line][2]);
+            $this->assertTrue(Hash::check($credentials[$line][3], $child->password));
+        }
+    }
+
     public function test_linked_school_rejects_independent_import(): void
     {
         $school = School::factory()->create();

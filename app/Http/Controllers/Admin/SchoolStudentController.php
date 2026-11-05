@@ -15,6 +15,7 @@ use App\Services\School\StudentImportReader;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -55,6 +56,9 @@ class SchoolStudentController extends Controller
     public function import(Request $request, $id)
     {
         $this->authorizeSchool();
+        // Each student costs one bcrypt hash (~0.2s at 12 rounds), so a class-sized
+        // upload of 200+ rows runs past PHP's default 30s limit.
+        set_time_limit(300);
         $request->validate(['students_excel' => 'required|file|mimes:xlsx,xls|max:5120']);
         $school = School::findOrFail($id);
         $book = IOFactory::load($request->file('students_excel')->getRealPath());
@@ -93,7 +97,12 @@ class SchoolStudentController extends Controller
         }
         if (!$valid) throw ValidationException::withMessages(['students_excel' => 'No student rows found.']);
 
-        $credentials = DB::transaction(function () use ($school, $valid) {
+        // Hash before the transaction so the school row is locked only for the
+        // inserts, not for the whole hashing time.
+        $passwords = array_map(fn () => $this->temporaryPassword(), $valid);
+        $hashes = array_map(fn ($password) => Hash::make($password), $passwords);
+
+        $credentials = DB::transaction(function () use ($school, $valid, $passwords, $hashes) {
             $school = School::whereKey($school->id)->lockForUpdate()->firstOrFail();
             if ($school->account_mode !== School::MODE_CHILD || $school->status !== 'active') {
                 throw ValidationException::withMessages(['students_excel' => 'Student import requires an active school in Independent Child Accounts mode.']);
@@ -103,23 +112,22 @@ class SchoolStudentController extends Controller
                 throw ValidationException::withMessages(['students_excel' => 'Not enough child places. No accounts were created.']);
             }
             $output = [['Name', 'Email', 'Username', 'Temporary Password', 'Password Reset Link']];
-            foreach ($valid as $student) {
+            foreach ($valid as $i => $student) {
                 if (User::withTrashed()->where('username', $student['username'])->exists()
                     || User::withTrashed()->where('user_role_id', 4)->where('email', $student['email'])->exists()) {
                     throw ValidationException::withMessages(['students_excel' => 'Student email or username already exists. No accounts were created.']);
                 }
-                $password = $this->temporaryPassword();
                 $token = Str::random(64);
                 $user = User::create($student + [
                     'school_id' => $school->id, 'parent_id' => null, 'user_role_id' => 4, 'user_type' => 'child',
-                    'password' => $password, 'status' => 'active', 'is_first_login' => 'yes',
+                    'password' => $hashes[$i], 'status' => 'active', 'is_first_login' => 'yes',
                     'battery_points' => 100, 'is_avatar_primary' => 'no',
                     'password_reset_code' => $token, 'password_reset_expires_at' => now()->addDays(self::RESET_LINK_DAYS),
                 ]);
                 BatteryEvent::create(['user_id' => $user->id, 'direction' => 'credit', 'points' => 100,
                     'reason' => 'Initial default battery points', 'effective_date' => now()]);
                 app(SchoolContractService::class)->grantParentEntitlement($school, $user);
-                $output[] = [$student['name'], $student['email'], $student['username'], $password,
+                $output[] = [$student['name'], $student['email'], $student['username'], $passwords[$i],
                     route('reset.password.page', ['token' => $token])];
             }
             return $output;
