@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\ApiResponse;
+use App\Services\QuizQuestionTranslator;
 use App\Models\Category;
 use App\Models\DeviceToken;
 use Illuminate\Http\Request;
@@ -252,8 +253,7 @@ class QuizController extends Controller
             $request->file('image')->move(public_path('assets/images'), $imageName);
         }
 
-        $translator = new GoogleTranslate('zh'); // 'zh' is the language code for Chinese
-        $questionChinese = $translator->translate($request['question']);
+        $questionChinese = app(QuizQuestionTranslator::class)->translate($request['question']);
         // dd($request->all());
         $quizQuestion =  QuizQuestion::create([
             'quiz_category_id' => $request['category'],
@@ -361,8 +361,7 @@ class QuizController extends Controller
                 ->withInput();
         }
         $quizCategory = QuizCategory::find($request->category);
-        $translator = new GoogleTranslate('zh'); // 'zh' is the language code for Chinese
-        $questionChinese = $translator->translate($request['question']);
+        $questionChinese = app(QuizQuestionTranslator::class)->translate($request['question']);
         $data = QuizQuestion::findOrFail($id);
 
         $imageName = $data->image;
