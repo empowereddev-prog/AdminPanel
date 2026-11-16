@@ -19,7 +19,6 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Stichoza\GoogleTranslate\GoogleTranslate;
 use Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -501,17 +500,16 @@ class QuizController extends Controller
         ]);
 
         if ($validators->passes()) {
+            $quizQuestion = QuizQuestion::findOrFail($request->question_id);
+            $quiz = Quiz::findOrFail($request->quiz_id);
             foreach ($request->options as $index => $option) {
-                $translator = new GoogleTranslate('zh');
-                $optionChinese = $translator->translate($option);
-
                 $isCorrect = ($index == $request->is_correct) ? 1 : 0;
 
                 // Only include description if it's the correct option
                 $data = [
+                    'quiz_category_id' => $quizQuestion->quiz_category_id,
                     'question_id' => $request['question_id'],
                     'option_text' => $option,
-                    // 'option_text_chinese' => $optionChinese ?? $option,
                     'is_correct' => $isCorrect,
                 ];
 
@@ -525,10 +523,8 @@ class QuizController extends Controller
             }
 
             //Question active कर दो
-            $quiz = Quiz::find($request->quiz_id);
             $quiz->update(['status' => 'active']);
 
-            $quizQuestion = QuizQuestion::find($request->question_id);
             $quizQuestion->update(['status' => 'active']);
 
             //  Notification send 
@@ -670,21 +666,19 @@ class QuizController extends Controller
 
 
         if ($validators->passes()) {
+            $quizQuestion = QuizQuestion::findOrFail($request->question_id);
             // dd($request->question_id);
             // Delete previous options
             QuizQuestionOption::where('question_id', $request->question_id)->delete();
 
             // Loop through each option and save it along with the corresponding description
             foreach ($request->options as $index => $option) {
-                // Translate the option text into Chinese
-                $translator = new GoogleTranslate('zh'); // 'zh' is the language code for Chinese
-                $optionChinese = $translator->translate($option);
                 $isCorrect = ($index == $request->is_correct) ? 1 : 0;
                 // Save the option
                 $quizOption = QuizQuestionOption::create([
+                    'quiz_category_id' => $quizQuestion->quiz_category_id,
                     'question_id' => $request['question_id'],
                     'option_text' => $option,
-                    // 'option_text_chinese' => $optionChinese ?? $option,
                     'is_correct' => $isCorrect,
                 ]);
 
