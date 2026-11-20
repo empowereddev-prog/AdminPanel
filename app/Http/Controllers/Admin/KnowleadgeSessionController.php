@@ -92,6 +92,7 @@ class KnowleadgeSessionController extends Controller
                     ->addColumn('action', function ($row) {
                         $shareUrl = \App\Services\DeepLinkService::canonicalUrl('article', (int) $row->id);
                         $btn = "";
+                        $btn .= '<a href="' . route('knowledgeSession.show', $row->id) . '" title="View Article" aria-label="View Article" style="margin-left:5px;font-size:20px"><i class="mdi mdi-eye"></i></a>&nbsp;';
                         $btn .= '<a href="javascript:void(0);" class="copy-article-link" data-url="' . e($shareUrl) . '" title="Copy share link" style="margin-left:5px;font-size:20px"><i class="mdi mdi-share-variant"></i></a>&nbsp;';
                         $btn .= '<a href="' . url("knowledge-session/" . $row->id . "/edit") . '" title="Edit" style="margin-left:5px;font-size:20px"><i class="mdi mdi-pencil"></i></a>&nbsp;';
                         $btn .= '<a href="' . url("delete-knowledge-session/" . $row->id) . '" class="delete" title="Delete" data-id="' . $row->id . '" style="margin-left:5px;font-size:20px"><span class="mdi mdi-trash-can"></span></a>&nbsp;';
@@ -180,7 +181,8 @@ class KnowleadgeSessionController extends Controller
                 return Datatables::of($ageGroup)
                     ->addColumn('action', function ($row) {
                         $shareUrl = \App\Services\DeepLinkService::canonicalUrl('article', (int) $row->id);
-                        return '<a href="javascript:void(0);" class="copy-article-link" data-url="' . e($shareUrl) . '" title="Copy share link" style="margin-left:5px;font-size:20px"><i class="mdi mdi-share-variant"></i></a>';
+                        return '<a href="' . route('knowledgeSession.show', $row->id) . '" title="View Article" aria-label="View Article" style="margin-left:5px;font-size:20px"><i class="mdi mdi-eye"></i></a>&nbsp;'
+                            . '<a href="javascript:void(0);" class="copy-article-link" data-url="' . e($shareUrl) . '" title="Copy share link" style="margin-left:5px;font-size:20px"><i class="mdi mdi-share-variant"></i></a>';
                     })
                     ->editColumn('title', function ($row) {
                         $plainTexttitle = strip_tags($row->title);
@@ -542,7 +544,14 @@ class KnowleadgeSessionController extends Controller
      */
     public function show(string $id)
     {
-        //
+        $pre = PermissionUser::checkpermission(Auth::user()->id, $this->subadmin_menu_id);
+        if (empty($pre) || ($pre->is_view !== 'yes' && $pre->is_modify !== 'yes')) {
+            abort(403);
+        }
+
+        $article = KnowledgeSession::with('category')->findOrFail($id);
+
+        return view('admin.knowledgeSession.show', compact('article', 'pre'));
     }
 
     /**

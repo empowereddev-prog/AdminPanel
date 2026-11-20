@@ -1,0 +1,17 @@
+.ck-content {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    color: #212529;
+}
+.ck-content p { margin: 0 0 1em; }
+.ck-content ul, .ck-content ol { padding-left: 2em; margin: 0 0 1em; }
+.ck-content ul { list-style-type: disc; }
+.ck-content ol { list-style-type: decimal; }
+.ck-content li { list-style-type: inherit; }
+.ck-content img { max-width: 100%; height: auto; }
+.ck-content table { border-collapse: collapse; max-width: 100%; }
+.ck-content td, .ck-content th { border: 1px solid #bfbfbf; padding: .4em; }
+.ck-content blockquote { border-left: 4px solid #ccc; padding-left: 1.5em; margin-left: 0; }
+.ck-content a { color: #1769aa; text-decoration: underline; }

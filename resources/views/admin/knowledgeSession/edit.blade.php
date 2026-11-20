@@ -177,7 +177,7 @@
 
                                             <div class="form-group col-12 mt-2">
                                                 <label for="description">Description</label>
-                                                <textarea class="form-control" id="description" name="description" placeholder="Enter Description">{!! old('description', $data->description ?? '') !!}</textarea>
+                                                <textarea class="form-control" id="description" name="description" placeholder="Enter Description">{{ old('description', $data->description ?? '') }}</textarea>
                                                 @error('description')
                                                     <div class="text-danger small mt-1">{{ $message }}</div>
                                                 @enderror
@@ -410,118 +410,16 @@
         width: 100% !important;
     }
 
-    .note-editor .note-editable ul {
-        list-style: disc;
-        margin-bottom: 1rem;
-        padding-left: 2rem;
-    }
-
-    .note-editor .note-editable ul li {
-        list-style-type: disc;
-    }
-
-    .note-editor .note-editable ol {
-        list-style: decimal;
-        margin-bottom: 1rem;
-        padding-left: 2rem;
-    }
-
-    .note-editor .note-editable ol li {
-        list-style-type: decimal;
-    }
 </style>
+@include('admin.knowledgeSession.editor')
+
 @push('scripts')
     <script>
-        // CKEDITOR.replace('description', {
-        //     height: 100,
-        //     removePlugins: 'image',
-        // });
         $(document).ready(function() {
             $('#article_ids').select2({
                 placeholder: "Select suggested articles",
                 allowClear: true,
                 minimumResultsForSearch: 0 // search enable
-            });
-
-            // $('#description').summernote({
-            //     height: 300,
-            //     dialogsInBody: true,
-            //     disableResizeEditor: true,
-            //     fontNames: [
-            //         'Arial',
-            //         'Helvetica',
-            //         'Comic Sans MS',
-            //         'Courier New',
-            //         'Merriweather',
-            //         'Times New Roman',
-            //         'Verdana'
-            //     ],
-
-            // fontNamesIgnoreCheck: [
-            //     'Arial',
-            //     'Helvetica',
-            //     'Comic Sans MS',
-            //     'Courier New',
-            //     'Merriweather',
-            //     'Times New Roman',
-            //     'Verdana'
-            // ],
-            //     toolbar: [
-            //         ['style', ['style']],
-            //         ['font', ['bold', 'italic', 'underline', 'strikethrough', 'superscript',
-            //             'subscript', 'clear'
-            //         ]],
-            //         ['fontname', ['fontname']],
-            //         ['fontsize', ['fontsize']],
-            //         ['color', ['color']],
-            //         ['para', ['ul', 'ol', 'paragraph', 'height']],
-            //         ['insert', ['link', 'table', 'hr']],
-
-            //     ]
-            // });
-
-            $('#description').summernote({
-                height: 300,
-                dialogsInBody: true,
-                disableResizeEditor: true,
-                codeviewFilter: false,
-                codeviewIframeFilter: false,
-                fontNames: [
-                    'Arial',
-                    'Helvetica',
-                    'Comic Sans MS',
-                    'Courier New',
-                    'Merriweather',
-                    'Times New Roman',
-                    'Verdana',
-                    'sans-serif'
-                ],
-                fontNamesIgnoreCheck: [
-                    'Arial',
-                    'Helvetica',
-                    'Comic Sans MS',
-                    'Courier New',
-                    'Merriweather',
-                    'Times New Roman',
-                    'Verdana',
-                    'sans-serif'
-                ],
-                toolbar: [
-                    // ['style', ['style']],
-                    ['font', ['bold', 'italic', 'underline', 'strikethrough']],
-                    ['fontname', ['fontname']],
-                    // ['fontsize', ['fontsize']],
-                    ['color', ['color']],
-                    ['para', ['ul', 'ol', 'paragraph']],
-                    ['insert', ['link', 'table']]
-                ],
-                callbacks: {
-                    onInit: function() {
-                        // 🔥 FORCE LOAD CONTENT WITH STYLES
-                        var content = `{!! old('description', $data->description ?? '') !!}`;
-                        $('#description').summernote('code', content);
-                    }
-                }
             });
 
             function updateColor() {
