@@ -183,7 +183,7 @@
 
                                         <div class="mb-3 mt-2">
                                             <label for="description">Description </label>
-                                            <textarea class="form-control" id="description" name="description" placeholder="Enter Description">{!! old('description') !!}</textarea>
+                                            <textarea class="form-control" id="description" name="description" placeholder="Enter Description">{{ old('description') }}</textarea>
                                             @error('description')
                                                 <div class="text-danger small mt-1">{{ $message }}</div>
                                             @enderror
@@ -392,26 +392,9 @@
         width: 100% !important;
     }
 
-    .note-editor .note-editable ul {
-        list-style: disc;
-        margin-bottom: 1rem;
-        padding-left: 2rem;
-    }
-
-    .note-editor .note-editable ul li {
-        list-style-type: disc;
-    }
-
-    .note-editor .note-editable ol {
-        list-style: decimal;
-        margin-bottom: 1rem;
-        padding-left: 2rem;
-    }
-
-    .note-editor .note-editable ol li {
-        list-style-type: decimal;
-    }
 </style>
+
+@include('admin.knowledgeSession.editor')
 
 @push('scripts')
     <script>
@@ -438,49 +421,7 @@
             updateColor();
 
             $('.first-level').addClass('in');
-            // $('#description').summernote({
-            //     height: 300,
-            //     dialogsInBody: true,
-            //     disableResizeEditor: true
-            // });
-            $('#description').summernote({
-                height: 300,
-                dialogsInBody: true,
-                disableResizeEditor: true,
-                // summernote
-                fontNames: [
-                    'Arial',
-                    'Helvetica',
-                    'Comic Sans MS',
-                    'Courier New',
-                    'Merriweather',
-                    'Times New Roman',
-                    'Verdana',
-                    'sans-serif'
-                ],
 
-                fontNamesIgnoreCheck: [
-                    'Arial',
-                    'Helvetica',
-                    'Comic Sans MS',
-                    'Courier New',
-                    'Merriweather',
-                    'Times New Roman',
-                    'Verdana',
-                    'sans-serif'
-                ],
-                toolbar: [
-                    // ['style', ['style']],
-                    ['font', ['bold', 'italic', 'underline', 'strikethrough', 'superscript',
-                        'subscript', 'clear'
-                    ]],
-                    ['fontname', ['fontname']],
-                    // ['fontsize', ['fontsize']],
-                    ['para', ['ul', 'ol', 'paragraph', 'height']],
-                    ['insert', ['link', 'table', 'hr']],
-
-                ]
-            });
 
         })
         $(document).ready(function() {

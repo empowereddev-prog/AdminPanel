@@ -219,6 +219,7 @@ Route::middleware('auth:admin', 'checkActive')->group(function () {
     Route::get('knowledge-session', [KnowleadgeSessionController::class, 'index'])->name('knowledgeSession.index');
     Route::get('knowledge-session/data', [KnowleadgeSessionController::class, 'getknowledge'])->name('knowledgeSession.data');
     Route::get('knowledge-session/create', [KnowleadgeSessionController::class, 'create'])->name('knowledgeSession.create');
+    Route::get('knowledge-session/{id}/view', [KnowleadgeSessionController::class, 'show'])->whereNumber('id')->name('knowledgeSession.show');
     Route::post('knowledge-session-store', [KnowleadgeSessionController::class, 'store'])->name('knowledgeSession.store');
     Route::get('knowledge-session/{id}/edit', [KnowleadgeSessionController::class, 'edit'])->name('knowledgeSession.edit');
     Route::put('update-knowledge-session/{id}', [KnowleadgeSessionController::class, 'update'])->name('knowledgeSession.update');
